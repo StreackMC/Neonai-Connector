@@ -29,6 +29,7 @@ const ROOT = resolve(__dirname, '..');
 
 /** ---- 声明式：内部名 -> 配置路径（硬编码，勿依赖运行时推断）---- */
 export const CONFIG_PATHS = {
+  app: './package.json',
   main: './config/main.json',
   logger: './config/logger.json',
   secret: './secret.json',

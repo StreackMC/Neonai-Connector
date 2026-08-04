@@ -1,4 +1,7 @@
 {
-  "name": "Neonai",
-  "version": "0.1.0"
+  // 监听哪些平台的消息
+  // 平台鉴权见于 secret.json
+  "listening": {
+    "qqbot": true
+  }
 }
