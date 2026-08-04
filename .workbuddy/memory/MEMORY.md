@@ -8,13 +8,31 @@
 
 ## 架构设计
 
-采用 **组合根 (Composition Root) + 依赖注入** 模式：
+采用 **三层架构 + 组合根 (Composition Root) + 依赖注入** 模式：
 
-- `main.js` — 入口/组合根：加载配置 → 创建日志器 → PID 进程锁 → 按配置加载监听器 → 注册优雅关闭
-- `src/conf.js` — 声明式配置：`CONFIG_PATHS` 硬编码内部名→路径映射，用 JSON5 解析（兼容 JSON/JSONC）
-- `src/logger.js` — 分模块日志：`LOG_TYPES` 声明式定义类型，Proxy 路由 `logger.<call>.<level>()`，控制台+文件双输出，gzip 轮转，支持 console 劫持
-- `src/QQBot/entry.js` — QQ 频道机器人监听器（qq-guild-bot），`init()` 返回 `{ close }` 供优雅关闭
-- `src/Handler/` — 预留目录（消息处理器，当前为空）
+### 三层划分
+
+| 层 | 目录 | 职责 |
+|----|------|------|
+| **System** | `src/system/` | 底层基础设施：bootstrap、config、logger、CLI、PID 锁 |
+| **Handler** | `src/Handler/` | IN→OUT 中转：调用 AI/Tool 将输入转换为输出 |
+| **Platform** | `src/platform/` | 平台适配：接收消息流（IN），调用 Handler 获取回复（OUT），发回平台 |
+
+### 模块清单
+
+- `main.js` — 瘦入口（仅调用 system/entry.bootstrap 并兜底错误）
+- `src/system/entry.js` — 组合根（惰性单例 getConfigs/getLogger、平台加载、CLI 启动、优雅关闭）
+- `src/system/conf.js` — 声明式配置：`CONFIG_PATHS` 硬编码，JSON5 解析
+- `src/system/logger.js` — 分模块日志：`LOG_TYPES` 声明式定义，Proxy 路由，gzip 轮转，console 劫持
+- `src/system/pid.js` — PID 进程锁（通过参数接收 logger）
+- `src/system/cli.js` — 注册式命令系统：`registerCommand(name, handler)`，参数解析含引号转义，readline REPL
+- `src/platform/qqbot.js` — QQ 频道机器人适配器（qq-guild-bot），提供 `qqbot status|reconnect` 命令
+
+### CLI 命令系统
+
+通过 `registerCommand(name, (args: string[]) => void)` 注册命令，各层模块在 import 时自动注册。启动后进入 readline REPL（`>` 提示符）。
+
+内置系统命令：`help`、`status`、`stop`。
 
 设计原则：声明式（模块顶部硬编码映射表）、解耦（子模块互不引用，经组合根注入）、惰性单例（import 无副作用）、优雅关闭（5s 超时强制退出）。
 
@@ -43,5 +61,5 @@
 
 ## 已知待办
 
-- README.md 内容过时：仍提及已移除的 `src/websocket.js`，未记录 QQBot 模块和当前实际目录结构
-- `logs/` 下残留 `Chat/`、`WebSocket/` 空目录（来自已移除的模块）
+- Handler 层待实现（当前仅为空目录，暂未填充实际 IN→OUT 逻辑）
+- 平台层目前仅支持 QQBot，后续可扩展其他平台适配器
