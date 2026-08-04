@@ -87,16 +87,8 @@ async function shutdown(signal) {
 // ---- 系统级 CLI 命令 ----
 
 registerCommand('help', () => {
-  let output = '';
   const names = [...getCommands().keys()].sort();
-  for (const name of names) {
-    const meta = getCommands().get(name);
-    output += `  ${CYAN}${name}${R}`;
-    if (meta.description) output += ` — ${meta.description}`;
-    if (meta.usage) output += `\n    ${DIM}用法: ${meta.usage}${R}`;
-    output += '\n';
-  }
-  process.stdout.write(output || '暂无注册命令\n');
+  process.stdout.write(names.join(', ') || '暂无注册命令\n');
 }, { description: '显示可用命令列表', argsCount: 0 });
 
 registerCommand('status', () => {
