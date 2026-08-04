@@ -39,11 +39,32 @@ const LEVEL_ALIASES = {
   serve: 'error',
 };
 
+/** ANSI 颜色码 */
+const COLORS = {
+  reset: '\x1b[0m',
+  gray: '\x1b[90m',
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  magenta: '\x1b[35m',
+  cyan: '\x1b[36m',
+  white: '\x1b[37m',
+};
+
+/** 日志级别 -> 控制台颜色（null 表示终端默认色；可在 createLogger({ levelColors }) 中覆盖） */
+const LEVEL_COLORS = {
+  info: null,
+  warn: 'yellow',
+  error: 'red',
+};
+
 /** ---- 声明式：日志类型定义（硬编码，参考 Untitled-1）----
  *  key      : 类型名，用于控制台标签与日志目录命名
  *  console  : 是否输出到控制台
  *  file     : 是否写入文件
  *  call     : 代码内调用的内部名（logger.<call>.<level>()）
+ *  color    : （可选）控制台类型标签的颜色，不设置则用终端默认色
  */
 const LOG_TYPES = {
   WebSocket: { console: true, file: true, call: 'ws' },
@@ -72,12 +93,15 @@ function formatTime(d = new Date()) {
  * @param {object} [options] 配置项
  * @param {string} [options.logDir] 日志根目录，默认 './logs'
  * @param {number} [options.maxFileSize] 单文件大小上限（字节）
- * @param {object} [options.types] 覆盖默认的日志类型定义
+ * @param {object} [options.types] 覆盖默认的日志类型定义（每项可含 color 字段）
+ * @param {object} [options.levelColors] 覆盖默认的级别颜色，如 { error: 'red' }
+ * @param {boolean} [options.colorize] 是否输出 ANSI 颜色；缺省时按终端 TTY 自动判断
  * @returns {object} 代理对象：logger.<call>.<level>(msg) 或 logger.<level>(msg)
  */
 export function createLogger(options = {}) {
   const logDir = options.logDir ?? './logs';
   const maxFileSize = options.maxFileSize ?? DEFAULT_MAX_FILE_SIZE;
+  const levelColors = { ...LEVEL_COLORS, ...(options.levelColors ?? {}) };
 
   // 归一化类型定义：为每个类型补充 name 字段
   const types = Object.fromEntries(
@@ -115,14 +139,27 @@ export function createLogger(options = {}) {
     rmSync(filePath);
   }
 
-  /** 发出一条日志（控制台 + 文件） */
+  /** 为文本包裹 ANSI 颜色；无该颜色名或关闭颜色时原样返回 */
+  const wrap = (text, color) => (COLORS[color] ? `${COLORS[color]}${text}${COLORS.reset}` : text);
+
+  /** 是否对某输出流启用颜色：colorize 显式指定时优先，否则按该流是否 TTY 判断 */
+  const shouldColor = (stream) => options.colorize ?? stream.isTTY;
+
+  /** 发出一条日志（控制台 + 文件）；文件始终写纯文本，控制台按需着色 */
   function emit(type, level, msg) {
-    const line = `[${formatTime()} | ${LEVELS[level]} | ${type.name}] ${msg}`;
-    if (type.console) {
-      const out = level === 'error' ? console.error : console.log;
-      out(line);
-    }
-    writeFile(type, line);
+    const time = formatTime();
+    const tag = LEVELS[level];
+    const plainLine = `[${time} | ${tag} | ${type.name}] ${msg}`;
+
+    writeFile(type, plainLine);
+
+    if (!type.console) return;
+    const isError = level === 'error';
+    const line = shouldColor(isError ? process.stderr : process.stdout)
+      ? `[${time} | ${wrap(tag, levelColors[level])} | ${type.name}] ${msg}`
+      : plainLine;
+    const out = isError ? console.error : console.log;
+    out(line);
   }
 
   /** 为某类型创建实例（含各级别方法及别名） */
