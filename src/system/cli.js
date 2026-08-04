@@ -234,13 +234,19 @@ export function executeCommand(input) {
 
 // ---- REPL ----
 
+/** 保活定时器（防止无平台时进程退出） */
+let keepAliveTimer = null;
+/** 当前 readline 实例 */
+let _rl = null;
+
 /**
  * 启动交互式 REPL（readline，非阻塞）。
+ * 同时设置保活定时器，确保即使没有平台运行，进程也不会退出。
  *
  * @returns {import('node:readline').Interface}
  */
 export function startCLI() {
-  const rl = createInterface({
+  _rl = createInterface({
     input: process.stdin,
     output: process.stdout,
     prompt: `${CYAN}>${R} `,
@@ -261,18 +267,37 @@ export function startCLI() {
     },
   });
 
-  rl.prompt();
+  // 保持事件循环活跃：即使没有平台运行，进程也不退出
+  clearInterval(keepAliveTimer);
+  keepAliveTimer = setInterval(() => {}, 86400000);
 
-  rl.on('line', (line) => {
+  _rl.prompt();
+
+  _rl.on('line', (line) => {
     executeCommand(line);
-    rl.prompt();
+    _rl.prompt();
   });
 
-  rl.on('close', () => {
+  _rl.on('close', () => {
     // stdin 关闭时由 graceful shutdown 处理退出
   });
 
-  return rl;
+  return _rl;
+}
+
+/**
+ * 停止 CLI：关闭 readline 接口并清除保活定时器。
+ * 由 stop 命令调用，不主动 exit（留给 shutdown 流程处理）。
+ */
+export function stopCLI() {
+  if (keepAliveTimer) {
+    clearInterval(keepAliveTimer);
+    keepAliveTimer = null;
+  }
+  if (_rl) {
+    _rl.close();
+    _rl = null;
+  }
 }
 
 // ---- 工具 ----
