@@ -1,3 +1,6 @@
+# Only Apple Can Do
+*.DS_Store
+
 # Logs
 logs
 *.log
