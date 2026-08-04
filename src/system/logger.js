@@ -50,7 +50,6 @@
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { format } from 'node:util';
 import { gzipSync } from 'node:zlib';
 
 /** 日志级别 -> 控制台标签 */
@@ -230,7 +229,7 @@ export function createLogger(options = {}) {
     return args.map(short).join(' ');
   }
 
-  /** 生成全局 console 的劫持函数：文件走 toString，控制台保留原生 util.format 并加前缀 */
+  /** 生成全局 console 的劫持函数：文件与终端均走截断路径 */
   function makeRedirect(level) {
     return (...args) => {
       const mainType = getTypeByCall('main');
@@ -238,15 +237,17 @@ export function createLogger(options = {}) {
 
       const time = formatTime();
       const tag = LEVELS[level];
-      writeFile(mainType, `[${time} | ${tag} | ${mainType.name}] ${toFileText(args)}`);
+      const body = toFileText(args);
+
+      writeFile(mainType, `[${time} | ${tag} | ${mainType.name}] ${body}`);
 
       if (!mainType.console) return;
       const isError = level === 'error';
       const line = shouldColor(isError ? process.stderr : process.stdout)
         ? `[${time} | ${wrap(tag, levelColors[level])} | ${mainType.name}]`
         : `[${time} | ${tag} | ${mainType.name}]`;
-      const method = level === 'info' ? 'log' : level; // info -> log, warn -> warn, error -> error
-      nativeConsole[method](`${line} ${format(...args)}`);
+      const method = level === 'info' ? 'log' : level;
+      nativeConsole[method](`${line} ${body}`);
     };
   }
 

@@ -5,14 +5,24 @@
  *
  * 通过 registerPlatform 向平台管理器注册自身（start / stop 生命周期），
  * 并通过 registerCommand 提供运维命令（status / reconnect）。
+ *
+ * 注意：qq-guild-bot 动态导入（非顶层静态 import），确保其内嵌的 loglevel
+ * 在 console 被劫持后才初始化，从而走截断输出。
  */
 
-import qqGuildBot from 'qq-guild-bot';
 import { getConfigs } from '../system/entry.js';
 import { registerCommand } from '../system/cli.js';
 import { registerPlatform } from '../system/platform-manager.js';
 
-const { createOpenAPI, createWebsocket } = qqGuildBot;
+/** qq-guild-bot 惰性加载缓存 */
+let _qqGuildBot = null;
+
+async function getQQGuildBot() {
+  if (!_qqGuildBot) {
+    _qqGuildBot = await import('qq-guild-bot');
+  }
+  return _qqGuildBot.default;
+}
 
 /** 当前生效的配置信息 */
 const bot_conf = {
@@ -25,7 +35,9 @@ const bot_conf = {
 let client, ws;
 
 /** 启动 QQBot 连接（供平台管理器调用） */
-function start() {
+async function start() {
+  const qqGuildBot = await getQQGuildBot();
+  const { createOpenAPI, createWebsocket } = qqGuildBot;
   client = createOpenAPI(bot_conf);
   ws = createWebsocket(bot_conf);
   return { close: stop };
@@ -56,7 +68,7 @@ export function getClient() {
 registerPlatform('qqbot', { start, stop });
 
 // ---- CLI 运维命令 ----
-registerCommand('qqbot', (args) => {
+registerCommand('qqbot', async (args) => {
   const sub = args[0];
 
   if (sub === 'status') {
@@ -64,7 +76,7 @@ registerCommand('qqbot', (args) => {
     process.stdout.write(`QQBot 状态: ${connected ? '\x1b[32m已连接\x1b[0m' : '\x1b[33m未连接\x1b[0m'}\n`);
   } else if (sub === 'reconnect') {
     stop();
-    start();
+    await start();
     process.stdout.write('QQBot 已重新连接\n');
   } else {
     process.stdout.write(`未知子命令: ${sub}，可用: status | reconnect\n`);
