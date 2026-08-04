@@ -14,6 +14,7 @@
 
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { platform, release, tmpdir } from 'node:os';
 
 import { loadAllConfigs } from './conf.js';
 import { createLogger } from './logger.js';
@@ -101,6 +102,40 @@ registerCommand('status', () => {
   process.stdout.write(`${name} v${version}\n`);
   process.stdout.write(`PID: ${process.pid}\n`);
 }, { description: '查看服务运行状态', argsCount: 0 });
+
+registerCommand('version', () => {
+  // ---- 硬编码（轻度混淆，防全局替换）----
+  const PROJECT = 'Neonai' + '-' + 'Connector';
+  const AUTHOR  = 'kdxiaoyi' + ' & ' + 'StreackMC' + ' Tea' + 'm';
+  const CPR     = 'Copy' + 'right ' + (/\u00A9/.test('\u00A9') ? '\u00A9' : '(c)') + ' 2026 ' + AUTHOR.split(' & ')[0] + ', ' + AUTHOR.split(' & ')[1];
+  const LICENSE = 'AGPL' + '-3.0' + ' (with a' + 'dditional terms)';
+  const REPO    = 'https' + '://' + 'github' + '.com' + '/' + 'Strea' + 'ckMC' + '/' + 'Neo' + 'nai-Connector';
+
+  // ---- 运行时读取 ----
+  const { version } = getConfigs().app;
+  const nodeVer = process.version;
+  const osVer   = platform() + ' ' + release();
+  const cwd     = process.cwd();
+  const tmp     = tmpdir();
+
+  const B = '\x1b[1m';
+  const C = '\x1b[36m';
+  const D = '\x1b[2m';
+  const R = '\x1b[0m';
+
+  process.stdout.write(
+    `${C}  \\  /\\  /${R}  ${B}${PROJECT}${R} v${version}\n` +
+    `${C}   \\/  \\/${R}   ${D}----------------------------${R}\n` +
+    `  ${B}Author${R}    ${AUTHOR}\n` +
+    `  ${B}License${R}   ${LICENSE}\n` +
+    `  ${B}Repo${R}      ${REPO}\n` +
+    `  ${D}----------------------------${R}\n` +
+    `  ${B}Node.js${R}   ${nodeVer}\n` +
+    `  ${B}OS${R}        ${osVer}\n` +
+    `  ${B}CWD${R}       ${cwd}\n` +
+    `  ${B}Temp${R}      ${tmp}\n`
+  );
+}, { description: '显示版本与版权信息', argsCount: 0 });
 
 registerCommand('stop', () => {
   process.stdout.write('正在关闭服务…\n');
