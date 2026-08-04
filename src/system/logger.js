@@ -33,18 +33,19 @@
 
 /**
  * 日志器对象（createLogger 的返回值）。
- * 按内部名（call）访问各类型实例，或直接调用级别方法（默认 Main）。
+ * 按内部名（call）访问各类型实例，或直接调用级别方法（默认 Other）。
  * 注意：若修改 LOG_TYPES，请同步更新本类型的属性。
  * @typedef {object} Logger
  * @property {LoggerInstance} chatIn ChatReceived 类型实例
  * @property {LoggerInstance} chatOut ChatSent 类型实例
  * @property {LoggerInstance} main Main 类型实例
- * @property {(message: string) => void} log console.log 重定向（Main 类型 INFO）
- * @property {(message: string) => void} info 默认 Main 类型的 INFO
- * @property {(message: string) => void} warn 默认 Main 类型的 WARN
- * @property {(message: string) => void} error 默认 Main 类型的 ERROR
- * @property {(message: string) => void} warning 默认 Main 类型的 WARN 别名
- * @property {(message: string) => void} serve 默认 Main 类型的 ERROR 别名
+ * @property {LoggerInstance} other Other 类型实例
+ * @property {(message: string) => void} log console.log 重定向（Other 类型 INFO）
+ * @property {(message: string) => void} info 默认 Other 类型的 INFO
+ * @property {(message: string) => void} warn 默认 Other 类型的 WARN
+ * @property {(message: string) => void} error 默认 Other 类型的 ERROR
+ * @property {(message: string) => void} warning 默认 Other 类型的 WARN 别名
+ * @property {(message: string) => void} serve 默认 Other 类型的 ERROR 别名
  * @property {(enable?: boolean) => void} redirectConsole 劫持全局 console 到 Main 日志（控制台保留原生格式化，文件尽量 toString）
  */
 
@@ -120,6 +121,7 @@ const LOG_TYPES = {
   ChatReceived: { console: true, file: true, call: 'chatIn' },
   ChatSent: { console: true, file: true, call: 'chatOut' },
   Main: { console: true, file: true, call: 'main' },
+  Other: { console: true, file: true, call: 'other' },
 };
 
 /** 默认单文件大小上限（字节），超过即轮转 */
@@ -262,19 +264,19 @@ export function createLogger(options = {}) {
   /** 生成全局 console 的劫持函数：文件与终端均走截断路径 */
   function makeRedirect(level, forceConsole = false) {
     return (...args) => {
-      const mainType = getTypeByCall('main');
-      if (!mainType) return;
+      const otherType = getTypeByCall('other');
+      if (!otherType) return;
 
       const time = formatTime();
       const tag = LEVELS[level];
       const body = toFileText(args);
 
-      writeFile(mainType, `[${time} | ${tag} | ${mainType.name}] ${body}`);
+      writeFile(otherType, `[${time} | ${tag} | ${otherType.name}] ${body}`);
 
       // 控制台：forceConsole 无视类型自身配置
-      if (!forceConsole && !mainType.console) return;
+      if (!forceConsole && !otherType.console) return;
       const isError = level === 'error';
-      const plainLine = `[${time} | ${tag} | ${mainType.name}] ${body}`;
+      const plainLine = `[${time} | ${tag} | ${otherType.name}] ${body}`;
       const coloredLine = shouldColor(isError ? process.stderr : process.stdout)
         ? wrap(plainLine, levelColors[level])
         : plainLine;
@@ -284,7 +286,7 @@ export function createLogger(options = {}) {
   }
 
   /**
-   * 劫持全局 console 到 Main 类型日志。
+   * 劫持全局 console 到 Other 类型日志。
    * 不直接替换 console.*（库可能已 bind 了旧引用），而是更新蹦床 _target。
    *
    * @param {boolean} enable 是否启用劫持
@@ -310,14 +312,14 @@ export function createLogger(options = {}) {
 
   const cache = new Map();
 
-  /** 代理：logger.<call>.<level>() 按内部名路由；未指定类型时默认 Main */
+  /** 代理：logger.<call>.<level>() 按内部名路由；未指定类型时默认 Other */
   return new Proxy({}, {
     get(_target, prop) {
       if (typeof prop !== 'string') return undefined;
 
-      // console.log 重定向入口 -> Main 类型
+      // console.log 重定向入口 -> Other 类型
       if (prop === 'log') {
-        return (msg) => emit(getTypeByCall('main'), 'info', msg);
+        return (msg) => emit(getTypeByCall('other'), 'info', msg);
       }
 
       // 劫持全局 console 的方法
@@ -330,11 +332,11 @@ export function createLogger(options = {}) {
         return cache.get(prop);
       }
 
-      // 未命中类型：视为直接调用级别方法，默认 Main 类型（含别名）
+      // 未命中类型：视为直接调用级别方法，默认 Other 类型（含别名）
       if (LEVELS[prop] || LEVEL_ALIASES[prop]) {
-        const mainType = getTypeByCall('main');
+        const otherType = getTypeByCall('other');
         const level = LEVEL_ALIASES[prop] ?? prop;
-        return (msg) => emit(mainType, level, msg);
+        return (msg) => emit(otherType, level, msg);
       }
       return undefined;
     },
