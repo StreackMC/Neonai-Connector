@@ -1,6 +1,9 @@
 # Only Apple Can Do
 *.DS_Store
 
+# PID 锁文件
+.neonai.pid
+
 # SECRET
 secret.json
 
