@@ -125,6 +125,12 @@ async function bootstrap() {
   getLogger().main.info(`${name} 服务启动`);
 
   acquirePidLock();
+
+  // 按配置决定是否把全局 console.log/warn/error 劫持到 Main 日志
+  if (getConfigs().main?.log?.redirectConsole) {
+    getLogger().redirectConsole(true);
+  }
+
   await loadAllListeners();
 
   process.on('SIGINT', () => shutdown('SIGINT'));

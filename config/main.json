@@ -3,5 +3,9 @@
   // 平台鉴权见于 secret.json
   "listening": {
     "qqbot": true
+  },
+  // 是否把全局 console.log/warn/error 劫持到 Main 类型日志
+  "log": {
+    "redirectConsole": true
   }
 }

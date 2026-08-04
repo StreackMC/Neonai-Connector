@@ -23,6 +23,7 @@
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { format } from 'node:util';
 import { gzipSync } from 'node:zlib';
 
 /** 日志级别 -> 控制台标签 */
@@ -95,6 +96,7 @@ const LOG_TYPES = {
  * @property {(message: string) => void} error 默认 Main 类型的 ERROR
  * @property {(message: string) => void} warning 默认 Main 类型的 WARN 别名
  * @property {(message: string) => void} serve 默认 Main 类型的 ERROR 别名
+ * @property {(enable?: boolean) => void} redirectConsole 劫持全局 console 到 Main 日志（控制台保留原生格式化，文件尽量 toString）
  */
 
 /** 默认单文件大小上限（字节），超过即轮转 */
@@ -127,6 +129,9 @@ export function createLogger(options = {}) {
   const logDir = options.logDir ?? './logs';
   const maxFileSize = options.maxFileSize ?? DEFAULT_MAX_FILE_SIZE;
   const levelColors = { ...LEVEL_COLORS, ...(options.levelColors ?? {}) };
+
+  // 捕获原生 console：redirectConsole 劫持全局 console 后，内部输出仍走原生引用，避免自我递归
+  const nativeConsole = { log: console.log, warn: console.warn, error: console.error };
 
   // 归一化类型定义：为每个类型补充 name 字段
   const types = Object.fromEntries(
@@ -183,7 +188,7 @@ export function createLogger(options = {}) {
     const line = shouldColor(isError ? process.stderr : process.stdout)
       ? `[${time} | ${wrap(tag, levelColors[level])} | ${type.name}] ${msg}`
       : plainLine;
-    const out = isError ? console.error : console.log;
+    const out = isError ? nativeConsole.error : nativeConsole.log;
     out(line);
   }
 
@@ -199,6 +204,54 @@ export function createLogger(options = {}) {
     return instance;
   }
 
+  /** 将任意参数尽量转为字符串（供文件日志使用） */
+  function toFileText(args) {
+    return args.map((arg) => {
+      if (typeof arg === 'string') return arg;
+      if (arg instanceof Error) return arg.stack ?? String(arg);
+      if (arg === null) return 'null';
+      if (arg === undefined) return 'undefined';
+      try {
+        return typeof arg === 'object' ? JSON.stringify(arg) : String(arg);
+      } catch {
+        return String(arg);
+      }
+    }).join(' ');
+  }
+
+  /** 生成全局 console 的劫持函数：文件走 toString，控制台保留原生 util.format 并加前缀 */
+  function makeRedirect(level) {
+    return (...args) => {
+      const mainType = getTypeByCall('main');
+      if (!mainType) return;
+
+      const time = formatTime();
+      const tag = LEVELS[level];
+      writeFile(mainType, `[${time} | ${tag} | ${mainType.name}] ${toFileText(args)}`);
+
+      if (!mainType.console) return;
+      const isError = level === 'error';
+      const line = shouldColor(isError ? process.stderr : process.stdout)
+        ? `[${time} | ${wrap(tag, levelColors[level])} | ${mainType.name}]`
+        : `[${time} | ${tag} | ${mainType.name}]`;
+      const method = level === 'info' ? 'log' : level; // info -> log, warn -> warn, error -> error
+      nativeConsole[method](`${line} ${format(...args)}`);
+    };
+  }
+
+  /** 劫持全局 console.log / warn / error 到 Main 类型日志；行为贴合原生 */
+  function redirectConsole(enable = true) {
+    if (enable) {
+      console.log = makeRedirect('info');
+      console.warn = makeRedirect('warn');
+      console.error = makeRedirect('error');
+    } else {
+      console.log = nativeConsole.log;
+      console.warn = nativeConsole.warn;
+      console.error = nativeConsole.error;
+    }
+  }
+
   const cache = new Map();
 
   /** 代理：logger.<call>.<level>() 按内部名路由；未指定类型时默认 Main */
@@ -210,6 +263,9 @@ export function createLogger(options = {}) {
       if (prop === 'log') {
         return (msg) => emit(getTypeByCall('main'), 'info', msg);
       }
+
+      // 劫持全局 console 的方法
+      if (prop === 'redirectConsole') return redirectConsole;
 
       // 命中类型内部名 -> 返回该类型实例
       const type = getTypeByCall(prop);
