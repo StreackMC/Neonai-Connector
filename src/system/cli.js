@@ -284,11 +284,14 @@ export function startCLI() {
     },
   });
 
+  // 确保光标在干净行上再显示 prompt
+  process.stdout.write('\n');
   _rl.prompt();
 
   _rl.on('line', (line) => {
     executeCommand(line);
-    _rl.prompt();
+    // stopCLI 可能在 executeCommand 中被调用，此时 _rl 已为 null
+    if (_rl) _rl.prompt();
   });
 
   _rl.on('close', () => {

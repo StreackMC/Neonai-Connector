@@ -62,10 +62,14 @@ export function getLogger() {
 
 let shuttingDown = false;
 
-/** 优雅关闭：释放所有平台 → 清理 CLI → 释放 PID 锁 */
+/** 优雅关闭：清理 CLI → 释放所有平台 → 释放 PID 锁 */
 async function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
+
+  // 先关闭 CLI，避免后续日志叠加在 readline prompt 上
+  stopCLI();
+
   getLogger().main.warn(`收到 ${signal}，正在关闭…`);
 
   // 兜底：5 秒内未能优雅退出则强制退出
@@ -76,9 +80,6 @@ async function shutdown(signal) {
   if (pm) {
     await Promise.allSettled(pm.getClosers().map((close) => close()));
   }
-
-  // 关闭 CLI（包括保活定时器）
-  stopCLI();
 
   getLogger().main.info('服务已关闭');
   process.exit(0);
@@ -132,7 +133,6 @@ registerCommand('version', () => {
 }, { description: '显示版本与版权信息', argsCount: 0 });
 
 registerCommand('stop', () => {
-  process.stdout.write('正在关闭服务…\n');
   shutdown('CLI');
 }, { description: '安全关闭服务', argsCount: 0 });
 
