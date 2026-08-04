@@ -30,9 +30,13 @@
 
 ### CLI 命令系统
 
-通过 `registerCommand(name, (args: string[]) => void)` 注册命令，各层模块在 import 时自动注册。启动后进入 readline REPL（`>` 提示符）。
+通过 `registerCommand(name, handler, options?)` 注册命令，各层模块在 import 时自动注册。启动后进入 readline REPL（`>` 提示符）。
 
-内置系统命令：`help`、`status`、`stop`。
+options 包含：`description`（帮助文本）、`argsCount`（参数数量校验，支持数字精确匹配和 [min, max] 范围）、`usage`（用法示例）。
+
+特性：TAB 补全命令名、参数校验（红色高亮出错部分+原因说明）、错误防抖（800ms 内相同错误不重复）。
+
+内置系统命令：`help`（美化输出含描述）、`status`、`stop`。QQBot 提供 `qqbot status|reconnect`。
 
 设计原则：声明式（模块顶部硬编码映射表）、解耦（子模块互不引用，经组合根注入）、惰性单例（import 无副作用）、优雅关闭（5s 超时强制退出）。
 
