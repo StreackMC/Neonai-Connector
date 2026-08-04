@@ -214,11 +214,11 @@ export function createLogger(options = {}) {
 
     if (!type.console) return;
     const isError = level === 'error';
-    const line = shouldColor(isError ? process.stderr : process.stdout)
-      ? `[${time} | ${wrap(tag, levelColors[level])} | ${type.name}] ${msg}`
+    const coloredLine = shouldColor(isError ? process.stderr : process.stdout)
+      ? wrap(plainLine, levelColors[level])
       : plainLine;
     const out = isError ? nativeConsole.error : nativeConsole.log;
-    out(line);
+    out(coloredLine);
   }
 
   /** 为某类型创建实例（含各级别方法及别名） */
@@ -274,11 +274,12 @@ export function createLogger(options = {}) {
       // 控制台：forceConsole 无视类型自身配置
       if (!forceConsole && !mainType.console) return;
       const isError = level === 'error';
-      const line = shouldColor(isError ? process.stderr : process.stdout)
-        ? `[${time} | ${wrap(tag, levelColors[level])} | ${mainType.name}]`
-        : `[${time} | ${tag} | ${mainType.name}]`;
+      const plainLine = `[${time} | ${tag} | ${mainType.name}] ${body}`;
+      const coloredLine = shouldColor(isError ? process.stderr : process.stdout)
+        ? wrap(plainLine, levelColors[level])
+        : plainLine;
       const method = (level === 'info' || level === 'debug') ? 'log' : level;
-      nativeConsole[method](`${line} ${body}`);
+      nativeConsole[method](coloredLine);
     };
   }
 
