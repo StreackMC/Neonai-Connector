@@ -174,6 +174,16 @@ export async function bootstrap() {
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('exit', () => releasePidLock(PID_FILE));
 
+  // 顶层未捕获异常：走安全关闭流程而非直接崩溃
+  process.on('uncaughtException', (err) => {
+    getLogger().main.error(`未捕获异常: ${err.message}`);
+    shutdown('uncaughtException');
+  });
+  process.on('unhandledRejection', (reason) => {
+    getLogger().main.error(`未处理的 Promise 拒绝: ${reason?.message ?? reason}`);
+    shutdown('unhandledRejection');
+  });
+
   // 非 TTY 环境（调试会话）：暴露全局 $() 模拟标准输入
   if (isDebug) {
     globalThis.$ = (input) => executeCommand(String(input));
