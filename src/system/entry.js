@@ -151,8 +151,18 @@ export async function bootstrap() {
 
   acquirePidLock(PID_FILE, getLogger());
 
-  // 按配置决定是否把全局 console.log/warn/error 劫持到 Main 日志
-  if (getConfigs().main?.log?.redirectConsole) {
+  const isDebug = !process.stdin.isTTY;
+
+  if (isDebug) {
+    // 调试会话：日志强制输出到终端
+    // 若 config 显式关闭了 redirectConsole，则降级为 DEBUG 级别
+    const debugMode = !(getConfigs().main?.log?.redirectConsole);
+    getLogger().redirectConsole(true, debugMode);
+    if (debugMode) {
+      getLogger().main.info('调试模式：config 关闭终端日志，已降级为 DEBUG 级别');
+    }
+  } else if (getConfigs().main?.log?.redirectConsole) {
+    // 普通 CLI：按 config 决定
     getLogger().redirectConsole(true);
   }
 
@@ -173,9 +183,8 @@ export async function bootstrap() {
   process.on('exit', () => releasePidLock(PID_FILE));
 
   // 非 TTY 环境（调试会话）：暴露全局 $() 模拟标准输入
-  if (!process.stdin.isTTY) {
+  if (isDebug) {
     globalThis.$ = (input) => executeCommand(String(input));
-    getLogger().main.info('非 TTY 环境，已启用全局 $() 调试接口');
   }
 
   // 启动 CLI（含保活；非 TTY 时仅保活，不启 REPL）

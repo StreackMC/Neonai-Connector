@@ -52,8 +52,31 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, 
 import { dirname, join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
+// ---- Console 蹦床（模块加载时立即替换，确保任何后续库的 bind(console) 都抓到蹦床）----
+const _origConsole = {
+  debug: console.debug,
+  log: console.log,
+  info: console.info,
+  warn: console.warn,
+  error: console.error,
+};
+const _target = {
+  debug: _origConsole.debug,
+  log: _origConsole.log,
+  info: _origConsole.info,
+  warn: _origConsole.warn,
+  error: _origConsole.error,
+};
+
+console.debug = (...a) => _target.debug.apply(console, a);
+console.log   = (...a) => _target.log.apply(console, a);
+console.info  = (...a) => _target.info.apply(console, a);
+console.warn  = (...a) => _target.warn.apply(console, a);
+console.error = (...a) => _target.error.apply(console, a);
+
 /** 日志级别 -> 控制台标签 */
 const LEVELS = {
+  debug: 'DEBUG',
   info: 'INFO',
   warn: 'WARN',
   error: 'ERROR',
@@ -80,6 +103,7 @@ const COLORS = {
 
 /** 日志级别 -> 控制台颜色（null 表示终端默认色；可在 createLogger({ levelColors }) 中覆盖） */
 const LEVEL_COLORS = {
+  debug: null,
   info: null,
   warn: 'yellow',
   error: 'red',
@@ -129,8 +153,14 @@ export function createLogger(options = {}) {
   const maxFileSize = options.maxFileSize ?? DEFAULT_MAX_FILE_SIZE;
   const levelColors = { ...LEVEL_COLORS, ...(options.levelColors ?? {}) };
 
-  // 捕获原生 console：redirectConsole 劫持全局 console 后，内部输出仍走原生引用，避免自我递归
-  const nativeConsole = { log: console.log, warn: console.warn, error: console.error };
+  // 捕获原生 console（蹦床已设，内部输出必须走原始引用避免递归）
+  const nativeConsole = {
+    debug: _origConsole.debug,
+    log: _origConsole.log,
+    info: _origConsole.info,
+    warn: _origConsole.warn,
+    error: _origConsole.error,
+  };
 
   // 归一化类型定义：为每个类型补充 name 字段
   const types = Object.fromEntries(
@@ -230,7 +260,7 @@ export function createLogger(options = {}) {
   }
 
   /** 生成全局 console 的劫持函数：文件与终端均走截断路径 */
-  function makeRedirect(level) {
+  function makeRedirect(level, forceConsole = false) {
     return (...args) => {
       const mainType = getTypeByCall('main');
       if (!mainType) return;
@@ -241,26 +271,39 @@ export function createLogger(options = {}) {
 
       writeFile(mainType, `[${time} | ${tag} | ${mainType.name}] ${body}`);
 
-      if (!mainType.console) return;
+      // 控制台：forceConsole 无视类型自身配置
+      if (!forceConsole && !mainType.console) return;
       const isError = level === 'error';
       const line = shouldColor(isError ? process.stderr : process.stdout)
         ? `[${time} | ${wrap(tag, levelColors[level])} | ${mainType.name}]`
         : `[${time} | ${tag} | ${mainType.name}]`;
-      const method = level === 'info' ? 'log' : level;
+      const method = (level === 'info' || level === 'debug') ? 'log' : level;
       nativeConsole[method](`${line} ${body}`);
     };
   }
 
-  /** 劫持全局 console.log / warn / error 到 Main 类型日志；行为贴合原生 */
-  function redirectConsole(enable = true) {
+  /**
+   * 劫持全局 console 到 Main 类型日志。
+   * 不直接替换 console.*（库可能已 bind 了旧引用），而是更新蹦床 _target。
+   *
+   * @param {boolean} enable 是否启用劫持
+   * @param {boolean} [debugMode=false] 调试模式：无视类型 console 配置强制输出，
+   *   且 console.log 使用 DEBUG 级别而非 INFO
+   */
+  function redirectConsole(enable = true, debugMode = false) {
     if (enable) {
-      console.log = makeRedirect('info');
-      console.warn = makeRedirect('warn');
-      console.error = makeRedirect('error');
+      const logLevel = debugMode ? 'debug' : 'info';
+      _target.debug = makeRedirect('debug', debugMode);
+      _target.log   = makeRedirect(logLevel, debugMode);
+      _target.info  = makeRedirect('info', debugMode);
+      _target.warn  = makeRedirect('warn', debugMode);
+      _target.error = makeRedirect('error', debugMode);
     } else {
-      console.log = nativeConsole.log;
-      console.warn = nativeConsole.warn;
-      console.error = nativeConsole.error;
+      _target.debug = _origConsole.debug;
+      _target.log   = _origConsole.log;
+      _target.info  = _origConsole.info;
+      _target.warn  = _origConsole.warn;
+      _target.error = _origConsole.error;
     }
   }
 
