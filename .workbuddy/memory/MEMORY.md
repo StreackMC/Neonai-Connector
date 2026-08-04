@@ -37,7 +37,7 @@ options 包含：`description`（帮助文本）、`argsCount`（参数数量校
 
 特性：TAB 补全命令名、参数校验（红色高亮出错部分+原因说明）、错误防抖（800ms 内相同错误不重复）、保活定时器（无平台时进程不退出，仅 stop 命令安全关闭）。
 
-内置系统命令：`help`（美化输出含描述）、`status`、`stop`、`platform list|start|stop|enable|disable`。QQBot 提供 `qqbot status|reconnect`。
+内置系统命令：`help`（美化输出含描述）、`version`（版本/版权/系统信息）、`status`、`stop`、`platform list|start|stop|enable|disable`。QQBot 提供 `qqbot status|reconnect`。
 
 设计原则：声明式（模块顶部硬编码映射表）、解耦（子模块互不引用，经组合根注入）、惰性单例（import 无副作用）、优雅关闭（5s 超时强制退出）。
 

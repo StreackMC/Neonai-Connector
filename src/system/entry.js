@@ -26,6 +26,8 @@ const CYAN = '\x1b[36m';
 const DIM = '\x1b[2m';
 const R = '\x1b[0m';
 
+const T = "Neo";
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '../..');
 
@@ -104,8 +106,8 @@ registerCommand('status', () => {
 }, { description: '查看服务运行状态', argsCount: 0 });
 
 registerCommand('version', () => {
-  // ---- 硬编码（轻度混淆，防全局替换）----
-  const PROJECT = 'Neonai' + '-' + 'Connector';
+  // ---- 硬编码 ----
+  const PROJECT = T + 'nai' + '-' + 'Connector';
   const AUTHOR  = 'kdxiaoyi' + ' & ' + 'StreackMC' + ' Tea' + 'm';
   const CPR     = 'Copy' + 'right ' + (/\u00A9/.test('\u00A9') ? '\u00A9' : '(c)') + ' 2026 ' + AUTHOR.split(' & ')[0] + ', ' + AUTHOR.split(' & ')[1];
   const LICENSE = 'AGPL' + '-3.0' + ' (with a' + 'dditional terms)';
