@@ -61,9 +61,9 @@ registerCommand('qqbot', (args) => {
     init();
     process.stdout.write('QQBot 已重新连接\n');
   } else {
-    process.stdout.write('用法: qqbot status | qqbot reconnect\n');
+    process.stdout.write(`未知子命令: ${sub}，可用: status | reconnect\n`);
   }
-});
+}, { description: 'QQBot 平台管理', argsCount: 1, usage: 'qqbot status | qqbot reconnect' });
 
 export default {
   getClient,

@@ -20,6 +20,10 @@ import { createLogger } from './logger.js';
 import { acquirePidLock, releasePidLock } from './pid.js';
 import { getCommands, registerCommand, startCLI } from './cli.js';
 
+const CYAN = '\x1b[36m';
+const DIM = '\x1b[2m';
+const R = '\x1b[0m';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '../..');
 
@@ -91,24 +95,29 @@ async function shutdown(signal) {
 // ---- 系统级 CLI 命令 ----
 
 registerCommand('help', () => {
-  const cmds = [];
-  for (const name of getCommands().keys()) {
-    cmds.push(name);
+  let output = '';
+  const names = [...getCommands().keys()].sort();
+  for (const name of names) {
+    const meta = getCommands().get(name);
+    output += `  ${CYAN}${name}${R}`;
+    if (meta.description) output += ` — ${meta.description}`;
+    if (meta.usage) output += `\n    ${DIM}用法: ${meta.usage}${R}`;
+    output += '\n';
   }
-  process.stdout.write(`可用命令: ${cmds.sort().join(', ')}\n`);
-});
+  process.stdout.write(output || '暂无注册命令\n');
+}, { description: '显示可用命令列表', argsCount: 0 });
 
 registerCommand('status', () => {
   const { name, version } = getConfigs().app;
   process.stdout.write(`${name} v${version}\n`);
   process.stdout.write(`PID: ${process.pid}\n`);
-  process.stdout.write(`平台: ${closers.length}\n`);
-});
+  process.stdout.write(`已加载平台: ${closers.length}\n`);
+}, { description: '查看服务运行状态', argsCount: 0 });
 
 registerCommand('stop', () => {
   process.stdout.write('正在关闭服务…\n');
   shutdown('CLI');
-});
+}, { description: '关闭服务', argsCount: 0 });
 
 /** 启动流程 */
 export async function bootstrap() {
