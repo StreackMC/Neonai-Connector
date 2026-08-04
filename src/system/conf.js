@@ -25,7 +25,7 @@ import JSON5 from 'json5';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /** 项目根目录（用于相对配置路径的解析基准） */
-const ROOT = resolve(__dirname, '..');
+const ROOT = resolve(__dirname, '../..');
 
 /** ---- 声明式：内部名 -> 配置路径（硬编码，勿依赖运行时推断）---- */
 export const CONFIG_PATHS = {

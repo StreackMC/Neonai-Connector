@@ -28,7 +28,7 @@ let client, ws;
 function start() {
   client = createOpenAPI(bot_conf);
   ws = createWebsocket(bot_conf);
-  return { close };
+  return { close: stop };
 }
 
 /** 关闭 QQBot 连接 */
