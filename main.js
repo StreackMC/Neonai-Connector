@@ -35,7 +35,10 @@ export function getConfigs() {
   return _configs;
 }
 
-/** 获取日志器（首次调用时创建） */
+/**
+ * 获取日志器（首次调用时创建）。
+ * @returns {import('./src/logger.js').Logger} 共享日志器实例
+ */
 export function getLogger() {
   if (!_logger) {
     const { logDir, maxFileSize } = getConfigs().logger;

@@ -71,6 +71,32 @@ const LOG_TYPES = {
   Main: { console: true, file: true, call: 'main' },
 };
 
+/**
+ * 单个日志类型的实例（logger.<call> 的形态）。
+ * @typedef {object} LoggerInstance
+ * @property {(message: string) => void} info 输出 INFO 日志
+ * @property {(message: string) => void} warn 输出 WARN 日志
+ * @property {(message: string) => void} error 输出 ERROR 日志
+ * @property {(message: string) => void} warning warn 的别名
+ * @property {(message: string) => void} serve error 的别名
+ */
+
+/**
+ * 日志器对象（createLogger 的返回值）。
+ * 按内部名（call）访问各类型实例，或直接调用级别方法（默认 Main）。
+ * 注意：若修改 LOG_TYPES，请同步更新本类型的属性。
+ * @typedef {object} Logger
+ * @property {LoggerInstance} chatIn ChatReceived 类型实例
+ * @property {LoggerInstance} chatOut ChatSent 类型实例
+ * @property {LoggerInstance} main Main 类型实例
+ * @property {(message: string) => void} log console.log 重定向（Main 类型 INFO）
+ * @property {(message: string) => void} info 默认 Main 类型的 INFO
+ * @property {(message: string) => void} warn 默认 Main 类型的 WARN
+ * @property {(message: string) => void} error 默认 Main 类型的 ERROR
+ * @property {(message: string) => void} warning 默认 Main 类型的 WARN 别名
+ * @property {(message: string) => void} serve 默认 Main 类型的 ERROR 别名
+ */
+
 /** 默认单文件大小上限（字节），超过即轮转 */
 const DEFAULT_MAX_FILE_SIZE = 1024 * 1024;
 
@@ -95,7 +121,7 @@ function formatTime(d = new Date()) {
  * @param {object} [options.types] 覆盖默认的日志类型定义（每项可含 color 字段）
  * @param {object} [options.levelColors] 覆盖默认的级别颜色，如 { error: 'red' }
  * @param {boolean} [options.colorize] 是否输出 ANSI 颜色；缺省时按终端 TTY 自动判断
- * @returns {object} 代理对象：logger.<call>.<level>(msg) 或 logger.<level>(msg)
+ * @returns {Logger} 代理对象：logger.<call>.<level>(msg) 或 logger.<level>(msg)
  */
 export function createLogger(options = {}) {
   const logDir = options.logDir ?? './logs';
