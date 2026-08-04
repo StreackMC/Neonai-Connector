@@ -22,7 +22,8 @@
 
 - `config/main.json` — 监听平台开关、console 重定向开关（JSONC）
 - `config/logger.json` — 日志目录、单文件大小上限
-- `secret.json` — 敏感信息（OAI 配置、QQBot 凭据），**已 gitignore，不入库**
+- `config/secret.json` — 凭据模板文件（key 为随意填充），**已入库 Git 跟踪**
+- `secret.json`（根目录）— 真实敏感信息（OAI 配置、QQBot 凭据），**已 gitignore，不入库**
 
 ## Git 提交约定（全局强制）
 
@@ -34,6 +35,11 @@
   - 常用 type：feat / fix / refactor / style / docs / chore / env
 - **暂存规则**：只 `git add` 必要文件，**禁止盲目 `git add .`**
 - **记忆文件**：`.workbuddy/memory/` 下的记忆文件需一并提交
+
+## 注意事项
+
+- 凭据管理：`config/secret.json` 是模板（假 key），`secret.json`（根目录）是真凭据，gitignore 已正确排除根目录版本
+- 运行程序前需确保根目录 `secret.json` 已填入真实凭据
 
 ## 已知待办
 
