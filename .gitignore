@@ -1,6 +1,9 @@
 # Only Apple Can Do
 *.DS_Store
 
+# SECRET
+secret.json
+
 # Logs
 logs
 *.log

@@ -6,6 +6,11 @@
  *
  * 解耦约定：本模块不依赖任何其他子模块，只负责读取 / 解析配置。
  *
+ * 配置格式：使用 JSON5 解析，因此同时支持：
+ *   - 严格 JSON（向后兼容）
+ *   - JSONC：单行 // 与多行 /* *\/ 注释、尾逗号
+ *   - JSON5：单引号字符串、无引号键名、十六进制数、+Infinity / NaN 等
+ *
  * 用法：
  *   import { loadConfig, loadAllConfigs } from './conf.js';
  *   const main = loadConfig('main');       // 读取内部名为 main 的配置
@@ -15,6 +20,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import JSON5 from 'json5';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -24,8 +30,8 @@ const ROOT = resolve(__dirname, '..');
 /** ---- 声明式：内部名 -> 配置路径（硬编码，勿依赖运行时推断）---- */
 export const CONFIG_PATHS = {
   main: './config/main.json',
-  websocket: './config/websocket.json',
   logger: './config/logger.json',
+  secret: './secret.json',
 };
 
 /**
@@ -40,7 +46,7 @@ export function loadConfig(name) {
   }
   const filePath = resolve(ROOT, rel);
   const raw = readFileSync(filePath, 'utf8');
-  return JSON.parse(raw);
+  return JSON5.parse(raw);
 }
 
 /**
