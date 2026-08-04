@@ -1,0 +1,4 @@
+{
+  "logDir": "./logs",
+  "maxFileSize": 1048576
+}
