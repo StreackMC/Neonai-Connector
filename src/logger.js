@@ -208,7 +208,7 @@ export function createLogger(options = {}) {
   function toFileText(args) {
     return args.map((arg) => {
       if (typeof arg === 'string') return arg;
-      if (arg instanceof Error) return arg.stack ?? String(arg);
+      if (arg instanceof Error) return arg.message ?? String(arg);
       if (arg === null) return 'null';
       if (arg === undefined) return 'undefined';
       try {
