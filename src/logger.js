@@ -16,7 +16,6 @@
  *   import { createLogger } from './logger.js';
  *   const logger = createLogger({ logDir: './logs' });
  *
- *   logger.ws.info('消息');      // 输出到 WebSocket 类型
  *   logger.main.error('错误');   // 输出到 Main 类型
  *   logger.info('未指定类型');   // 未指定类型时默认输出到 Main
  *   logger.log('console 重定向');// console.log 的重定向入口
@@ -67,8 +66,8 @@ const LEVEL_COLORS = {
  *  color    : （可选）控制台类型标签的颜色，不设置则用终端默认色
  */
 const LOG_TYPES = {
-  WebSocket: { console: true, file: true, call: 'ws' },
-  Chat: { console: true, file: true, call: 'chat' },
+  ChatReceived: { console: true, file: true, call: 'chatIn' },
+  ChatSent: { console: true, file: true, call: 'chatOut' },
   Main: { console: true, file: true, call: 'main' },
 };
 
