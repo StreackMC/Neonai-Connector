@@ -23,11 +23,12 @@
 - `main.js` — 瘦入口（仅调用 system/entry.bootstrap 并兜底错误）
 - `src/system/entry.js` — 组合根（惰性单例 getConfigs/getLogger、平台管理器初始化、CLI 启动、优雅关闭）
 - `src/system/conf.js` — 声明式配置：`CONFIG_PATHS` 硬编码，JSON5 解析
-- `src/system/logger.js` — 分模块日志：`LOG_TYPES` 声明式定义，Proxy 路由，gzip 轮转，console 劫持
+- `src/system/logger.js` — 分模块日志：`LOG_TYPES` 声明式定义，Proxy 路由，gzip 轮转，console 劫持。落盘日志自动截断（对象/数组仅展开前 3 属性，字符串超 80 字符截断）
 - `src/system/pid.js` — PID 进程锁（通过参数接收 logger）
-- `src/system/cli.js` — 注册式命令系统：`registerCommand(name, handler, opts)`，参数校验，防抖错误，TAB 补全，readline REPL + 保活定时器
+- `src/system/cli.js` — 注册式命令系统：`registerCommand(name, handler, opts)`，参数校验，防抖错误，TAB 补全，readline REPL + 保活定时器。非 TTY 时跳过 REPL
 - `src/system/platform-manager.js` — 平台生命周期管理：registerPlatform(name, {start,stop})，提供 `platform` CLI 命令（list/start/stop/enable/disable），enable/disable 直接写入 config/main.json
 - `src/platform/qqbot.js` — QQ 频道机器人适配器，通过 registerPlatform 注册到管理器
+- `debug.cjs` — 调试会话入口（CJS→ESM 过渡），非 TTY 下通过全局 `$("cmd")` 模拟 CLI 输入
 
 ### CLI 命令系统
 
@@ -36,6 +37,8 @@
 options 包含：`description`（帮助文本）、`argsCount`（参数数量校验，支持数字精确匹配和 [min, max] 范围）、`usage`（用法示例）。
 
 特性：TAB 补全命令名、参数校验（红色高亮出错部分+原因说明）、错误防抖（800ms 内相同错误不重复）、保活定时器（无平台时进程不退出，仅 stop 命令安全关闭）。
+
+**调试模式**：非 TTY 环境（VS Code 调试等）跳过 REPL，通过 `globalThis.$("cmd")` 模拟 CLI 输入。使用 `debug.cjs` 作为入口（CJS → ESM 过渡）。
 
 内置系统命令：`help`（美化输出含描述）、`version`（版本/版权/系统信息）、`status`、`stop`、`platform list|start|stop|enable|disable`。QQBot 提供 `qqbot status|reconnect`。
 
