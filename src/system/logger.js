@@ -169,9 +169,11 @@ export function createLogger(options = {}) {
     Object.entries(options.types ?? LOG_TYPES).map(([name, def]) => [name, { ...def, name }]),
   );
 
-  // 预创建各类型的日志目录
+  // 预创建各类型的日志目录，并在启动时打包已有 latest.log
   for (const type of Object.values(types)) {
-    mkdirSync(join(logDir, type.name), { recursive: true });
+    const typeDir = join(logDir, type.name);
+    mkdirSync(typeDir, { recursive: true });
+    initialRotation(join(typeDir, 'latest.log'));
   }
 
   /** 按内部名查找类型定义 */
@@ -179,7 +181,7 @@ export function createLogger(options = {}) {
     return Object.values(types).find((t) => t.call === call) ?? null;
   }
 
-  /** 写入日志文件，写入前按需轮转 */
+  /** 写入日志文件，写入前按需轮转（仅大小上限触发，跨天由启动轮转覆盖） */
   function writeFile(type, line) {
     if (!type.file) return;
     const filePath = join(logDir, type.name, 'latest.log');
@@ -187,16 +189,33 @@ export function createLogger(options = {}) {
     appendFileSync(filePath, `${line}\n`, 'utf8');
   }
 
-  /** 轮转：跨天或文件过大时，将 latest.log 压缩为 <日期>.log.gz 并重建 */
+  /** 为归档路径生成不重复文件名：<日期>.log.gz，若已存在则 -1、-2 递增 */
+  function archivePath(filePath, date) {
+    let counter = 0;
+    let candidate;
+    do {
+      const suffix = counter === 0 ? '' : `-${counter}`;
+      candidate = join(dirname(filePath), `${date}${suffix}.log.gz`);
+      counter++;
+    } while (existsSync(candidate));
+    return candidate;
+  }
+
+  /** 启动时轮转：若 latest.log 存在，始终打包为 gz 归档 */
+  function initialRotation(filePath) {
+    if (!existsSync(filePath)) return;
+    const stat = statSync(filePath);
+    const mtime = formatDate(stat.mtime);
+    writeFileSync(archivePath(filePath, mtime), gzipSync(readFileSync(filePath)));
+    rmSync(filePath);
+  }
+
+  /** 运行时轮转：仅当文件超过大小上限时打包 */
   function rotateIfNeeded(filePath) {
     if (!existsSync(filePath)) return;
     const stat = statSync(filePath);
-    const today = formatDate();
-    const mtime = formatDate(stat.mtime);
-    const tooLong = stat.size >= maxFileSize;
-    if (mtime === today && !tooLong) return;
-    const archivePath = join(dirname(filePath), `${mtime}.log.gz`);
-    writeFileSync(archivePath, gzipSync(readFileSync(filePath)));
+    if (stat.size < maxFileSize) return;
+    writeFileSync(archivePath(filePath, formatDate()), gzipSync(readFileSync(filePath)));
     rmSync(filePath);
   }
 
