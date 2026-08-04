@@ -4,11 +4,11 @@
     {
       "type": "node",
       "request": "launch",
-      "name": "启动 Neonai Server",
+      "name": "启动 Neonai Server（调试模式，$() 交互）",
       "skipFiles": [
         "<node_internals>/**"
       ],
-      "program": "${workspaceFolder}/main.js"
+      "program": "${workspaceFolder}/debug.cjs"
     }
   ]
 }

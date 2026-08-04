@@ -19,7 +19,7 @@ import { platform, release, tmpdir } from 'node:os';
 import { loadAllConfigs } from './conf.js';
 import { createLogger } from './logger.js';
 import { acquirePidLock, releasePidLock } from './pid.js';
-import { getCommands, registerCommand, startCLI, stopCLI } from './cli.js';
+import { getCommands, registerCommand, startCLI, stopCLI, executeCommand } from './cli.js';
 import { createPlatformManager } from './platform-manager.js';
 
 const CYAN = '\x1b[36m';
@@ -172,6 +172,12 @@ export async function bootstrap() {
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('exit', () => releasePidLock(PID_FILE));
 
-  // 启动 CLI（含保活，非阻塞）
+  // 非 TTY 环境（调试会话）：暴露全局 $() 模拟标准输入
+  if (!process.stdin.isTTY) {
+    globalThis.$ = (input) => executeCommand(String(input));
+    getLogger().main.info('非 TTY 环境，已启用全局 $() 调试接口');
+  }
+
+  // 启动 CLI（含保活；非 TTY 时仅保活，不启 REPL）
   startCLI();
 }

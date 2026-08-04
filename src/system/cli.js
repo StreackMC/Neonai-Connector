@@ -243,9 +243,17 @@ let _rl = null;
  * 启动交互式 REPL（readline，非阻塞）。
  * 同时设置保活定时器，确保即使没有平台运行，进程也不会退出。
  *
- * @returns {import('node:readline').Interface}
+ * 非 TTY 环境（调试会话、管道输入等）跳过 REPL 启动，
+ * 但保活定时器仍然生效，交互通过全局 $() 进行。
  */
 export function startCLI() {
+  // 保活定时器（无论是否 TTY 都生效）
+  clearInterval(keepAliveTimer);
+  keepAliveTimer = setInterval(() => {}, 86400000);
+
+  // 非 TTY 环境：跳过 REPL，依赖全局 $() 交互
+  if (!process.stdin.isTTY) return;
+
   _rl = createInterface({
     input: process.stdin,
     output: process.stdout,

@@ -204,19 +204,30 @@ export function createLogger(options = {}) {
     return instance;
   }
 
-  /** 将任意参数尽量转为字符串（供文件日志使用） */
+  /** 将值转为短字符串（对象/数组仅展开前 3 项，字符串超 80 字符截断） */
+  function short(val) {
+    if (val === null) return 'null';
+    if (val === undefined) return 'undefined';
+    if (typeof val === 'string') return val.length > 80 ? val.slice(0, 80) + '...' : val;
+    if (val instanceof Error) return val.message ?? String(val);
+    if (Array.isArray(val)) {
+      const head = val.slice(0, 3).map(short);
+      const tail = val.length > 3 ? ` ... (+${val.length - 3})` : '';
+      return `[${head.join(', ')}${tail}]`;
+    }
+    if (typeof val === 'object') {
+      const keys = Object.keys(val);
+      const head = keys.slice(0, 3);
+      const pairs = head.map((k) => `${k}: ${short(val[k])}`);
+      const tail = keys.length > 3 ? ` ... (+${keys.length - 3})` : '';
+      return `{${pairs.join(', ')}${tail}}`;
+    }
+    return String(val);
+  }
+
+  /** 将任意参数尽量转为字符串（供文件日志使用），复杂结构截断展开 */
   function toFileText(args) {
-    return args.map((arg) => {
-      if (typeof arg === 'string') return arg;
-      if (arg instanceof Error) return arg.message ?? String(arg);
-      if (arg === null) return 'null';
-      if (arg === undefined) return 'undefined';
-      try {
-        return typeof arg === 'object' ? JSON.stringify(arg) : String(arg);
-      } catch {
-        return String(arg);
-      }
-    }).join(' ');
+    return args.map(short).join(' ');
   }
 
   /** 生成全局 console 的劫持函数：文件走 toString，控制台保留原生 util.format 并加前缀 */
