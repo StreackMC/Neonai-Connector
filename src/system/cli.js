@@ -270,14 +270,19 @@ export function startCLI() {
           hits.push(name);
         }
       }
-      // readline 约定： [匹配列表, 原行]；只有一个匹配时自动补全
-      return [hits, trimmed];
+      if (hits.length === 1) {
+        return [hits, trimmed];
+      }
+      if (hits.length > 1) {
+        // 多个匹配：延迟写入候选项然后重新显示 prompt；用户继续输入时自然消失
+        setTimeout(() => {
+          process.stdout.write(`\n${DIM}${hits.join('  ')}${R}\n`);
+          _rl.prompt(true);
+        }, 0);
+      }
+      return [[], line];
     },
   });
-
-  // 保持事件循环活跃：即使没有平台运行，进程也不退出
-  clearInterval(keepAliveTimer);
-  keepAliveTimer = setInterval(() => {}, 86400000);
 
   _rl.prompt();
 
