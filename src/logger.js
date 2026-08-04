@@ -21,6 +21,33 @@
  *   logger.log('console 重定向');// console.log 的重定向入口
  */
 
+/**
+ * 单个日志类型的实例（logger.<call> 的形态）。
+ * @typedef {object} LoggerInstance
+ * @property {(message: string) => void} info 输出 INFO 日志
+ * @property {(message: string) => void} warn 输出 WARN 日志
+ * @property {(message: string) => void} error 输出 ERROR 日志
+ * @property {(message: string) => void} warning warn 的别名
+ * @property {(message: string) => void} serve error 的别名
+ */
+
+/**
+ * 日志器对象（createLogger 的返回值）。
+ * 按内部名（call）访问各类型实例，或直接调用级别方法（默认 Main）。
+ * 注意：若修改 LOG_TYPES，请同步更新本类型的属性。
+ * @typedef {object} Logger
+ * @property {LoggerInstance} chatIn ChatReceived 类型实例
+ * @property {LoggerInstance} chatOut ChatSent 类型实例
+ * @property {LoggerInstance} main Main 类型实例
+ * @property {(message: string) => void} log console.log 重定向（Main 类型 INFO）
+ * @property {(message: string) => void} info 默认 Main 类型的 INFO
+ * @property {(message: string) => void} warn 默认 Main 类型的 WARN
+ * @property {(message: string) => void} error 默认 Main 类型的 ERROR
+ * @property {(message: string) => void} warning 默认 Main 类型的 WARN 别名
+ * @property {(message: string) => void} serve 默认 Main 类型的 ERROR 别名
+ * @property {(enable?: boolean) => void} redirectConsole 劫持全局 console 到 Main 日志（控制台保留原生格式化，文件尽量 toString）
+ */
+
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { format } from 'node:util';
@@ -71,33 +98,6 @@ const LOG_TYPES = {
   ChatSent: { console: true, file: true, call: 'chatOut' },
   Main: { console: true, file: true, call: 'main' },
 };
-
-/**
- * 单个日志类型的实例（logger.<call> 的形态）。
- * @typedef {object} LoggerInstance
- * @property {(message: string) => void} info 输出 INFO 日志
- * @property {(message: string) => void} warn 输出 WARN 日志
- * @property {(message: string) => void} error 输出 ERROR 日志
- * @property {(message: string) => void} warning warn 的别名
- * @property {(message: string) => void} serve error 的别名
- */
-
-/**
- * 日志器对象（createLogger 的返回值）。
- * 按内部名（call）访问各类型实例，或直接调用级别方法（默认 Main）。
- * 注意：若修改 LOG_TYPES，请同步更新本类型的属性。
- * @typedef {object} Logger
- * @property {LoggerInstance} chatIn ChatReceived 类型实例
- * @property {LoggerInstance} chatOut ChatSent 类型实例
- * @property {LoggerInstance} main Main 类型实例
- * @property {(message: string) => void} log console.log 重定向（Main 类型 INFO）
- * @property {(message: string) => void} info 默认 Main 类型的 INFO
- * @property {(message: string) => void} warn 默认 Main 类型的 WARN
- * @property {(message: string) => void} error 默认 Main 类型的 ERROR
- * @property {(message: string) => void} warning 默认 Main 类型的 WARN 别名
- * @property {(message: string) => void} serve 默认 Main 类型的 ERROR 别名
- * @property {(enable?: boolean) => void} redirectConsole 劫持全局 console 到 Main 日志（控制台保留原生格式化，文件尽量 toString）
- */
 
 /** 默认单文件大小上限（字节），超过即轮转 */
 const DEFAULT_MAX_FILE_SIZE = 1024 * 1024;
