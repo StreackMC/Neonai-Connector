@@ -21,12 +21,13 @@
 ### 模块清单
 
 - `main.js` — 瘦入口（仅调用 system/entry.bootstrap 并兜底错误）
-- `src/system/entry.js` — 组合根（惰性单例 getConfigs/getLogger、平台加载、CLI 启动、优雅关闭）
+- `src/system/entry.js` — 组合根（惰性单例 getConfigs/getLogger、平台管理器初始化、CLI 启动、优雅关闭）
 - `src/system/conf.js` — 声明式配置：`CONFIG_PATHS` 硬编码，JSON5 解析
 - `src/system/logger.js` — 分模块日志：`LOG_TYPES` 声明式定义，Proxy 路由，gzip 轮转，console 劫持
 - `src/system/pid.js` — PID 进程锁（通过参数接收 logger）
-- `src/system/cli.js` — 注册式命令系统：`registerCommand(name, handler)`，参数解析含引号转义，readline REPL
-- `src/platform/qqbot.js` — QQ 频道机器人适配器（qq-guild-bot），提供 `qqbot status|reconnect` 命令
+- `src/system/cli.js` — 注册式命令系统：`registerCommand(name, handler, opts)`，参数校验，防抖错误，TAB 补全，readline REPL + 保活定时器
+- `src/system/platform-manager.js` — 平台生命周期管理：registerPlatform(name, {start,stop})，提供 `platform` CLI 命令（list/start/stop/enable/disable），enable/disable 直接写入 config/main.json
+- `src/platform/qqbot.js` — QQ 频道机器人适配器，通过 registerPlatform 注册到管理器
 
 ### CLI 命令系统
 
@@ -34,9 +35,9 @@
 
 options 包含：`description`（帮助文本）、`argsCount`（参数数量校验，支持数字精确匹配和 [min, max] 范围）、`usage`（用法示例）。
 
-特性：TAB 补全命令名、参数校验（红色高亮出错部分+原因说明）、错误防抖（800ms 内相同错误不重复）。
+特性：TAB 补全命令名、参数校验（红色高亮出错部分+原因说明）、错误防抖（800ms 内相同错误不重复）、保活定时器（无平台时进程不退出，仅 stop 命令安全关闭）。
 
-内置系统命令：`help`（美化输出含描述）、`status`、`stop`。QQBot 提供 `qqbot status|reconnect`。
+内置系统命令：`help`（美化输出含描述）、`status`、`stop`、`platform list|start|stop|enable|disable`。QQBot 提供 `qqbot status|reconnect`。
 
 设计原则：声明式（模块顶部硬编码映射表）、解耦（子模块互不引用，经组合根注入）、惰性单例（import 无副作用）、优雅关闭（5s 超时强制退出）。
 
