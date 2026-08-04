@@ -331,6 +331,24 @@ export function createLogger(options = {}) {
 
   const cache = new Map();
 
+  /** 写入崩溃报告到 logs/crashes/<时间戳>.log */
+  function writeCrashReport(err) {
+    const d = new Date();
+    const ts = `${formatDate(d)}-${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}-${String(d.getMilliseconds()).padStart(4, '0')}`;
+    const dir = join(logDir, 'crashes');
+    mkdirSync(dir, { recursive: true });
+    const report = [
+      `Crash Report — ${ts}`,
+      `PID: ${process.pid}`,
+      `Node: ${process.version}`,
+      `OS: ${process.platform} ${process.release}`,
+      `Type: ${err?.name ?? 'Error'}`,
+      `Message: ${err?.message ?? String(err)}`,
+      err?.stack ? `\nStack:\n${err.stack}` : '',
+    ].join('\n');
+    writeFileSync(join(dir, `${ts}.log`), report, 'utf8');
+  }
+
   /** 代理：logger.<call>.<level>() 按内部名路由；未指定类型时默认 Other */
   return new Proxy({}, {
     get(_target, prop) {
@@ -343,6 +361,9 @@ export function createLogger(options = {}) {
 
       // 劫持全局 console 的方法
       if (prop === 'redirectConsole') return redirectConsole;
+
+      // 崩溃报告
+      if (prop === 'writeCrashReport') return writeCrashReport;
 
       // 命中类型内部名 -> 返回该类型实例
       const type = getTypeByCall(prop);

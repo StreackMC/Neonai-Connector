@@ -174,13 +174,16 @@ export async function bootstrap() {
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('exit', () => releasePidLock(PID_FILE));
 
-  // 顶层未捕获异常：走安全关闭流程而非直接崩溃
+  // 顶层未捕获异常：写崩溃报告后走安全关闭流程
   process.on('uncaughtException', (err) => {
     getLogger().main.error(`未捕获异常: ${err.message}`);
+    getLogger().writeCrashReport(err);
     shutdown('uncaughtException');
   });
   process.on('unhandledRejection', (reason) => {
-    getLogger().main.error(`未处理的 Promise 拒绝: ${reason?.message ?? reason}`);
+    const err = reason instanceof Error ? reason : new Error(String(reason));
+    getLogger().main.error(`未处理的 Promise 拒绝: ${err.message}`);
+    getLogger().writeCrashReport(err);
     shutdown('unhandledRejection');
   });
 
