@@ -9,6 +9,7 @@
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { format } from 'node:util';
 import { gzipSync } from 'node:zlib';
 
 // ---- Console 蹦床（模块加载时立即执行）----
@@ -57,6 +58,7 @@ const LOG_TYPES = {
 
 const DEFAULT_MAX_FILE_SIZE = 1024 * 1024;
 const ROTATE_CHECK_MS = 500; // 最小轮转检测间隔（ms）
+const MAX_CONSOLE_LEN = 2000; // 控制台单行最大长度，超长截断（避免 util.format 完全展开）
 
 const pad = (n) => String(n).padStart(2, '0');
 function formatDate(d = new Date()) {
@@ -103,9 +105,10 @@ export function createLogger(options = {}) {
     Object.entries(options.types ?? LOG_TYPES).map(([name, def]) => [name, { ...def, name }]),
   );
 
-  // 预建目录
+  // 预建目录 + 初始化轮转检测器（所有类型，含 console 劫持使用的 Other）
   for (const t of Object.values(types)) {
     mkdirSync(join(logDir, t.name), { recursive: true });
+    t._checker = { last: 0 };
   }
 
   const getType  = (call) => Object.values(types).find((t) => t.call === call) ?? null;
@@ -131,34 +134,27 @@ export function createLogger(options = {}) {
   function emit(type, level, ...msgs) {
     const time = formatTime();
     const tag  = LEVELS[level];
-    const body = toText(msgs);
     const prefix = `[${time} | ${tag} | ${type.name}]`;
-    const line = `${prefix} ${body}`;
+    const fileLine = `${prefix} ${toText(msgs)}`; // 文件：截断 toString
 
-    // 控制台
+    // ---- 控制台：util.format 原生格式化，超长则截断（避免一行无限长）----
+    const method = level === 'error' ? 'error' : level === 'warn' ? 'warn' : level === 'debug' ? 'debug' : 'log';
+    const body = format(...msgs);
+    const rendered = body.length > MAX_CONSOLE_LEN
+      ? `${body.slice(0, MAX_CONSOLE_LEN)}…(截断 ${body.length - MAX_CONSOLE_LEN} 字符)`
+      : body;
     if (_isDebug) {
-      // 调试模式：强制走原生 console
-      if (!type.console && level !== 'warn' && level !== 'error') {
-        native.debug(prefix, ...msgs);
-      } else if (level === 'error') {
-        native.error(prefix, ...msgs);
-      } else if (level === 'warn') {
-        native.warn(prefix, ...msgs);
-      } else {
-        native.log(prefix, ...msgs);
-      }
-    } else {
-      // 正常模式：按配置、带颜色
-      if (type.console) {
-        const colored = colorize(level === 'error' ? process.stderr : process.stdout)
-          ? wrap(line, levelColors[level]) : line;
-        if (level === 'error') native.error(colored);
-        else if (level === 'warn') native.warn(colored);
-        else native.log(colored);
-      }
+      // 调试模式：强制走原生 console（无颜色）
+      native[method](`${prefix} ${rendered}`);
+    } else if (type.console) {
+      // 正常模式：前缀按级别着色
+      const coloredPrefix = colorize(level === 'error' ? process.stderr : process.stdout)
+        ? `[${time} | ${wrap(tag, levelColors[level])} | ${type.name}]`
+        : prefix;
+      native[method](`${coloredPrefix} ${rendered}`);
     }
 
-    // 文件：始终按配置
+    // ---- 文件：始终按配置（截断路径）----
     if (type.file) {
       const fp = join(logDir, type.name, 'latest.log');
       const ck = type._checker;
@@ -166,7 +162,7 @@ export function createLogger(options = {}) {
         ck.last = Date.now();
         rotateIfOversize(fp);
       }
-      appendFileSync(fp, `${line}\n`, 'utf8');
+      appendFileSync(fp, `${fileLine}\n`, 'utf8');
     }
   }
 
@@ -197,14 +193,12 @@ export function createLogger(options = {}) {
   const cache = new Map();
 
   function instance(type) {
-    const ck = { last: 0 };
-    type._checker = ck;
     return {
       debug: (...a) => emit(type, 'debug', ...a),
       info:  (...a) => emit(type, 'info',  ...a),
       warn:  (...a) => emit(type, 'warn',  ...a),
       error: (...a) => emit(type, 'error', ...a),
-      checker: ck,
+      checker: type._checker,
     };
   }
 
