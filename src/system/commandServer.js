@@ -9,6 +9,8 @@
  *   getCommands()                     — 获取所有已注册命令
  */
 
+import { getLogger, Logger } from "./logger.js";
+
 // ---- 颜色常量（仅 executeCommand 错误输出用）----
 const RED   = '\x1b[31m';
 const CYAN  = '\x1b[36m';
@@ -86,22 +88,25 @@ function buildError(cmdName, reason, usage) {
 }
 
 /**
- * 执行命令（自动 catch，错误打印到终端）。
+ * 执行命令
  * @param {string} input
+ * @return {Promise<Object>|Object} 执行结果
  */
-export async function executeCommand(input) {
+export function executeCommand(input) {
   try {
-    await executeCommandSilent(input);
+    return executeCommandSilent(input);
   } catch (err) {
-    process.stdout.write(`${err.message}\n`);
+    getLogger().error(`${err.message}\n`);
   }
 }
 
 /**
- * 执行命令（不 catch，未知命令 / 参数错误 / 执行异常均 throw）。
+ * 执行命令
  * @param {string} input
+ * @return {Promise<Object>|Object} 执行结果
+ * @throws {Error} 未知命令 / 参数错误 / 执行异常
  */
-export async function executeCommandSilent(input) {
+export function executeCommandSilent(input) {
   const trimmed = input.trim();
   if (!trimmed) return;
 
@@ -119,7 +124,7 @@ export async function executeCommandSilent(input) {
   }
 
   try {
-    await meta.handler(cmdArgs);
+    return meta.handler(cmdArgs);
   } catch (err) {
     throw new Error(buildError(cmdName, `执行失败: ${err.message}`));
   }
@@ -153,3 +158,8 @@ export function inferNext(input) {
 export function getCommands() {
   return commands;
 }
+
+registerCommand('help', () => {
+  const names = [...commands.keys()].sort();
+  return names.join(', ') || '暂无注册命令\n';
+}, { description: '显示可用命令列表', argsCount: 0 });

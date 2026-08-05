@@ -11,6 +11,7 @@
 
 import { createInterface } from 'node:readline';
 import { executeCommandSilent, inferNext } from './commandServer.js';
+import { getLogger } from './logger.js';
 
 // ---- 颜色 ----
 const CYAN   = '\x1b[36m';
@@ -58,9 +59,10 @@ export function startCLI() {
     const trimmed = line.trim();
     if (trimmed) {
       try {
-        await executeCommandSilent(trimmed);
+        const result = await executeCommandSilent(trimmed);
+        if (result) getLogger().main.info(`${result}`);
       } catch (err) {
-        process.stdout.write(`${err.message}\n`);
+        getLogger().main.error(err.message );
       }
     }
     if (_rl) _rl.prompt();

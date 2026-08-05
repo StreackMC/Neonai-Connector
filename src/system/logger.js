@@ -257,3 +257,16 @@ export function createLogger(options = {}) {
     },
   });
 }
+
+/**
+ * 获取日志器（首次调用时创建）。
+ *
+ * @returns {Logger} 共享日志器实例
+ */
+export function getLogger() {
+  if (!_logger) {
+    const { logDir, maxFileSize } = getConfigs().logger;
+    _logger = createLogger({ logDir, maxFileSize });
+  }
+  return _logger;
+}

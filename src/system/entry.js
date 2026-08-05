@@ -23,6 +23,8 @@ import { getCommands, registerCommand, executeCommand } from './commandServer.js
 import { startCLI, stopCLI, refreshCLI, erasePrompt, redrawPrompt } from './cli.js';
 import { createPlatformManager } from './platform-manager.js';
 
+import { getLogger, Logger } from './logger.js';
+
 const CYAN = '\x1b[36m';
 const DIM = '\x1b[2m';
 const R = '\x1b[0m';
@@ -46,19 +48,6 @@ let pm = null;
 export function getConfigs() {
   if (!_configs) _configs = loadAllConfigs();
   return _configs;
-}
-
-/**
- * 获取日志器（首次调用时创建）。
- *
- * @returns {import('./logger.js').Logger} 共享日志器实例
- */
-export function getLogger() {
-  if (!_logger) {
-    const { logDir, maxFileSize } = getConfigs().logger;
-    _logger = createLogger({ logDir, maxFileSize });
-  }
-  return _logger;
 }
 
 let shuttingDown = false;
@@ -87,11 +76,6 @@ async function shutdown(signal) {
 }
 
 // ---- 系统级 CLI 命令 ----
-
-registerCommand('help', () => {
-  const names = [...getCommands().keys()].sort();
-  process.stdout.write(names.join(', ') || '暂无注册命令\n');
-}, { description: '显示可用命令列表', argsCount: 0 });
 
 registerCommand('status', () => {
   const { name, version } = getConfigs().app;
