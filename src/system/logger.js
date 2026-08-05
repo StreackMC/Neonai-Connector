@@ -109,8 +109,37 @@ function short(val) {
 function toText(args) { return args.map(short).join(' '); }
 
 /**
+ * 单个日志类型的实例（如 `logger.main`）。
+ * @typedef {object} LoggerInstance
+ * @property {(...args: any[]) => void} debug
+ * @property {(...args: any[]) => void} info
+ * @property {(...args: any[]) => void} warn
+ * @property {(...args: any[]) => void} error
+ * @property {{ last: number }} checker  轮转检测时间戳
+ */
+
+/**
+ * 日志器对象（`createLogger` / `getLogger` 的返回值）。
+ * @typedef {object} Logger
+ * @property {LoggerInstance} main
+ * @property {LoggerInstance} other
+ * @property {LoggerInstance} chatIn
+ * @property {LoggerInstance} chatOut
+ * @property {(...args: any[]) => void} log         无类型默认日志（走 Other）
+ * @property {(err?: Error) => void} writeCrashReport
+ * @property {(enable?: boolean, |debugMode?: boolean) => void} redirectConsole
+ * @property {(...args: any[]) => void} info        无类型默认 INFO（走 Other）
+ * @property {(...args: any[]) => void} warn        无类型默认 WARN（走 Other）
+ * @property {(...args: any[]) => void} error       无类型默认 ERROR（走 Other）
+ * @property {(...args: any[]) => void} debug       无类型默认 DEBUG（走 Other）
+ */
+
+/**
  * 创建日志器。
- * @returns {import('./logger.js').Logger}
+ * @param {object} [options]
+ * @param {string} [options.logDir]
+ * @param {number} [options.maxFileSize]
+ * @returns {Logger}
  */
 export function createLogger(options = {}) {
   const logDir      = options.logDir ?? './logs';
