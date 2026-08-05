@@ -316,6 +316,14 @@ export function stopCLI() {
   }
 }
 
+/**
+ * 刷新 REPL 提示符（外部异步输出后调用，让提示符回到干净行）。
+ * 未启动 REPL（非 TTY）时为空操作。
+ */
+export function refreshCLI() {
+  if (_rl) _rl.prompt(true);
+}
+
 // ---- 工具 ----
 
 /**

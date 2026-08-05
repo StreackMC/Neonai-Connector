@@ -19,7 +19,7 @@ import { platform, release, tmpdir } from 'node:os';
 import { loadAllConfigs } from './conf.js';
 import { createLogger, setDebugMode } from './logger.js';
 import { acquirePidLock, releasePidLock } from './pid.js';
-import { getCommands, registerCommand, startCLI, stopCLI, executeCommand } from './cli.js';
+import { getCommands, registerCommand, startCLI, stopCLI, executeCommand, refreshCLI } from './cli.js';
 import { createPlatformManager } from './platform-manager.js';
 
 const CYAN = '\x1b[36m';
@@ -165,8 +165,14 @@ export async function bootstrap() {
   // 导入平台模块（触发 registerPlatform 注册）
   await import('../platform/qqbot.js');
 
+  // 立即启动 CLI，让提示符尽快出现（平台加载不阻塞交互）
+  startCLI();
+
   // 按配置启动已启用的平台
   await pm.loadEnabled();
+
+  // 平台加载完成（期间可能有日志输出），刷新提示符行
+  refreshCLI();
 
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
@@ -184,7 +190,4 @@ export async function bootstrap() {
     getLogger().writeCrashReport(err);
     shutdown('unhandledRejection');
   });
-
-  // 启动 CLI（含保活；非 TTY 时仅保活，不启 REPL）
-  startCLI();
 }
