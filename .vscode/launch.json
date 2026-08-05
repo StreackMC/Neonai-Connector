@@ -4,7 +4,7 @@
     {
       "type": "node",
       "request": "launch",
-      "name": "启动 Neonai Server（调试模式，$() 交互）",
+      "name": "启动 Neonai Server",
       "skipFiles": [
         "<node_internals>/**"
       ],
