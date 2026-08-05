@@ -1,9 +1,10 @@
-# Neonai 项目长期记忆
+# Neonai-Connector 项目长期记忆
 
 ## 项目概览
 
-- **名称**：澪奈 Neonai — 基于 Node.js (ESM) 的服务端项目，作为与"澪奈"沟通的桥梁
-- **License**：AGPL-3.0 + 附加条款（禁止复用美术资源、禁止将项目名用作自身品牌）
+- **名称**：Neonai-Connector — 基于 Node.js (ESM) 的服务端项目，作为与"澪奈 (Neonai)"沟通的桥梁
+- **显示名称**：Neonai / 澪奈（配置在 config/main.json 的 name / name_cn）
+- **License**：AGPL-3.0 + 附加条款（禁止复用美术资源、禁止将 "Neonai""澪奈" 用作自身品牌，项目名 "Neonai-Connector" 除外）
 - **远程仓库**：`git@github.com:StreackMC/Neonai.git`（GitHub）
 
 ## 架构设计
