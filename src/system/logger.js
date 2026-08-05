@@ -132,19 +132,20 @@ export function createLogger(options = {}) {
     const time = formatTime();
     const tag  = LEVELS[level];
     const body = toText(msgs);
-    const line = `[${time} | ${tag} | ${type.name}] ${body}`;
+    const prefix = `[${time} | ${tag} | ${type.name}]`;
+    const line = `${prefix} ${body}`;
 
     // 控制台
     if (_isDebug) {
       // 调试模式：强制走原生 console
       if (!type.console && level !== 'warn' && level !== 'error') {
-        native.debug(line);
+        native.debug(prefix, ...msgs);
       } else if (level === 'error') {
-        native.error(line);
+        native.error(prefix, ...msgs);
       } else if (level === 'warn') {
-        native.warn(line);
+        native.warn(prefix, ...msgs);
       } else {
-        native.log(line);
+        native.log(prefix, ...msgs);
       }
     } else {
       // 正常模式：按配置、带颜色
