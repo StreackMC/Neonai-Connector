@@ -1,15 +1,16 @@
 {
-  // 项目显示名称（注意与 package.json 的 npm 包名区分）
+  // 机器人名称
   "name": "Neonai",
-  // 项目中文名称
-  "name_cn": "澪奈",
+  // 机器人名称2（部分场景会使用）
+  "name2": "澪奈",
   // 监听哪些平台的消息
   // 平台鉴权见于 secret.json
   "listening": {
-    "qqbot": true
-  },
-  // 是否把全局 console.log/warn/error 劫持到 Main 类型日志
-  "log": {
-    "redirectConsole": true
+    "qqbot": {
+      // 启用【官方QQ机器人】
+      "enabled": true,
+      // 最大重连次数
+      "maxRetry": 3,
+    }
   }
 }

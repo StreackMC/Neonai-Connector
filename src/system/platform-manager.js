@@ -91,7 +91,7 @@ export function createPlatformManager({ configPath, logger }) {
     /** 供 registerPlatform 调用的内部注册 */
     _register(name, lifecycle) {
       const cfg = readConfig();
-      const enabled = cfg?.listening?.[name] ?? false;
+      const enabled = cfg?.listening?.[name]?.enabled ?? false;
       registry.set(name, { lifecycle, enabled, running: false });
       logger.main.info(`平台 "${name}" 已注册（${enabled ? '已启用' : '已禁用'}）`);
     },

@@ -119,7 +119,7 @@ export async function bootstrap() {
     setDebugMode(true);
     globalThis.$ = (input) => executeCommand(String(input));
     getLogger().main.info('调试模式已启用，$(cmd) 可用');
-  } else if (getConfigs().main?.log?.redirectConsole) {
+  } else {
     // 正常模式：劫持 console 到日志系统
     getLogger().redirectConsole(true);
   }

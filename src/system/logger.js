@@ -102,6 +102,7 @@ console.error = (...a) => _target.error.apply(console, a);
 // ---- 全局调试标志（由 entry.js 通过 setDebugMode 控制）----
 let _isDebug = false;
 export function setDebugMode(on) { _isDebug = !!on; }
+export function getDebugMode(on) { return !!_isDebug; }
 
 // ---- 控制台输出钩子（与 REPL 协作：输出前清 prompt，输出后重绘）----
 let _beforeWrite = null;
