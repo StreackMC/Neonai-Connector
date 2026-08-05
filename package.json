@@ -14,7 +14,7 @@
   "license": "AGPL-3.0",
   "dependencies": {
     "json5": "^2.2.3",
-    "qq-guild-bot": "^2.9.5",
+    "qq-official-bot": "^1.0.3",
     "ws": "^8.18.0"
   }
 }
