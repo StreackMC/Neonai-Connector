@@ -9,7 +9,6 @@
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { format } from 'node:util';
 import { gzipSync } from 'node:zlib';
 
 // ---- Console 蹦床（模块加载时立即执行）----
@@ -58,7 +57,6 @@ const LOG_TYPES = {
 
 const DEFAULT_MAX_FILE_SIZE = 1024 * 1024;
 const ROTATE_CHECK_MS = 500; // 最小轮转检测间隔（ms）
-const MAX_CONSOLE_LEN = 2000; // 控制台单行最大长度，超长截断（避免 util.format 完全展开）
 
 const pad = (n) => String(n).padStart(2, '0');
 function formatDate(d = new Date()) {
@@ -134,27 +132,25 @@ export function createLogger(options = {}) {
   function emit(type, level, ...msgs) {
     const time = formatTime();
     const tag  = LEVELS[level];
+    // 控制台与文件统一复用同一套 short/toText 截断逻辑
+    const body = toText(msgs);
     const prefix = `[${time} | ${tag} | ${type.name}]`;
-    const fileLine = `${prefix} ${toText(msgs)}`; // 文件：截断 toString
+    const line = `${prefix} ${body}`;
 
-    // ---- 控制台：util.format 原生格式化，超长则截断（避免一行无限长）----
+    // ---- 控制台 ----
     const method = level === 'error' ? 'error' : level === 'warn' ? 'warn' : level === 'debug' ? 'debug' : 'log';
-    const body = format(...msgs);
-    const rendered = body.length > MAX_CONSOLE_LEN
-      ? `${body.slice(0, MAX_CONSOLE_LEN)}…(截断 ${body.length - MAX_CONSOLE_LEN} 字符)`
-      : body;
     if (_isDebug) {
       // 调试模式：强制走原生 console（无颜色）
-      native[method](`${prefix} ${rendered}`);
+      native[method](line);
     } else if (type.console) {
-      // 正常模式：前缀按级别着色
+      // 正常模式：仅级别标签着色，正文与文件一致
       const coloredPrefix = colorize(level === 'error' ? process.stderr : process.stdout)
         ? `[${time} | ${wrap(tag, levelColors[level])} | ${type.name}]`
         : prefix;
-      native[method](`${coloredPrefix} ${rendered}`);
+      native[method](`${coloredPrefix} ${body}`);
     }
 
-    // ---- 文件：始终按配置（截断路径）----
+    // ---- 文件 ----
     if (type.file) {
       const fp = join(logDir, type.name, 'latest.log');
       const ck = type._checker;
@@ -162,7 +158,7 @@ export function createLogger(options = {}) {
         ck.last = Date.now();
         rotateIfOversize(fp);
       }
-      appendFileSync(fp, `${fileLine}\n`, 'utf8');
+      appendFileSync(fp, `${line}\n`, 'utf8');
     }
   }
 
