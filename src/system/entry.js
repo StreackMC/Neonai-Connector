@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { platform, release, tmpdir } from 'node:os';
 
 import { loadAllConfigs } from './conf.js';
-import { createLogger } from './logger.js';
+import { createLogger, setDebugMode } from './logger.js';
 import { acquirePidLock, releasePidLock } from './pid.js';
 import { getCommands, registerCommand, startCLI, stopCLI, executeCommand } from './cli.js';
 import { createPlatformManager } from './platform-manager.js';
@@ -143,15 +143,16 @@ export async function bootstrap() {
 
   acquirePidLock(PID_FILE, getLogger());
 
-  // 解析 --debug / --debug=true 参数（替代运行时 TTY 判断）
+  // 解析 --debug / --debug=true 参数
   const isDebug = process.argv.some((a) => a === '--debug=true' || a === '--debug');
 
   if (isDebug) {
-    // 调试模式：日志走原生 console（不劫持，不截断），启用全局 $()
+    // 调试模式：console 走原生输出，设置全局标志位，启用 $()
+    setDebugMode(true);
     globalThis.$ = (input) => executeCommand(String(input));
-    getLogger().main.info('调试模式，console 为原生输出，$(cmd) 可用');
+    getLogger().main.info('调试模式已启用，$(cmd) 可用');
   } else if (getConfigs().main?.log?.redirectConsole) {
-    // 正常模式：按 config 劫持 console 到日志系统（截断输出）
+    // 正常模式：劫持 console 到日志系统
     getLogger().redirectConsole(true);
   }
 
