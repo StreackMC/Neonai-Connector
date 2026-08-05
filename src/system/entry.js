@@ -19,7 +19,8 @@ import { platform, release, tmpdir } from 'node:os';
 import { loadAllConfigs } from './conf.js';
 import { createLogger, setDebugMode } from './logger.js';
 import { acquirePidLock, releasePidLock } from './pid.js';
-import { getCommands, registerCommand, startCLI, stopCLI, executeCommand, refreshCLI } from './cli.js';
+import { getCommands, registerCommand, executeCommand } from './commandServer.js';
+import { startCLI, stopCLI, refreshCLI } from './cli.js';
 import { createPlatformManager } from './platform-manager.js';
 
 const CYAN = '\x1b[36m';

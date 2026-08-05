@@ -21,7 +21,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import JSON5 from 'json5';
 
-import { registerCommand } from './cli.js';
+import { registerCommand } from './commandServer.js';
 
 // ---- 颜色 ----
 const CYAN   = '\x1b[36m';

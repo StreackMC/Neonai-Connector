@@ -11,7 +11,7 @@
  */
 
 import { getConfigs } from '../system/entry.js';
-import { registerCommand } from '../system/cli.js';
+import { registerCommand } from '../system/commandServer.js';
 import { registerPlatform } from '../system/platform-manager.js';
 
 /** qq-guild-bot 惰性加载缓存 */

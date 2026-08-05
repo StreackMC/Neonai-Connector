@@ -1,0 +1,155 @@
+/**
+ * commandServer.js — 命令注册与执行引擎（纯逻辑，无 UI 依赖）
+ *
+ * 提供：
+ *   registerCommand(name, handler, opts) — 注册命令
+ *   executeCommand(input)             — 执行，自动 catch 并打印错误到终端
+ *   executeCommandSilent(input)       — 执行，不 catch（未知命令 / 执行失败 throw）
+ *   inferNext(input)                  — 返回 TAB 补全建议
+ *   getCommands()                     — 获取所有已注册命令
+ */
+
+// ---- 颜色常量（仅 executeCommand 错误输出用）----
+const RED   = '\x1b[31m';
+const CYAN  = '\x1b[36m';
+const DIM   = '\x1b[2m';
+const BOLD  = '\x1b[1m';
+const R     = '\x1b[0m';
+
+/** @type {Map<string, { handler: Function, argsCount?: number|[number,number], usage?: string }>} */
+const commands = new Map();
+
+// ---- 参数解析（保持原逻辑）----
+
+export function parseArgs(input) {
+  const args = [];
+  let current = '', inSingle = false, inDouble = false, escape = false;
+
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+    if (escape) {
+      if (inDouble && ch !== '"' && ch !== '\\') current += '\\';
+      current += ch; escape = false; continue;
+    }
+    if (ch === '\\') { escape = true; continue; }
+    if (ch === '"' && !inSingle) { inDouble = !inDouble; continue; }
+    if (ch === "'" && !inDouble) { inSingle = !inSingle; continue; }
+    if (ch === ' ' && !inSingle && !inDouble) {
+      if (current.length > 0) { args.push(current); current = ''; }
+      continue;
+    }
+    current += ch;
+  }
+  if (current.length > 0) args.push(current);
+  return args;
+}
+
+// ---- 命令注册 ----
+
+/**
+ * @param {string} name
+ * @param {(args: string[]) => void|Promise<void>} handler
+ * @param {{ argsCount?: number|[number,number], usage?: string }} [opts]
+ */
+export function registerCommand(name, handler, opts = {}) {
+  if (commands.has(name)) throw new Error(`命令 "${name}" 已被注册`);
+  commands.set(name, { handler, ...opts });
+}
+
+// ---- 参数校验 ----
+
+function formatRange(count) {
+  if (typeof count === 'number') return String(count);
+  const [min, max] = count;
+  if (max === Infinity) return `至少 ${min} 个`;
+  if (min === max) return String(min);
+  return `${min}-${max} 个`;
+}
+
+function validateArgs(meta, actual) {
+  const c = meta.argsCount;
+  if (c === undefined) return null;
+  if (typeof c === 'number' && actual !== c) return `参数数量不匹配（期望 ${c} 个，实际 ${actual} 个）`;
+  if (Array.isArray(c)) {
+    if (actual < c[0]) return `参数不足（需要 ${formatRange(c)}，实际 ${actual} 个）`;
+    if (actual > c[1]) return `参数过多（需要 ${formatRange(c)}，实际 ${actual} 个）`;
+  }
+  return null;
+}
+
+// ---- 执行 ----
+
+function buildError(cmdName, reason, usage) {
+  return usage
+    ? `${BOLD}${cmdName}${R}${RED}: ${reason}${R}\n${DIM}用法: ${CYAN}${usage}${R}`
+    : `${BOLD}${cmdName}${R}${RED}: ${reason}${R}`;
+}
+
+/**
+ * 执行命令（自动 catch，错误打印到终端）。
+ * @param {string} input
+ */
+export async function executeCommand(input) {
+  try {
+    await executeCommandSilent(input);
+  } catch (err) {
+    process.stdout.write(`${err.message}\n`);
+  }
+}
+
+/**
+ * 执行命令（不 catch，未知命令 / 参数错误 / 执行异常均 throw）。
+ * @param {string} input
+ */
+export async function executeCommandSilent(input) {
+  const trimmed = input.trim();
+  if (!trimmed) return;
+
+  const args = parseArgs(trimmed);
+  const [cmdName, ...cmdArgs] = args;
+  const meta = commands.get(cmdName);
+
+  if (!meta) {
+    throw new Error(buildError(cmdName, '未知命令'));
+  }
+
+  const argErr = validateArgs(meta, cmdArgs.length);
+  if (argErr) {
+    throw new Error(buildError(cmdName, argErr, meta.usage));
+  }
+
+  try {
+    await meta.handler(cmdArgs);
+  } catch (err) {
+    throw new Error(buildError(cmdName, `执行失败: ${err.message}`));
+  }
+}
+
+// ---- TAB 建议 ----
+
+/**
+ * 根据当前输入返回补全建议列表。
+ * @param {string} input 当前行内容
+ * @returns {{ hits: string[], prefix: string }} 匹配列表 + 用于补全的前缀
+ */
+export function inferNext(input) {
+  const trimmed = input.trimStart();
+  if (!trimmed) return { hits: [], prefix: '' };
+
+  // 仅补全第一个词（命令名）
+  if (trimmed.includes(' ')) {
+    return { hits: [], prefix: trimmed };
+  }
+
+  const hits = [];
+  for (const name of commands.keys()) {
+    if (name.startsWith(trimmed)) hits.push(name);
+  }
+  return { hits, prefix: trimmed };
+}
+
+// ---- 工具 ----
+
+export function getCommands() {
+  return commands;
+}
