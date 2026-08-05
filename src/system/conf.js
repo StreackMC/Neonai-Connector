@@ -59,3 +59,14 @@ export function loadAllConfigs() {
     Object.keys(CONFIG_PATHS).map((name) => [name, loadConfig(name)]),
   );
 }
+
+let _configs = null;
+
+/**
+ * 获取全部配置（惰性单例，供各模块复用）。
+ * @returns {Record<string, object>} 内部名 -> 配置对象
+ */
+export function getConfigs() {
+  if (!_configs) _configs = loadAllConfigs();
+  return _configs;
+}

@@ -2,28 +2,24 @@
  * system/entry.js — 系统层入口（组合根 Composition Root）
  *
  * 职责：
- *   1. 加载全部配置（惰性单例）
- *   2. 创建日志器（惰性单例）
- *   3. 获取 PID 进程锁
- *   4. 初始化平台管理器，导入并注册各平台，按配置启动
- *   5. 启动 CLI 命令系统（含保活）
- *   6. 注册信号处理并优雅关闭
+ *   1. 获取 PID 进程锁
+ *   2. 初始化平台管理器，导入并注册各平台，按配置启动
+ *   3. 启动 CLI 命令系统（含保活）
+ *   4. 注册信号处理并优雅关闭
  *
- * 导出 getConfigs() / getLogger() 供其他模块复用（惰性初始化，import 无副作用）。
+ * 配置 / 日志 / 平台管理器单例分别由 conf.js / logger.js / platform-manager.js 提供。
  */
 
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { platform, release, tmpdir } from 'node:os';
 
-import { loadAllConfigs } from './conf.js';
-import { createLogger, setDebugMode, setConsoleHooks } from './logger.js';
+import { getConfigs } from './conf.js';
+import { setDebugMode, setConsoleHooks, getLogger } from './logger.js';
 import { acquirePidLock, releasePidLock } from './pid.js';
 import { getCommands, registerCommand, executeCommand } from './commandServer.js';
 import { startCLI, stopCLI, refreshCLI, erasePrompt, redrawPrompt } from './cli.js';
-import { createPlatformManager } from './platform-manager.js';
-
-import { getLogger } from './logger.js';
+import { createPlatformManager, getPM } from './platform-manager.js';
 
 const CYAN = '\x1b[36m';
 const DIM = '\x1b[2m';
@@ -36,18 +32,6 @@ const ROOT = resolve(__dirname, '../..');
 
 /** PID 锁文件路径 */
 const PID_FILE = resolve(ROOT, '.neonai.pid');
-
-/** 共享单例（惰性初始化） */
-let _configs = null;
-
-/** 平台管理器实例 */
-let pm = null;
-
-/** 获取全部配置（首次调用时加载） */
-export function getConfigs() {
-  if (!_configs) _configs = loadAllConfigs();
-  return _configs;
-}
 
 let shuttingDown = false;
 
@@ -66,6 +50,7 @@ async function shutdown(signal) {
   forceTimer.unref();
 
   // 释放所有平台
+  const pm = getPM();
   if (pm) {
     await Promise.allSettled(pm.getClosers().map((close) => close()));
   }
@@ -140,8 +125,8 @@ export async function bootstrap() {
     getLogger().redirectConsole(true);
   }
 
-  // 初始化平台管理器
-  pm = createPlatformManager({
+  // 初始化平台管理器（单例由 platform-manager.js 持有）
+  createPlatformManager({
     configPath: resolve(ROOT, 'config', 'main.json'),
     logger: getLogger(),
   });
@@ -156,7 +141,7 @@ export async function bootstrap() {
   setConsoleHooks(erasePrompt, redrawPrompt);
 
   // 按配置启动已启用的平台
-  await pm.loadEnabled();
+  await getPM().loadEnabled();
 
   // 平台加载完成（期间可能有日志输出），刷新提示符行
   refreshCLI();

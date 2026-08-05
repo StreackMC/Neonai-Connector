@@ -12,6 +12,8 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, 
 import { dirname, join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
+import { getConfigs } from './conf.js';
+
 // ---- Console 蹦床（模块加载时立即执行）----
 const _orig = {
   debug: console.debug,

@@ -10,7 +10,7 @@
  * 在 console 被劫持后才初始化，从而走截断输出。
  */
 
-import { getConfigs } from '../system/entry.js';
+import { getConfigs } from '../system/conf.js';
 import { registerCommand } from '../system/commandServer.js';
 import { registerPlatform } from '../system/platform-manager.js';
 

@@ -35,6 +35,14 @@ const R      = '\x1b[0m';
 let _pm = null;
 
 /**
+ * 获取平台管理器单例（未初始化时返回 null）。
+ * @returns {object | null} 平台管理器实例
+ */
+export function getPM() {
+  return _pm;
+}
+
+/**
  * 平台模块在 import 时调用此函数注册自身。
  * 内部依赖 createPlatformManager 已先执行。
  *
