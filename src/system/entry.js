@@ -143,18 +143,15 @@ export async function bootstrap() {
 
   acquirePidLock(PID_FILE, getLogger());
 
-  const isDebug = !process.stdin.isTTY;
+  // 解析 --debug / --debug=true 参数（替代运行时 TTY 判断）
+  const isDebug = process.argv.some((a) => a === '--debug=true' || a === '--debug');
 
   if (isDebug) {
-    // 调试会话：日志强制输出到终端
-    // 若 config 显式关闭了 redirectConsole，则降级为 DEBUG 级别
-    const debugMode = !(getConfigs().main?.log?.redirectConsole);
-    getLogger().redirectConsole(true, debugMode);
-    if (debugMode) {
-      getLogger().main.info('调试模式：config 关闭终端日志，已降级为 DEBUG 级别');
-    }
+    // 调试模式：日志走原生 console（不劫持，不截断），启用全局 $()
+    globalThis.$ = (input) => executeCommand(String(input));
+    getLogger().main.info('调试模式，console 为原生输出，$(cmd) 可用');
   } else if (getConfigs().main?.log?.redirectConsole) {
-    // 普通 CLI：按 config 决定
+    // 正常模式：按 config 劫持 console 到日志系统（截断输出）
     getLogger().redirectConsole(true);
   }
 
@@ -186,11 +183,6 @@ export async function bootstrap() {
     getLogger().writeCrashReport(err);
     shutdown('unhandledRejection');
   });
-
-  // 非 TTY 环境（调试会话）：暴露全局 $() 模拟标准输入
-  if (isDebug) {
-    globalThis.$ = (input) => executeCommand(String(input));
-  }
 
   // 启动 CLI（含保活；非 TTY 时仅保活，不启 REPL）
   startCLI();

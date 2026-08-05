@@ -251,7 +251,7 @@ export function startCLI() {
   clearInterval(keepAliveTimer);
   keepAliveTimer = setInterval(() => {}, 86400000);
 
-  // 非 TTY 环境：跳过 REPL，依赖全局 $() 交互
+  // 非 TTY 环境无法启动 REPL，仅保活
   if (!process.stdin.isTTY) return;
 
   _rl = createInterface({
