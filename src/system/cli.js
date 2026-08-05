@@ -80,3 +80,18 @@ export function stopCLI() {
 export function refreshCLI() {
   if (_rl) _rl.prompt(true);
 }
+
+/**
+ * 清掉当前行的 REPL 提示符（日志输出前调用；REPL 未运行或 stdout 非 TTY 时为空操作）。
+ */
+export function erasePrompt() {
+  if (_rl && process.stdout.isTTY) process.stdout.write('\r\x1b[2K');
+}
+
+/**
+ * 重新显示 REPL 提示符（日志输出后调用；REPL 未运行时为空操作）。
+ * _rl.prompt() 基于内部缓冲重绘 prompt 与用户当前输入，正在输入的内容不会丢失。
+ */
+export function redrawPrompt() {
+  if (_rl) _rl.prompt();
+}

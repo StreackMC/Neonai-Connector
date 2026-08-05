@@ -17,10 +17,10 @@ import { fileURLToPath } from 'node:url';
 import { platform, release, tmpdir } from 'node:os';
 
 import { loadAllConfigs } from './conf.js';
-import { createLogger, setDebugMode } from './logger.js';
+import { createLogger, setDebugMode, setConsoleHooks } from './logger.js';
 import { acquirePidLock, releasePidLock } from './pid.js';
 import { getCommands, registerCommand, executeCommand } from './commandServer.js';
-import { startCLI, stopCLI, refreshCLI } from './cli.js';
+import { startCLI, stopCLI, refreshCLI, erasePrompt, redrawPrompt } from './cli.js';
 import { createPlatformManager } from './platform-manager.js';
 
 const CYAN = '\x1b[36m';
@@ -168,6 +168,9 @@ export async function bootstrap() {
 
   // 立即启动 CLI，让提示符尽快出现（平台加载不阻塞交互）
   startCLI();
+
+  // 日志输出与 REPL 提示符协作：每次输出先清掉旧提示符，输出后重绘新提示符
+  setConsoleHooks(erasePrompt, redrawPrompt);
 
   // 按配置启动已启用的平台
   await pm.loadEnabled();

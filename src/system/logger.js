@@ -38,6 +38,20 @@ console.error = (...a) => _target.error.apply(console, a);
 let _isDebug = false;
 export function setDebugMode(on) { _isDebug = !!on; }
 
+// ---- 控制台输出钩子（与 REPL 协作：输出前清 prompt，输出后重绘）----
+let _beforeWrite = null;
+let _afterWrite = null;
+
+/**
+ * 设置控制台输出钩子（由 entry.js 在启动 REPL 后注入）。
+ * @param {() => void} [before] 输出到控制台前调用（清掉当前 prompt）
+ * @param {() => void} [after] 输出到控制台后调用（重绘 prompt）
+ */
+export function setConsoleHooks(before, after) {
+  _beforeWrite = before ?? null;
+  _afterWrite = after ?? null;
+}
+
 // ---- 常量 ----
 const LEVELS       = { debug: 'DEBUG', info: 'INFO', warn: 'WARN', error: 'ERROR' };
 const LEVEL_COLORS  = { debug: null, info: null, warn: 'yellow', error: 'red' };
@@ -141,13 +155,17 @@ export function createLogger(options = {}) {
     const method = level === 'error' ? 'error' : level === 'warn' ? 'warn' : level === 'debug' ? 'debug' : 'log';
     if (_isDebug) {
       // 调试模式：强制走原生 console（无颜色）
+      _beforeWrite?.();
       native[method](line);
+      _afterWrite?.();
     } else if (type.console) {
       // 正常模式：仅级别标签着色，正文与文件一致
+      _beforeWrite?.();
       const coloredPrefix = colorize(level === 'error' ? process.stderr : process.stdout)
         ? `[${time} | ${wrap(tag, levelColors[level])} | ${type.name}]`
         : prefix;
       native[method](`${coloredPrefix} ${body}`);
+      _afterWrite?.();
     }
 
     // ---- 文件 ----
