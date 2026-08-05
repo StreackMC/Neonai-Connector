@@ -122,7 +122,7 @@ export function setConsoleHooks(before, after) {
 function short(val) {
   if (val === null) return 'null';
   if (val === undefined) return 'undefined';
-  if (typeof val === 'string') return val.length > 80 ? val.slice(0, 80) + '...' : val;
+  if (typeof val === 'string') return val;
   if (val instanceof Error) return val.message ?? String(val);
   if (Array.isArray(val)) {
     const head = val.slice(0, 3).map(short);
