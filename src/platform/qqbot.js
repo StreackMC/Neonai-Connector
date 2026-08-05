@@ -13,6 +13,7 @@
 import { getConfigs } from '../system/conf.js';
 import { registerCommand } from '../system/commandServer.js';
 import { registerPlatform } from '../system/platform-manager.js';
+import { getLogger } from '../system/logger.js';
 
 /** qq-guild-bot 惰性加载缓存 */
 let _qqGuildBot = null;
@@ -71,19 +72,19 @@ registerPlatform('qqbot', { start, stop });
 registerCommand('qqbot', async (args) => {
   const sub = args[0];
   if (!sub) {
-    process.stdout.write('用法: qqbot status | qqbot reconnect\n');
+    getLogger().platQ.info('用法: qqbot status | qqbot reconnect');
     return;
   }
 
   if (sub === 'status') {
     const connected = !!ws;
-    process.stdout.write(`QQBot 状态: ${connected ? '\x1b[32m已连接\x1b[0m' : '\x1b[33m未连接\x1b[0m'}\n`);
+    getLogger().platQ.info(`QQBot 状态: ${connected ? '\x1b[32m已连接\x1b[0m' : '\x1b[33m未连接\x1b[0m'}`);
   } else if (sub === 'reconnect') {
     stop();
     await start();
-    process.stdout.write('QQBot 已重新连接\n');
+    getLogger().platQ.info('QQBot 已重新连接');
   } else {
-    process.stdout.write(`未知子命令: ${sub}，可用: status | reconnect\n`);
+    getLogger().platQ.warn(`未知子命令: ${sub}，可用: status | reconnect`);
   }
 }, { description: 'QQBot 运维操作', usage: 'qqbot status | qqbot reconnect' });
 

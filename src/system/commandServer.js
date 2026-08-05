@@ -76,7 +76,7 @@ export function executeCommand(input) {
   try {
     return executeCommandSilent(input);
   } catch (err) {
-    getLogger().error(`${err.message}\n`);
+    getLogger().cmd.error(`${err.message}\n`);
   }
 }
 

@@ -22,6 +22,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import JSON5 from 'json5';
 
 import { registerCommand } from './commandServer.js';
+import { getLogger } from './logger.js';
 
 // ---- 颜色 ----
 const CYAN   = '\x1b[36m';
@@ -104,11 +105,11 @@ export function createPlatformManager({ configPath, logger }) {
     async start(name) {
       const entry = registry.get(name);
       if (!entry) {
-        process.stdout.write(`${RED}未知平台: ${name}${R}\n`);
+        getLogger().platM.info(`${RED}未知平台: ${name}${R}\n`);
         return;
       }
       if (entry.running) {
-        process.stdout.write(`${YELLOW}${name}${R} 已在运行中\n`);
+        getLogger().platM.info(`${YELLOW}${name}${R} 已在运行中\n`);
         return;
       }
 
@@ -126,9 +127,9 @@ export function createPlatformManager({ configPath, logger }) {
           closers.set(name, () => {});
         }
 
-        process.stdout.write(`${GREEN}${name}${R} 已启动\n`);
+        getLogger().platM.info(`${GREEN}${name}${R} 已启动\n`);
       } catch (err) {
-        process.stdout.write(`${RED}启动 ${name} 失败: ${err.message}${R}\n`);
+        getLogger().platM.info(`${RED}启动 ${name} 失败: ${err.message}${R}\n`);
       }
     },
 
@@ -136,11 +137,11 @@ export function createPlatformManager({ configPath, logger }) {
     async stop(name) {
       const entry = registry.get(name);
       if (!entry) {
-        process.stdout.write(`${RED}未知平台: ${name}${R}\n`);
+        getLogger().platM.info(`${RED}未知平台: ${name}${R}\n`);
         return;
       }
       if (!entry.running) {
-        process.stdout.write(`${YELLOW}${name}${R} 未在运行\n`);
+        getLogger().platM.info(`${YELLOW}${name}${R} 未在运行\n`);
         return;
       }
 
@@ -151,34 +152,34 @@ export function createPlatformManager({ configPath, logger }) {
       }
       closers.delete(name);
       entry.running = false;
-      process.stdout.write(`${GREEN}${name}${R} 已停止\n`);
+      getLogger().platM.info(`${GREEN}${name}${R} 已停止\n`);
     },
 
     /** 在配置中启用平台 */
     enable(name) {
       if (!registry.has(name)) {
-        process.stdout.write(`${RED}未知平台: ${name}${R}\n`);
+        getLogger().platM.info(`${RED}未知平台: ${name}${R}\n`);
         return;
       }
       const entry = registry.get(name);
       if (entry.enabled) {
-        process.stdout.write(`${YELLOW}${name}${R} 已启用\n`);
+        getLogger().platM.info(`${YELLOW}${name}${R} 已启用\n`);
         return;
       }
       writeListening({ [name]: true });
       entry.enabled = true;
-      process.stdout.write(`${GREEN}${name}${R} 已启用（需手动 start 或重启生效）\n`);
+      getLogger().platM.info(`${GREEN}${name}${R} 已启用（需手动 start 或重启生效）\n`);
     },
 
     /** 在配置中禁用平台（若正在运行则先停止） */
     async disable(name) {
       if (!registry.has(name)) {
-        process.stdout.write(`${RED}未知平台: ${name}${R}\n`);
+        getLogger().platM.info(`${RED}未知平台: ${name}${R}\n`);
         return;
       }
       const entry = registry.get(name);
       if (!entry.enabled) {
-        process.stdout.write(`${YELLOW}${name}${R} 已禁用\n`);
+        getLogger().platM.info(`${YELLOW}${name}${R} 已禁用\n`);
         return;
       }
       if (entry.running) {
@@ -186,13 +187,13 @@ export function createPlatformManager({ configPath, logger }) {
       }
       writeListening({ [name]: false });
       entry.enabled = false;
-      process.stdout.write(`${GREEN}${name}${R} 已禁用\n`);
+      getLogger().platM.info(`${GREEN}${name}${R} 已禁用\n`);
     },
 
     /** 列出所有平台状态 */
     list() {
       if (registry.size === 0) {
-        process.stdout.write(`${DIM}暂无已注册平台${R}\n`);
+        getLogger().platM.info(`${DIM}暂无已注册平台${R}\n`);
         return;
       }
 
@@ -205,7 +206,7 @@ export function createPlatformManager({ configPath, logger }) {
             : `${DIM}已禁用${R}`;
         output += `  ${CYAN}${name}${R}  ${status}\n`;
       }
-      process.stdout.write(output);
+      getLogger().platM.info(output);
     },
 
     /** 加载所有 enabled 平台（启动时调用） */
@@ -225,7 +226,7 @@ export function createPlatformManager({ configPath, logger }) {
   registerCommand('platform', async (args) => {
     const [sub, name] = args;
     if (!sub) {
-      process.stdout.write(
+      getLogger().platM.info(
         `${RED}用法: platform ${CYAN}start|stop|enable|disable${R} ${DIM}<name>${R}  或  platform ${CYAN}list${R}\n`
       );
       return;
@@ -233,26 +234,26 @@ export function createPlatformManager({ configPath, logger }) {
 
     switch (sub) {
       case 'start':
-        if (!name) { process.stdout.write(`${RED}用法: platform start <name>${R}\n`); return; }
+        if (!name) { getLogger().platM.info(`${RED}用法: platform start <name>${R}\n`); return; }
         await pm.start(name);
         break;
       case 'stop':
-        if (!name) { process.stdout.write(`${RED}用法: platform stop <name>${R}\n`); return; }
+        if (!name) { getLogger().platM.info(`${RED}用法: platform stop <name>${R}\n`); return; }
         await pm.stop(name);
         break;
       case 'enable':
-        if (!name) { process.stdout.write(`${RED}用法: platform enable <name>${R}\n`); return; }
+        if (!name) { getLogger().platM.info(`${RED}用法: platform enable <name>${R}\n`); return; }
         pm.enable(name);
         break;
       case 'disable':
-        if (!name) { process.stdout.write(`${RED}用法: platform disable <name>${R}\n`); return; }
+        if (!name) { getLogger().platM.info(`${RED}用法: platform disable <name>${R}\n`); return; }
         await pm.disable(name);
         break;
       case 'list':
         pm.list();
         break;
       default:
-        process.stdout.write(
+        getLogger().platM.info(
           `${RED}未知子命令: ${sub}${R}\n` +
           `${DIM}用法: platform ${CYAN}start|stop|enable|disable${R} ${DIM}<name>  或  platform ${CYAN}list${R}\n`
         );

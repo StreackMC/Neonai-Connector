@@ -62,7 +62,7 @@ export function startCLI() {
         const result = await executeCommandSilent(trimmed);
         if (result) getLogger().main.info(`${result}`);
       } catch (err) {
-        getLogger().main.error(err.message );
+        getLogger().main.error(err.message);
       }
     }
     if (_rl) _rl.prompt();

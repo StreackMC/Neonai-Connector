@@ -63,8 +63,7 @@ async function shutdown(signal) {
 
 registerCommand('status', () => {
   const { name, version } = getConfigs().app;
-  process.stdout.write(`${name} v${version}\n`);
-  process.stdout.write(`PID: ${process.pid}\n`);
+  return `${name} v${version}\n` + `PID: ${process.pid}\n`;
 }, { description: '查看服务运行状态' });
 
 registerCommand('version', () => {
@@ -87,7 +86,7 @@ registerCommand('version', () => {
   const D = '\x1b[2m';
   const R = '\x1b[0m';
 
-  process.stdout.write(
+  return (
     `${C}  \\  /\\  /${R}  ${B}${PROJECT}${R} v${version}\n` +
     `${C}   \\/  \\/${R}   ${D}----------------------------${R}\n` +
     `  ${B}Author${R}    ${AUTHOR}\n` +
@@ -102,7 +101,7 @@ registerCommand('version', () => {
 }, { description: '显示版本与版权信息' });
 
 registerCommand('stop', () => {
-  shutdown('CLI');
+  shutdown('COMMAND');
 }, { description: '安全关闭服务' });
 
 /** 启动流程 */

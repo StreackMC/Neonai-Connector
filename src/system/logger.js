@@ -14,6 +14,66 @@ import { gzipSync } from 'node:zlib';
 
 import { getConfigs } from './conf.js';
 
+// ---- 常量与工具函数 ----
+const LEVELS = { debug: 'DEBUG', info: 'INFO', warn: 'WARN', error: 'ERROR' };
+const LEVEL_COLORS = { debug: null, info: null, warn: 'yellow', error: 'red' };
+
+const COLORS = {
+  reset: '\x1b[0m', gray: '\x1b[90m', red: '\x1b[31m', green: '\x1b[32m',
+  yellow: '\x1b[33m', blue: '\x1b[34m', magenta: '\x1b[35m', cyan: '\x1b[36m', white: '\x1b[37m',
+};
+
+/** 声明式日志类型 */
+const LOG_TYPES = {
+  Main: { console: true, file: true, call: 'main' },
+  Other: { console: true, file: true, call: 'other' },
+  "Chat:Received": { console: true, file: true, call: 'chatIn' },
+  "Chat:Sent": { console: true, file: true, call: 'chatOut' },
+  "Platform:Manager": { console: true, file: true, call: 'platM' },
+  "Platform:QQ": { console: true, file: true, call: 'platQ' },
+  Command: { console: true, file: true, call: 'cmd' },
+};
+
+/**
+ * 日志器对象（`createLogger` / `getLogger` 的返回值）。
+ * @typedef {object} Logger
+ * @property {LoggerInstance} main
+ * @property {LoggerInstance} other
+ * @property {LoggerInstance} chatIn
+ * @property {LoggerInstance} chatOut
+ * @property {LoggerInstance} platM
+ * @property {LoggerInstance} platQ
+ * @property {LoggerInstance} cmd
+ * @property {(...args: any[]) => void} log         无类型默认日志（走 Other）
+ * @property {(err?: Error) => void} writeCrashReport
+ * @property {(enable?: boolean, |debugMode?: boolean) => void} redirectConsole
+ * @property {(...args: any[]) => void} info        无类型默认 INFO（走 Other）
+ * @property {(...args: any[]) => void} warn        无类型默认 WARN（走 Other）
+ * @property {(...args: any[]) => void} error       无类型默认 ERROR（走 Other）
+ * @property {(...args: any[]) => void} debug       无类型默认 DEBUG（走 Other）
+ */
+
+/**
+ * 单个日志类型的实例（如 `logger.main`）。
+ * @typedef {object} LoggerInstance
+ * @property {(...args: any[]) => void} debug
+ * @property {(...args: any[]) => void} info
+ * @property {(...args: any[]) => void} warn
+ * @property {(...args: any[]) => void} error
+ * @property {{ last: number }} checker  轮转检测时间戳
+ */
+
+const DEFAULT_MAX_FILE_SIZE = 1024 * 1024;
+const ROTATE_CHECK_MS = 500; // 最小轮转检测间隔（ms）
+
+const pad = (n) => String(n).padStart(2, '0');
+function formatDate(d = new Date()) {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+function formatTime(d = new Date()) {
+  return `${formatDate(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
 // ---- Console 蹦床（模块加载时立即执行）----
 const _orig = {
   debug: console.debug,
@@ -57,34 +117,6 @@ export function setConsoleHooks(before, after) {
   _afterWrite = after ?? null;
 }
 
-// ---- 常量 ----
-const LEVELS       = { debug: 'DEBUG', info: 'INFO', warn: 'WARN', error: 'ERROR' };
-const LEVEL_COLORS  = { debug: null, info: null, warn: 'yellow', error: 'red' };
-
-const COLORS = {
-  reset: '\x1b[0m', gray: '\x1b[90m', red: '\x1b[31m', green: '\x1b[32m',
-  yellow: '\x1b[33m', blue: '\x1b[34m', magenta: '\x1b[35m', cyan: '\x1b[36m', white: '\x1b[37m',
-};
-
-/** 声明式日志类型 */
-const LOG_TYPES = {
-  ChatReceived: { console: true, file: true, call: 'chatIn' },
-  ChatSent:     { console: true, file: true, call: 'chatOut' },
-  Main:         { console: true, file: true, call: 'main' },
-  Other:        { console: true, file: true, call: 'other' },
-};
-
-const DEFAULT_MAX_FILE_SIZE = 1024 * 1024;
-const ROTATE_CHECK_MS = 500; // 最小轮转检测间隔（ms）
-
-const pad = (n) => String(n).padStart(2, '0');
-function formatDate(d = new Date()) {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-function formatTime(d = new Date()) {
-  return `${formatDate(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
-
 // ---- 截断器 ----
 function short(val) {
   if (val === null) return 'null';
@@ -107,32 +139,6 @@ function short(val) {
 }
 
 function toText(args) { return args.map(short).join(' '); }
-
-/**
- * 单个日志类型的实例（如 `logger.main`）。
- * @typedef {object} LoggerInstance
- * @property {(...args: any[]) => void} debug
- * @property {(...args: any[]) => void} info
- * @property {(...args: any[]) => void} warn
- * @property {(...args: any[]) => void} error
- * @property {{ last: number }} checker  轮转检测时间戳
- */
-
-/**
- * 日志器对象（`createLogger` / `getLogger` 的返回值）。
- * @typedef {object} Logger
- * @property {LoggerInstance} main
- * @property {LoggerInstance} other
- * @property {LoggerInstance} chatIn
- * @property {LoggerInstance} chatOut
- * @property {(...args: any[]) => void} log         无类型默认日志（走 Other）
- * @property {(err?: Error) => void} writeCrashReport
- * @property {(enable?: boolean, |debugMode?: boolean) => void} redirectConsole
- * @property {(...args: any[]) => void} info        无类型默认 INFO（走 Other）
- * @property {(...args: any[]) => void} warn        无类型默认 WARN（走 Other）
- * @property {(...args: any[]) => void} error       无类型默认 ERROR（走 Other）
- * @property {(...args: any[]) => void} debug       无类型默认 DEBUG（走 Other）
- */
 
 /**
  * 创建日志器。
