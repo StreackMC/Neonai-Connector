@@ -3,7 +3,8 @@
  *
  * 模块加载时立即劫持 console.* 为蹦床，后续由 redirectConsole 控制目标。
  * 所有日志接口接受无限参数。调试模式（_isDebug）强制输出到原生 console，
- * 非调试模式按类型配置带颜色输出。文件日志始终走截断路径。
+ * 非调试模式按类型配置带颜色输出。文件日志始终走截断路径，
+ * 所有类型共用一个日志文件（不按类型分文件夹）。
  * 日志轮转惰性触发，最小检测间隔挂在 logger.<call>.checker 上。
  */
 
@@ -19,6 +20,8 @@ const _orig = {
   warn:  console.warn,
   error: console.error,
 };
+
+let _logger = null;
 
 let _target = {
   debug: _orig.debug,
@@ -117,11 +120,9 @@ export function createLogger(options = {}) {
     Object.entries(options.types ?? LOG_TYPES).map(([name, def]) => [name, { ...def, name }]),
   );
 
-  // 预建目录 + 初始化轮转检测器（所有类型，含 console 劫持使用的 Other）
-  for (const t of Object.values(types)) {
-    mkdirSync(join(logDir, t.name), { recursive: true });
-    t._checker = { last: 0 };
-  }
+  // 预建日志目录（所有类型共用单文件，不再分文件夹）+ 共享轮转检测器
+  mkdirSync(logDir, { recursive: true });
+  const fileChecker = { last: 0 };
 
   const getType  = (call) => Object.values(types).find((t) => t.call === call) ?? null;
   const wrap     = (text, color) => (COLORS[color] ? `${COLORS[color]}${text}${COLORS.reset}` : text);
@@ -168,12 +169,11 @@ export function createLogger(options = {}) {
       _afterWrite?.();
     }
 
-    // ---- 文件 ----
+    // ---- 文件：所有类型共用一个日志文件 ----
     if (type.file) {
-      const fp = join(logDir, type.name, 'latest.log');
-      const ck = type._checker;
-      if (ck && Date.now() - ck.last > ROTATE_CHECK_MS) {
-        ck.last = Date.now();
+      const fp = join(logDir, 'latest.log');
+      if (Date.now() - fileChecker.last > ROTATE_CHECK_MS) {
+        fileChecker.last = Date.now();
         rotateIfOversize(fp);
       }
       appendFileSync(fp, `${line}\n`, 'utf8');
@@ -212,7 +212,7 @@ export function createLogger(options = {}) {
       info:  (...a) => emit(type, 'info',  ...a),
       warn:  (...a) => emit(type, 'warn',  ...a),
       error: (...a) => emit(type, 'error', ...a),
-      checker: type._checker,
+      checker: fileChecker,
     };
   }
 
