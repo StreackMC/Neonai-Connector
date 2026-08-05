@@ -216,6 +216,12 @@ export function createPlatformManager({ configPath, logger }) {
 
   registerCommand('platform', async (args) => {
     const [sub, name] = args;
+    if (!sub) {
+      process.stdout.write(
+        `${RED}用法: platform ${CYAN}start|stop|enable|disable${R} ${DIM}<name>${R}  或  platform ${CYAN}list${R}\n`
+      );
+      return;
+    }
 
     switch (sub) {
       case 'start':
@@ -245,7 +251,6 @@ export function createPlatformManager({ configPath, logger }) {
     }
   }, {
     description: '平台生命周期管理',
-    argsCount: [1, 2],
     usage: 'platform start|stop|enable|disable|list [name]',
   });
 

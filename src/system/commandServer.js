@@ -9,7 +9,7 @@
  *   getCommands()                     — 获取所有已注册命令
  */
 
-import { getLogger, Logger } from "./logger.js";
+import { getLogger } from "./logger.js";
 
 // ---- 颜色常量（仅 executeCommand 错误输出用）----
 const RED   = '\x1b[31m';
@@ -18,7 +18,7 @@ const DIM   = '\x1b[2m';
 const BOLD  = '\x1b[1m';
 const R     = '\x1b[0m';
 
-/** @type {Map<string, { handler: Function, argsCount?: number|[number,number], usage?: string }>} */
+/** @type {Map<string, { handler: Function, usage?: string }>} */
 const commands = new Map();
 
 // ---- 参数解析（保持原逻辑）----
@@ -49,34 +49,14 @@ export function parseArgs(input) {
 // ---- 命令注册 ----
 
 /**
- * @param {string} name
- * @param {(args: string[]) => void|Promise<void>} handler
- * @param {{ argsCount?: number|[number,number], usage?: string }} [opts]
+ * 注册命令。参数校验由调用方（handler）自行处理，此处不限制参数数量。
+ * @param {string} name 命令名
+ * @param {(args: string[]) => void|Promise<void>} handler 处理函数，需自行校验参数
+ * @param {{ description?: string, usage?: string }} [opts] 可选元数据
  */
 export function registerCommand(name, handler, opts = {}) {
   if (commands.has(name)) throw new Error(`命令 "${name}" 已被注册`);
   commands.set(name, { handler, ...opts });
-}
-
-// ---- 参数校验 ----
-
-function formatRange(count) {
-  if (typeof count === 'number') return String(count);
-  const [min, max] = count;
-  if (max === Infinity) return `至少 ${min} 个`;
-  if (min === max) return String(min);
-  return `${min}-${max} 个`;
-}
-
-function validateArgs(meta, actual) {
-  const c = meta.argsCount;
-  if (c === undefined) return null;
-  if (typeof c === 'number' && actual !== c) return `参数数量不匹配（期望 ${c} 个，实际 ${actual} 个）`;
-  if (Array.isArray(c)) {
-    if (actual < c[0]) return `参数不足（需要 ${formatRange(c)}，实际 ${actual} 个）`;
-    if (actual > c[1]) return `参数过多（需要 ${formatRange(c)}，实际 ${actual} 个）`;
-  }
-  return null;
 }
 
 // ---- 执行 ----
@@ -118,11 +98,6 @@ export function executeCommandSilent(input) {
     throw new Error(buildError(cmdName, '未知命令'));
   }
 
-  const argErr = validateArgs(meta, cmdArgs.length);
-  if (argErr) {
-    throw new Error(buildError(cmdName, argErr, meta.usage));
-  }
-
   try {
     return meta.handler(cmdArgs);
   } catch (err) {
@@ -162,4 +137,4 @@ export function getCommands() {
 registerCommand('help', () => {
   const names = [...commands.keys()].sort();
   return names.join(', ') || '暂无注册命令\n';
-}, { description: '显示可用命令列表', argsCount: 0 });
+}, { description: '显示可用命令列表' });

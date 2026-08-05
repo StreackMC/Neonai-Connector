@@ -70,6 +70,10 @@ registerPlatform('qqbot', { start, stop });
 // ---- CLI 运维命令 ----
 registerCommand('qqbot', async (args) => {
   const sub = args[0];
+  if (!sub) {
+    process.stdout.write('用法: qqbot status | qqbot reconnect\n');
+    return;
+  }
 
   if (sub === 'status') {
     const connected = !!ws;
@@ -81,7 +85,7 @@ registerCommand('qqbot', async (args) => {
   } else {
     process.stdout.write(`未知子命令: ${sub}，可用: status | reconnect\n`);
   }
-}, { description: 'QQBot 运维操作', argsCount: 1, usage: 'qqbot status | qqbot reconnect' });
+}, { description: 'QQBot 运维操作', usage: 'qqbot status | qqbot reconnect' });
 
 export default {
   getClient,

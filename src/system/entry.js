@@ -23,7 +23,7 @@ import { getCommands, registerCommand, executeCommand } from './commandServer.js
 import { startCLI, stopCLI, refreshCLI, erasePrompt, redrawPrompt } from './cli.js';
 import { createPlatformManager } from './platform-manager.js';
 
-import { getLogger, Logger } from './logger.js';
+import { getLogger } from './logger.js';
 
 const CYAN = '\x1b[36m';
 const DIM = '\x1b[2m';
@@ -39,7 +39,6 @@ const PID_FILE = resolve(ROOT, '.neonai.pid');
 
 /** 共享单例（惰性初始化） */
 let _configs = null;
-let _logger = null;
 
 /** 平台管理器实例 */
 let pm = null;
@@ -81,7 +80,7 @@ registerCommand('status', () => {
   const { name, version } = getConfigs().app;
   process.stdout.write(`${name} v${version}\n`);
   process.stdout.write(`PID: ${process.pid}\n`);
-}, { description: '查看服务运行状态', argsCount: 0 });
+}, { description: '查看服务运行状态' });
 
 registerCommand('version', () => {
   // ---- 硬编码 ----
@@ -115,11 +114,11 @@ registerCommand('version', () => {
     `  ${B}CWD${R}       ${cwd}\n` +
     `  ${B}Temp${R}      ${tmp}\n`
   );
-}, { description: '显示版本与版权信息', argsCount: 0 });
+}, { description: '显示版本与版权信息' });
 
 registerCommand('stop', () => {
   shutdown('CLI');
-}, { description: '安全关闭服务', argsCount: 0 });
+}, { description: '安全关闭服务' });
 
 /** 启动流程 */
 export async function bootstrap() {
