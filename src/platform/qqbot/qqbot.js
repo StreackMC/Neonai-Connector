@@ -5,14 +5,11 @@
  * 运行时配置通过 PlatformManager.getProfile(this.profile) 获取。
  */
 
-import { registerCommand } from '../../system/commandServer.js';
 import { PlatformManager, registerPlatform } from '../../system/platform-manager.js';
-import { getLogger } from '../../system/logger.js';
 import { Platform } from '../PlatformInterface.js';
 import qqBotBackend from 'qq-official-bot';
 const { Bot } = qqBotBackend;
-import GroupHandler from "./groupHandler.js";
-import PrivateHandler from "./privateHandler.js";
+import MsgHandler from "./msgHandler.js";
 import { EVENTS, INTENTS } from "./enums.js";
 
 export class PlatformQQBot extends Platform {
@@ -44,8 +41,8 @@ export class PlatformQQBot extends Platform {
         INTENTS.common.INTERACTION,
       ],
     });
-    this._bot.on(EVENTS.message.group, (e) => GroupHandler.onMessageIn(e, this));
-    this._bot.on(EVENTS.message.private, (e) => PrivateHandler.onMessageIn(e, this));
+    this._bot.on(EVENTS.message.group, (e) => MsgHandler.onGroupMessageIn(e, this));
+    this._bot.on(EVENTS.message.private, (e) => MsgHandler.onPrivateMessageIn(e, this));
     await this._bot.start();
     return { close: () => this.stop() };
   }

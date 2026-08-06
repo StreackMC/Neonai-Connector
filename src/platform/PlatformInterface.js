@@ -44,7 +44,7 @@ export class Platform {
    */
   logMsgIn(...msg) {
     const type_ = (this.constructor.type) ? this.constructor.type : '<UNKNOWN>';
-    getLogger().chatIn.info(`<${type_}/${this.profile}> `, ...msg);
+    getLogger().chatIn.info(`<${type_}/${this.profile}>`, ...msg);
   }
 
   /**
@@ -54,7 +54,7 @@ export class Platform {
    */
   log(type, ...msg) {
     const type_ = (this.constructor.type) ? this.constructor.type : '<UNKNOWN>';
-    getLogger().platP[type](`<${type_}/${this.profile}> `, ...msg);
+    getLogger().platP[type](`<${type_}/${this.profile}>`, ...msg);
   }
 
   /**
@@ -63,6 +63,6 @@ export class Platform {
    */
   logMsgOut(...msg) {
     const type_ = (this.constructor.type) ? this.constructor.type : '<UNKNOWN>';
-    getLogger().chatOut.info(`<${type_}/${this.profile}> `, ...msg);
+    getLogger().chatOut.info(`<${type_}/${this.profile}>`, ...msg);
   }
 }
