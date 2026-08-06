@@ -13,6 +13,7 @@ import { dirname, join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
 import { getConfig, CONFIG_PATHS } from './conf.js';
+import { DEBUGING } from './entry.js';
 
 // ---- 常量与工具函数 ----
 const LEVELS = { debug: 'DEBUG', info: 'INFO', warn: 'WARN', error: 'ERROR' };
@@ -120,15 +121,15 @@ export function setConsoleHooks(before, after) {
 
 /**
  * 尝试将输入尽可能地转化为文本
- * @param {boolean} [short=true] 是否要截断:会只枚举前3个属性/对象
+ * @param {boolean} [short] 是否要截断:会只枚举前3个属性/对象；当调试模式时默认禁用，反之同理。
  */
-export function parseString(val, short = true) {
+export function parseString(val, short = !DEBUGING) {
   if (val === null) return 'null';
   if (val === undefined) return 'undefined';
   if (typeof val === 'string') return val;
   if (val instanceof Error) return val.message ?? String(val);
   if (Array.isArray(val)) {
-    if (!short) return val.join(', ').replace(/\n/g, '\\n');
+    if (!short) return `[${val.map(parseString).join(', ').replace(/\n/g, '\\n')}]`;
     const head = val.slice(0, 3).map(parseString);
     const tail = val.length > 3 ? ` ... (+${val.length - 3})` : '';
     return `[${head.join(', ').replace(/\n/g, '\\n') }${tail}]`;
