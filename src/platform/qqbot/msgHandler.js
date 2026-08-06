@@ -46,7 +46,8 @@ function toMarkdown(raw, pp) {
         result += piece.text;
         break;
       case '':
-      
+        //TODO: 先把基本文本消息搞定，然后再考虑富文本消息
+        // 所以这部分以后再写
       default:
         pp.log('warn', "无法将消息片段", piece, "转换为 Markdown，未知的消息类型：", piece.type);
         break;
