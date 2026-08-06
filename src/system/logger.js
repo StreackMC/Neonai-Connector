@@ -121,9 +121,10 @@ export function setConsoleHooks(before, after) {
 
 /**
  * 尝试将输入尽可能地转化为文本
- * @param {boolean} [short] 是否要截断:会只枚举前3个属性/对象；当调试模式时默认禁用，反之同理。
+ * @param {boolean} [short] 是否要截断:会只枚举前3个属性/对象；当调试模式时默认禁用，反之同理。**必须显式指定布尔值类型才可覆盖**
  */
-export function parseString(val, short = !DEBUGING) {
+export function parseString(val, short) {
+  if (typeof short !== 'boolean') short = !(DEBUGING || getConfig(CONFIG_PATHS.main).getBoolean('detailedLog', false));
   if (val === null) return 'null';
   if (val === undefined) return 'undefined';
   if (typeof val === 'string') return val;
