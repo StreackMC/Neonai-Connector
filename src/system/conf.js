@@ -18,7 +18,6 @@ import { ROOT_PATH } from './entry.js';
 export const CONFIG_PATHS = Object.freeze({
   app:    './package.json',
   main:   './config/main.json',
-  logger: './config/logger.json',
   secret: './secret.json',
 });
 

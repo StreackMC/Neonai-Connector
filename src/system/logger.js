@@ -311,9 +311,7 @@ export function createLogger(options = {}) {
  */
 export function getLogger() {
   if (!_logger) {
-    const logDir = getConfig(CONFIG_PATHS.logger).getString('logDir', './logs');
-    const maxFileSize = getConfig(CONFIG_PATHS.logger).getInt('maxFileSize', 1048576);
-    _logger = createLogger({ logDir, maxFileSize });
+    _logger = createLogger({ logDir: './logs', maxFileSize: getConfig(CONFIG_PATHS.main).getInt('maxLogFileSize', 1048576) });
   }
   return _logger;
 }
