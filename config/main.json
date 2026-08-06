@@ -3,14 +3,4 @@
   "name": "Neonai",
   // 机器人名称2（部分场景会使用）
   "name2": "澪奈",
-  // 监听哪些平台的消息
-  // 平台鉴权见于 secret.json
-  "listening": {
-    "qqbot": {
-      // 启用【官方QQ机器人】
-      "enabled": true,
-      // 最大重连次数
-      "maxRetry": 3,
-    }
-  }
 }

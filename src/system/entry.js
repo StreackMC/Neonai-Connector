@@ -14,12 +14,14 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { platform, release, tmpdir } from 'node:os';
 
-import { initConfig, getConfig } from './conf.js';
+import { getConfig, CONFIG_PATHS } from './conf.js';
 import { setDebugMode, setConsoleHooks, getLogger } from './logger.js';
 import { acquirePidLock, releasePidLock } from './pid.js';
-import { getCommands, registerCommand, executeCommand } from './commandServer.js';
-import { startCLI, stopCLI, refreshCLI, erasePrompt, redrawPrompt } from './cli.js';
-import { createPlatformManager, getPM } from './platform-manager.js';
+import { registerCommand, executeCommand } from './commandServer.js';
+import { startCLI, stopCLI, erasePrompt, redrawPrompt } from './cli.js';
+import { PlatformManager } from './platform-manager.js';
+
+// ---- 常量 ----
 
 const CYAN = '\x1b[36m';
 const DIM = '\x1b[2m';
@@ -27,11 +29,18 @@ const R = '\x1b[0m';
 
 const T = "Neo";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(__dirname, '../..');
-
+/** 当前是否在调试 */
+export const DEBUGING = process.argv.some((a) => a === '--debug=true' || a === '--debug');
+/** 项目根路径 */
+export const ROOT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+/** 项目名称 */
+export const APP_NAME = getConfig(CONFIG_PATHS.app).getString('name', 'neonai-connector');
+/** 项目版本 */
+export const APP_VERSION = getConfig(CONFIG_PATHS.app).getString('version', '0.0.0');
 /** PID 锁文件路径 */
-const PID_FILE = resolve(ROOT, '.neonai.pid');
+export const PID_FILE_PATH = resolve(ROOT_PATH, '.neonai.pid');
+
+// ---- 安全关闭 ----
 
 let shuttingDown = false;
 
@@ -50,21 +59,21 @@ async function shutdown(signal) {
   forceTimer.unref();
 
   // 释放所有平台
-  const pm = getPM();
+  const pm = PlatformManager.instance;
   if (pm) {
     await Promise.allSettled(pm.getClosers().map((close) => close()));
   }
 
   getLogger().main.info('服务已关闭');
+  // 如果在调试使用断点避免停止运行
+  if (DEBUGING) debugger;
   process.exit(0);
 }
 
 // ---- 系统级 CLI 命令 ----
 
 registerCommand('status', () => {
-  const name = getConfig().getString('app.name', 'neonai-connector');
-  const version = getConfig().getString('app.version', '0.0.0');
-  return `${name} v${version}\n` + `PID: ${process.pid}\n`;
+  return `${APP_NAME} v${APP_VERSION}\n` + `PID: ${process.pid}\n`;
 }, { description: '查看服务运行状态' });
 
 registerCommand('version', () => {
@@ -76,7 +85,6 @@ registerCommand('version', () => {
   const REPO    = 'https' + '://' + 'github' + '.com' + '/' + 'Strea' + 'ckMC' + '/' + 'Neo' + 'nai-Connector';
 
   // ---- 运行时读取 ----
-  const version = getConfig().getString('app.version', '0.0.0');
   const nodeVer = process.version;
   const osVer   = platform() + ' ' + release();
   const cwd     = process.cwd();
@@ -92,6 +100,7 @@ registerCommand('version', () => {
     `${C}   \\/  \\/${R}   ${D}----------------------------${R}\n` +
     `  ${B}Author${R}    ${AUTHOR}\n` +
     `  ${B}License${R}   ${LICENSE}\n` +
+    `  ${B}       ${R}   ${CPR}` +
     `  ${B}Repo${R}      ${REPO}\n` +
     `  ${D}----------------------------${R}\n` +
     `  ${B}Node.js${R}   ${nodeVer}\n` +
@@ -105,37 +114,31 @@ registerCommand('stop', () => {
   shutdown('COMMAND');
 }, { description: '安全关闭服务' });
 
+// ---- 启动 ----
+
 /** 启动流程 */
 export async function bootstrap() {
-  // 初始化配置（单例）
-  initConfig();
+  // PID锁
+  acquirePidLock(PID_FILE_PATH, getLogger());
+  getLogger().main.info(`${APP_NAME} 服务启动`);
 
-  const name = getConfig().getString('app.name', 'neonai-connector');
-  getLogger().main.info(`${name} 服务启动`);
-
-  acquirePidLock(PID_FILE, getLogger());
-
-  // 解析 --debug / --debug=true 参数
-  const isDebug = process.argv.some((a) => a === '--debug=true' || a === '--debug');
-
-  if (isDebug) {
+  // 调试模式分支
+  if (DEBUGING) {
     // 调试模式：console 走原生输出，设置全局标志位，启用 $()
     setDebugMode(true);
     globalThis.$ = (input) => executeCommand(String(input));
     getLogger().main.info('调试模式已启用，$(cmd) 可用');
   } else {
     // 正常模式：劫持 console 到日志系统
+    globalThis.$ = null;
     getLogger().redirectConsole(true);
   }
 
-  // 初始化平台管理器（单例由 platform-manager.js 持有）
-  createPlatformManager({
-    configPath: resolve(ROOT, 'config', 'main.json'),
+  // 初始化平台管理器（单例）
+  new PlatformManager({
+    configPath: resolve(ROOT_PATH, 'secret.json'),
     logger: getLogger(),
   });
-
-  // 导入平台模块（触发 registerPlatform 注册）
-  await import('../platform/qqbot/qqbot.js');
 
   // 立即启动 CLI，让提示符尽快出现（平台加载不阻塞交互）
   startCLI();
@@ -143,15 +146,16 @@ export async function bootstrap() {
   // 日志输出与 REPL 提示符协作：每次输出先清掉旧提示符，输出后重绘新提示符
   setConsoleHooks(erasePrompt, redrawPrompt);
 
+  // 导入平台模块（触发 registerPlatform 注册）
+  await import('../platform/qqbot/qqbot.js');
+
   // 按配置启动已启用的平台
-  await getPM().loadEnabled();
+  PlatformManager.instance.loadEnabled();
 
-  // 平台加载完成（期间可能有日志输出），刷新提示符行
-  refreshCLI();
-
+  // 监听 SIGNAL 等
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
-  process.on('exit', () => releasePidLock(PID_FILE));
+  process.on('exit', () => releasePidLock(PID_FILE_PATH));
 
   // 顶层未捕获异常：写崩溃报告后走安全关闭流程
   process.on('uncaughtException', (err) => {

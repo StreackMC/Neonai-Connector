@@ -12,7 +12,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, 
 import { dirname, join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
-import { getConfig } from './conf.js';
+import { getConfig, CONFIG_PATHS } from './conf.js';
 
 // ---- 常量与工具函数 ----
 const LEVELS = { debug: 'DEBUG', info: 'INFO', warn: 'WARN', error: 'ERROR' };
@@ -30,7 +30,7 @@ const LOG_TYPES = {
   "Chat:Received": { console: true, file: true, call: 'chatIn' },
   "Chat:Sent": { console: true, file: true, call: 'chatOut' },
   "Platform:Manager": { console: true, file: true, call: 'platM' },
-  "Platform:QQ": { console: true, file: true, call: 'platQ' },
+  "Platform:Profile": { console: true, file: true, call: 'platP' },
   Command: { console: true, file: true, call: 'cmd' },
 };
 
@@ -42,7 +42,7 @@ const LOG_TYPES = {
  * @property {LoggerInstance} chatIn
  * @property {LoggerInstance} chatOut
  * @property {LoggerInstance} platM
- * @property {LoggerInstance} platQ
+ * @property {LoggerInstance} platP
  * @property {LoggerInstance} cmd
  * @property {(...args: any[]) => void} log         无类型默认日志（走 Other）
  * @property {(err?: Error) => void} writeCrashReport
@@ -128,21 +128,21 @@ export function parseString(val, short = true) {
   if (typeof val === 'string') return val;
   if (val instanceof Error) return val.message ?? String(val);
   if (Array.isArray(val)) {
-    if (!short) return val.join(', ');
+    if (!short) return val.join(', ').replace(/\n/g, '\\n');
     const head = val.slice(0, 3).map(parseString);
     const tail = val.length > 3 ? ` ... (+${val.length - 3})` : '';
-    return `[${head.join(', ')}${tail}]`;
+    return `[${head.join(', ').replace(/\n/g, '\\n') }${tail}]`;
   }
   if (typeof val === 'object') {
     const keys = Object.keys(val);
     if (!short) {
       const pairs = keys.map((k) => `${k}: '${parseString(val[k])}'`);
-      return `{${pairs.join(', ')}}`;
+      return `{${pairs.join(', ').replace(/\n/g, '\\n') }}`;
     }
     const head = keys.slice(0, 3);
     const pairs = head.map((k) => `${k}: '${parseString(val[k])}'`);
     const tail = keys.length > 3 ? ` ... (+${keys.length - 3})` : '';
-    return `{${pairs.join(', ')}${tail}}`;
+    return `{${pairs.join(', ').replace(/\n/g, '\\n') }${tail}}`;
   }
   return String(val);
 }
@@ -166,7 +166,7 @@ export function createLogger(options = {}) {
     Object.entries(options.types ?? LOG_TYPES).map(([name, def]) => [name, { ...def, name }]),
   );
 
-  // 预建日志目录（所有类型共用单文件，不再分文件夹）+ 共享轮转检测器
+  // 预建日志目录 + 共享轮转检测器
   mkdirSync(logDir, { recursive: true });
   const fileChecker = { last: 0 };
 
@@ -311,8 +311,8 @@ export function createLogger(options = {}) {
  */
 export function getLogger() {
   if (!_logger) {
-    const logDir = getConfig().getString('logger.logDir', './logs');
-    const maxFileSize = getConfig().getInt('logger.maxFileSize', 1048576);
+    const logDir = getConfig(CONFIG_PATHS.logger).getString('logDir', './logs');
+    const maxFileSize = getConfig(CONFIG_PATHS.logger).getInt('maxFileSize', 1048576);
     _logger = createLogger({ logDir, maxFileSize });
   }
   return _logger;

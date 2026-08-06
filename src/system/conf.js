@@ -1,20 +1,18 @@
 /**
  * conf.js — 配置模块（SConfig API 风格）
  *
- * Config 类由 entry.js 初始化并持有单例，通过 getConfig() 暴露。
- * 支持点号嵌套路径（如 "secret.qqbot.appid"），
- * 每个 getter 均有默认值回退。
+ * 按路径创建 Config 实例：`new Config(path)` 读取单个配置文件，
+ * 或 `getConfig(path)` 获取（按路径缓存的）单例。
+ * 支持点号嵌套路径（如 "qqbot.appid"），每个 getter 均有默认值回退。
  *
  * 仅支持 JSON5 格式（覆盖 JSON / JSONC）。
  */
 
 import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import JSON5 from 'json5';
+import { ROOT_PATH } from './entry.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(__dirname, '../..');
 
 /** 内部名 → 配置文件相对路径 */
 export const CONFIG_PATHS = Object.freeze({
@@ -51,10 +49,11 @@ function getNested(map, key) {
 
 export class Config {
   /**
-   * @param {Record<string, object>} sources 内部名 → 解析后的对象
+   * 按路径读取单个配置文件。
+   * @param {string} path 配置文件路径（相对项目根或绝对路径）
    */
-  constructor(sources) {
-    this._ = sources;
+  constructor(path) {
+    this._ = JSON5.parse(readFileSync(resolve(ROOT_PATH, path), 'utf8'));
   }
 
   /**
@@ -110,16 +109,7 @@ export class Config {
    * @param {*} [def=undefined]
    */
   get(key, def) {
-    const idx = dotIndex(key);
-    if (idx === -1) {
-      // 无嵌套：顶层 section 名
-      return this._[key] !== undefined ? this._[key] : def;
-    }
-    const section = key.slice(0, idx);
-    const path    = key.slice(idx + 1);
-    const map     = this._[section];
-    if (!map || typeof map !== 'object') return def;
-    const v = getNested(map, path);
+    const v = getNested(this._, key);
     return v !== undefined ? v : def;
   }
 
@@ -145,29 +135,14 @@ export class Config {
   }
 }
 
-// ---- 单例 ----
-
-let _instance = null;
+const _cache = new Map();
 
 /**
- * 由 entry.js 在启动时调用，初始化全局配置。
+ * 按路径获取配置单例（首次调用时创建并缓存）。
+ * @param {string} path 配置文件路径（相对项目根或绝对路径）
+ * @returns {Config} 该路径对应的共享配置实例
  */
-export function initConfig() {
-  const sources = Object.fromEntries(
-    Object.entries(CONFIG_PATHS).map(([name, rel]) => {
-      const raw = readFileSync(resolve(ROOT, rel), 'utf8');
-      return [name, JSON5.parse(raw)];
-    }),
-  );
-  _instance = new Config(sources);
-  return _instance;
-}
-
-/**
- * 获取配置单例（需先调用 initConfig）。
- * @returns {Config}
- */
-export function getConfig() {
-  if (!_instance) throw new Error('Config 尚未初始化，请先调用 initConfig()');
-  return _instance;
+export function getConfig(path) {
+  if (!_cache.has(path)) _cache.set(path, new Config(path));
+  return _cache.get(path);
 }
