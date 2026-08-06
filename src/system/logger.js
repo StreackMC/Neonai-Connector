@@ -118,28 +118,36 @@ export function setConsoleHooks(before, after) {
   _afterWrite = after ?? null;
 }
 
-// ---- 截断器 ----
-function short(val) {
+/**
+ * 尝试将输入尽可能地转化为文本
+ * @param {boolean} [short=true] 是否要截断:会只枚举前3个属性/对象
+ */
+export function parseString(val, short = true) {
   if (val === null) return 'null';
   if (val === undefined) return 'undefined';
   if (typeof val === 'string') return val;
   if (val instanceof Error) return val.message ?? String(val);
   if (Array.isArray(val)) {
-    const head = val.slice(0, 3).map(short);
+    if (!short) return val.join(', ');
+    const head = val.slice(0, 3).map(parseString);
     const tail = val.length > 3 ? ` ... (+${val.length - 3})` : '';
     return `[${head.join(', ')}${tail}]`;
   }
   if (typeof val === 'object') {
     const keys = Object.keys(val);
+    if (!short) {
+      const pairs = keys.map((k) => `${k}: '${parseString(val[k])}'`);
+      return `{${pairs.join(', ')}}`;
+    }
     const head = keys.slice(0, 3);
-    const pairs = head.map((k) => `${k}: ${short(val[k])}`);
+    const pairs = head.map((k) => `${k}: '${parseString(val[k])}'`);
     const tail = keys.length > 3 ? ` ... (+${keys.length - 3})` : '';
     return `{${pairs.join(', ')}${tail}}`;
   }
   return String(val);
 }
 
-function toText(args) { return args.map(short).join(' '); }
+function toText(args) { return args.map(parseString).join(' '); }
 
 /**
  * 创建日志器。

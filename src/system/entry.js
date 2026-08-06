@@ -131,7 +131,7 @@ export async function bootstrap() {
   });
 
   // 导入平台模块（触发 registerPlatform 注册）
-  await import('../platform/qqbot.js');
+  await import('../platform/qqbot/qqbot.js');
 
   // 立即启动 CLI，让提示符尽快出现（平台加载不阻塞交互）
   startCLI();
