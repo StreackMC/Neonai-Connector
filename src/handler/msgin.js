@@ -1,14 +1,20 @@
 /** 
- * 通过输入消息获取回复
+ * 消息入口 —— 通过输入消息获取 AI 回复
  */
 
-import { getLogger } from "../system/logger.js";
+import { askAI } from './ai.js';
+import { getLogger } from '../system/logger.js';
 
-/** 通过输入消息获取回复
- * @param {string} msg 消息输入
+/**
+ * 根据输入消息获取回复。
+ * @param {string} msg 用户输入
  * @returns {Promise<string>}
  */
 export async function resolveReply(msg) {
-  const r = await new Promise((rs, rj) => { setTimeout(() => rs("喵~"), 1000); });
-  return r;
+  try {
+    return await askAI(msg);
+  } catch (err) {
+    getLogger().chatOut.warn(`[回复失败] ${err.message}`);
+    return '抱歉，我暂时无法回复，请稍后再试。';
+  }
 }
