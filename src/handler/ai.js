@@ -2,8 +2,8 @@
  * handler/ai.js — AI 交互模块（概念验证）
  *
  * 使用 OpenAI 兼容 API 格式，仅发送系统提示词 + 用户消息，无历史记录。
- * API 端点与凭据从 secret.json oai[] 读取，
- * 系统提示词从文件 config/prompts/system.md 加载。
+ * 系统提示词按 OAI provider 名称加载：
+ *   config/prompts/${oai[x].name}.md
  */
 
 import { dirname, resolve } from 'node:path';
@@ -15,17 +15,24 @@ import { getLogger } from '../system/logger.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
-/** 缓存的系统提示词 */
-let _systemPrompt = null;
+/** @type {Map<string, string>} provider 名 → 提示词 */
+const _promptCache = new Map();
 
-function loadSystemPrompt() {
-  if (_systemPrompt) return _systemPrompt;
+/**
+ * @param {string} providerName
+ * @returns {string}
+ */
+function loadSystemPrompt(providerName) {
+  if (_promptCache.has(providerName)) return _promptCache.get(providerName);
+  let prompt;
   try {
-    _systemPrompt = readFileSync(resolve(ROOT, 'config/prompts/system.md'), 'utf8').trim();
+    prompt = readFileSync(resolve(ROOT, `config/prompts/${providerName}.md`), 'utf8').trim();
   } catch {
-    _systemPrompt = '你是一个有用的 AI 助手。';
+    prompt = '你是一个有用的 AI 助手。';
+    getLogger().toolAi.warn(`未找到提示词文件: config/prompts/${providerName}.md，使用默认`);
   }
-  return _systemPrompt;
+  _promptCache.set(providerName, prompt);
+  return prompt;
 }
 
 /**
@@ -38,7 +45,7 @@ export async function askAI(userMessage) {
   const provider = oaiList.find((p) => p?.available !== false);
   if (!provider) throw new Error('未找到可用的 AI API 配置');
 
-  const systemPrompt = loadSystemPrompt();
+  const systemPrompt = loadSystemPrompt(provider.name);
   const url  = `${provider.address}/v1/chat/completions`;
   const body = {
     model: provider.model,
