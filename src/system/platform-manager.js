@@ -14,8 +14,10 @@
  *   await pm.loadEnabled();
  *
  * 平台模块中注册：
+ *   import { Platform } from '../platform/Platform.js';
  *   import { registerPlatform } from '../system/platform-manager.js';
- *   registerPlatform('qqbot', { start: init, stop: close });
+ *   class PlatformQQBot extends Platform { ... }
+ *   registerPlatform(new PlatformQQBot());
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -45,16 +47,14 @@ export function getPM() {
 
 /**
  * 平台模块在 import 时调用此函数注册自身。
- * 内部依赖 createPlatformManager 已先执行。
  *
- * @param {string} name 平台名（对应 config 中 listening.<name>）
- * @param {{ start: () => any, stop: () => void }} lifecycle
+ * @param {import('../platform/Platform.js').Platform} platform 平台实例
  */
-export function registerPlatform(name, lifecycle) {
+export function registerPlatform(platform) {
   if (!_pm) {
     throw new Error('PlatformManager 尚未初始化，请确保在 system/entry.js 中先调用 createPlatformManager');
   }
-  _pm._register(name, lifecycle);
+  _pm._register(platform);
 }
 
 /**
@@ -65,7 +65,7 @@ export function registerPlatform(name, lifecycle) {
  * @param {import('./logger.js').Logger} opts.logger
  */
 export function createPlatformManager({ configPath, logger }) {
-  /** @type {Map<string, { lifecycle: {start,stop}, enabled: boolean, running: boolean }>} */
+  /** @type {Map<string, { platform: import('../platform/Platform.js').Platform, enabled: boolean, running: boolean }>} */
   const registry = new Map();
 
   /** 正在运行的平台 close 函数集合 */
@@ -89,10 +89,11 @@ export function createPlatformManager({ configPath, logger }) {
 
   const pm = {
     /** 供 registerPlatform 调用的内部注册 */
-    _register(name, lifecycle) {
+    _register(platform) {
       const cfg = readConfig();
+      const name = platform.name;
       const enabled = cfg?.listening?.[name]?.enabled ?? false;
-      registry.set(name, { lifecycle, enabled, running: false });
+      registry.set(name, { platform, enabled, running: false });
       logger.main.info(`平台 "${name}" 已注册（${enabled ? '已启用' : '已禁用'}）`);
     },
 
@@ -115,7 +116,7 @@ export function createPlatformManager({ configPath, logger }) {
 
       logger.main.info(`正在启动平台 "${name}"`);
       try {
-        const result = await entry.lifecycle.start();
+        const result = await entry.platform.start();
         entry.running = true;
 
         // 收集 close 函数

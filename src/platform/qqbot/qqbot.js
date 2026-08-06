@@ -14,57 +14,63 @@ import { getConfigs } from '../../system/conf.js';
 import { registerCommand } from '../../system/commandServer.js';
 import { registerPlatform } from '../../system/platform-manager.js';
 import { getDebugMode, getLogger } from '../../system/logger.js';
+import { Platform } from '../Platform.js';
 import qqBotBackend from 'qq-official-bot';
 const { Bot } = qqBotBackend;
 import GroupHandler from "./groupHandler.js";
 import PrivateHandler from "./privateHandler.js";
 import { EVENTS, INTENTS } from "./enums.js";
 
-/** 当前运行的 Bot 实例，未连接时为 null */
-let bot = null;
-export function getBot() { return bot; }
-
 /** 当前生效的配置信息 */
 const bot_conf = {
   appid: getConfigs()?.secret?.qqbot?.appid,
   secret: getConfigs()?.secret?.qqbot?.appsecret,
-  sandbox: false, // 是否为沙箱环境
-  removeAt: true, // 自动移除消息中的 @机器人
+  sandbox: false,
+  removeAt: true,
   logLevel: getDebugMode() ? 'debug' : 'fatal',
   maxRetry: (parseInt(getConfigs()?.secret?.qqbot?.maxRetry) > 0) ? parseInt(getConfigs()?.secret?.qqbot?.maxRetry) : 3,
   intents: [
-    // —— 群聊全部 intents ——
     INTENTS.group.GROUP_AT_MESSAGE_CREATE,
-    // —— 好友列表私信（单聊/C2C）全部 intents ——
     INTENTS.chat.C2C_MESSAGE_CREATE,
-    // —— 通用辅助 intents ——
-    INTENTS.common.MESSAGE_AUDIT,  // 消息审核事件
-    INTENTS.common.INTERACTION,    // 交互 / 按钮事件
+    INTENTS.common.MESSAGE_AUDIT,
+    INTENTS.common.INTERACTION,
   ],
 };
 
-// ---- 与 backend 交互 ----
+class PlatformQQBot extends Platform {
+  constructor() {
+    super('qqbot');
+    /** @type {import('qq-official-bot').Bot | null} */
+    this._bot = null;
+  }
 
-/** 启动 QQBot 连接（供平台管理器调用） */
-async function start() {
-  bot = new Bot(bot_conf);
-  bot.on(EVENTS.message.group, GroupHandler.onMessageIn);
-  bot.on(EVENTS.message.private, PrivateHandler.onMessageIn);
-  await bot.start();
-  return { close: stop };
-}
+  /** 获取当前 Bot 实例 */
+  get bot() { return this._bot; }
 
-/** 关闭 QQBot 连接 */
-function stop() {
-  if (bot) {
-    bot.stop();
-    bot = null;
+  async start() {
+    this._bot = new Bot(bot_conf);
+    this._bot.on(EVENTS.message.group, GroupHandler.onMessageIn);
+    this._bot.on(EVENTS.message.private, PrivateHandler.onMessageIn);
+    await this._bot.start();
+    return { close: () => this.stop() };
+  }
+
+  async stop() {
+    if (this._bot) {
+      this._bot.stop();
+      this._bot = null;
+    }
   }
 }
 
-// ---- 与 system 交互 ----
+const instance = new PlatformQQBot();
+registerPlatform(instance);
 
-registerPlatform('qqbot', { start, stop });
+/** 获取 QQBot 平台实例 */
+export function getQQBot() { return instance; }
+
+// ---- CLI 运维命令 ----
+
 registerCommand('qqbot', async (args) => {
   const sub = args[0];
   if (!sub) {
@@ -73,16 +79,14 @@ registerCommand('qqbot', async (args) => {
   }
 
   if (sub === 'status') {
-    const connected = !!bot;
+    const connected = !!instance.bot;
     getLogger().platQ.info(`QQBot 状态: ${connected ? '\x1b[32m已连接\x1b[0m' : '\x1b[33m未连接\x1b[0m'}`);
   } else if (sub === 'reconnect') {
-    stop();
-    await start();
+    await instance.stop();
+    await instance.start();
     getLogger().platQ.info('QQBot 已重新连接');
   } else {
     getLogger().platQ.warn(`未知子命令: ${sub}，可用: status | reconnect`);
   }
 }, { description: 'QQBot 运维操作', usage: 'qqbot status | qqbot reconnect' });
-
-// ---- 消息处理 ----
 
