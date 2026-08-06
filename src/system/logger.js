@@ -30,6 +30,7 @@ const LOG_TYPES = {
   Other: { console: true, file: true, call: 'other' },
   "Chat:Received": { console: true, file: true, call: 'chatIn' },
   "Chat:Sent": { console: true, file: true, call: 'chatOut' },
+  "Toolcall:AI": { console: true, file: true, call: 'toolAi' },
   "Platform:Manager": { console: true, file: true, call: 'platM' },
   "Platform:Profile": { console: true, file: true, call: 'platP' },
   Command: { console: true, file: true, call: 'cmd' },
@@ -44,6 +45,7 @@ const LOG_TYPES = {
  * @property {LoggerInstance} chatOut
  * @property {LoggerInstance} platM
  * @property {LoggerInstance} platP
+ * @property {LoggerInstance} toolAi
  * @property {LoggerInstance} cmd
  * @property {(...args: any[]) => void} log         无类型默认日志（走 Other）
  * @property {(err?: Error) => void} writeCrashReport
