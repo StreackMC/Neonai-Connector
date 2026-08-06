@@ -14,7 +14,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { platform, release, tmpdir } from 'node:os';
 
-import { getConfigs } from './conf.js';
+import { initConfig, getConfig } from './conf.js';
 import { setDebugMode, setConsoleHooks, getLogger } from './logger.js';
 import { acquirePidLock, releasePidLock } from './pid.js';
 import { getCommands, registerCommand, executeCommand } from './commandServer.js';
@@ -62,7 +62,8 @@ async function shutdown(signal) {
 // ---- 系统级 CLI 命令 ----
 
 registerCommand('status', () => {
-  const { name, version } = getConfigs().app;
+  const name = getConfig().getString('app.name', 'neonai-connector');
+  const version = getConfig().getString('app.version', '0.0.0');
   return `${name} v${version}\n` + `PID: ${process.pid}\n`;
 }, { description: '查看服务运行状态' });
 
@@ -75,7 +76,7 @@ registerCommand('version', () => {
   const REPO    = 'https' + '://' + 'github' + '.com' + '/' + 'Strea' + 'ckMC' + '/' + 'Neo' + 'nai-Connector';
 
   // ---- 运行时读取 ----
-  const { version } = getConfigs().app;
+  const version = getConfig().getString('app.version', '0.0.0');
   const nodeVer = process.version;
   const osVer   = platform() + ' ' + release();
   const cwd     = process.cwd();
@@ -106,7 +107,10 @@ registerCommand('stop', () => {
 
 /** 启动流程 */
 export async function bootstrap() {
-  const { name } = getConfigs().app;
+  // 初始化配置（单例）
+  initConfig();
+
+  const name = getConfig().getString('app.name', 'neonai-connector');
   getLogger().main.info(`${name} 服务启动`);
 
   acquirePidLock(PID_FILE, getLogger());

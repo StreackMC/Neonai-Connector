@@ -12,7 +12,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, 
 import { dirname, join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
-import { getConfigs } from './conf.js';
+import { getConfig } from './conf.js';
 
 // ---- 常量与工具函数 ----
 const LEVELS = { debug: 'DEBUG', info: 'INFO', warn: 'WARN', error: 'ERROR' };
@@ -311,7 +311,8 @@ export function createLogger(options = {}) {
  */
 export function getLogger() {
   if (!_logger) {
-    const { logDir, maxFileSize } = getConfigs().logger;
+    const logDir = getConfig().getString('logger.logDir', './logs');
+    const maxFileSize = getConfig().getInt('logger.maxFileSize', 1048576);
     _logger = createLogger({ logDir, maxFileSize });
   }
   return _logger;

@@ -10,7 +10,7 @@
  * 使其内嵌的 log4js 走统一截断输出。
  */
 
-import { getConfigs } from '../../system/conf.js';
+import { getConfig } from '../../system/conf.js';
 import { registerCommand } from '../../system/commandServer.js';
 import { registerPlatform } from '../../system/platform-manager.js';
 import { getDebugMode, getLogger } from '../../system/logger.js';
@@ -23,12 +23,12 @@ import { EVENTS, INTENTS } from "./enums.js";
 
 /** 当前生效的配置信息 */
 const bot_conf = {
-  appid: getConfigs()?.secret?.qqbot?.appid,
-  secret: getConfigs()?.secret?.qqbot?.appsecret,
+  appid: getConfig().getString('secret.qqbot.appid'),
+  secret: getConfig().getString('secret.qqbot.appsecret'),
   sandbox: false,
   removeAt: true,
   logLevel: getDebugMode() ? 'debug' : 'fatal',
-  maxRetry: (parseInt(getConfigs()?.secret?.qqbot?.maxRetry) > 0) ? parseInt(getConfigs()?.secret?.qqbot?.maxRetry) : 3,
+  maxRetry: Math.max(getConfig().getInt('secret.qqbot.maxRetry', 3), 1),
   intents: [
     INTENTS.group.GROUP_AT_MESSAGE_CREATE,
     INTENTS.chat.C2C_MESSAGE_CREATE,
