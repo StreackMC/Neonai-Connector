@@ -13,7 +13,7 @@ async function onPrivateMessageIn(event, pp) {
   pp.logMsgIn('Private:', `from=USR#${event.user_id} | msg=` + parseString(event.message, false));
   const reply = await resolveReply(toMarkdown(event.message, pp));
   if (reply) {
-    pp.logMsgOut('Private:', `to=USR#${event.user_id} | msg=`, reply);
+    pp.logMsgOut('Private:', `to=USR#${event.user_id} | msg=`, reply.replace(/\n/g, "\\n"));
     event.reply(reply);
   }
 }
@@ -28,7 +28,7 @@ async function onGroupMessageIn(event, pp) {
   pp.logMsgIn('Group:', `where=GRP#${event.group_id} | from=USR#${event.user_id} | msg=` + parseString(event.message, false));
   const reply = await resolveReply(toMarkdown(event.message, pp));
   if (reply) {
-    pp.logMsgOut('Group:', `where=GRP#${event.group_id} | to=USR#${event.user_id} | msg=`, reply);
+    pp.logMsgOut('Group:', `where=GRP#${event.group_id} | to=USR#${event.user_id} | msg=`, reply.replace(/\n/g, "\\n"));
     event.reply(reply);
   }
 }
