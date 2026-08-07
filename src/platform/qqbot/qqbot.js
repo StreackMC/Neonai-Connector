@@ -32,7 +32,7 @@ export class PlatformQQBot extends Platform {
       secret: cfg.appsecret ?? '',
       sandbox: cfg.sandbox ?? false,
       removeAt: cfg.removeAt ?? true,
-      logLevel: cfg._debug ? 'debug' : 'fatal',
+      logLevel: cfg._debug ? 'debug' : 'info',
       maxRetry: Math.max(cfg.maxRetry ?? 3, 1),
       intents: [
         INTENTS.group.GROUP_AT_MESSAGE_CREATE,

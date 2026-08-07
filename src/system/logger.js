@@ -13,7 +13,7 @@ import { dirname, join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
 import { getConfig, CONFIG_PATHS } from './conf.js';
-import { DEBUGING } from './entry.js';
+import { DEBUGING, ROOT_PATH } from './entry.js';
 
 // ---- 常量与工具函数 ----
 const LEVELS = { debug: 'DEBUG', info: 'INFO', warn: 'WARN', error: 'ERROR' };
@@ -194,8 +194,10 @@ export function createLogger(options = {}) {
   }
 
   // ---- 核心：发日志 ----
-  function emit(type, level, ...msgs) {
-    const time = formatTime();
+  /** @param {Date} [timestamp=new Date()] */
+  function emit(type = getType('other'), level, timestamp = new Date(), ...msgs) {
+    if (!type) type = getType('other');
+    const time = formatTime(timestamp);
     const tag  = LEVELS[level];
     // 控制台与文件统一复用同一套 short/toText 截断逻辑
     const body = toText(msgs);
@@ -232,12 +234,13 @@ export function createLogger(options = {}) {
 
   // ---- console 劫持 ----
   const REDIRECT_CALL = 'other';
+  injectLog4js(emit);
 
   function makeRedirect(level) {
     return (...args) => {
       const t = getType(REDIRECT_CALL);
       if (!t) return;
-      emit(t, level, ...args);
+      emit(t, level, new Date(), ...args);
     };
   }
 
@@ -258,10 +261,10 @@ export function createLogger(options = {}) {
 
   function instance(type) {
     return {
-      debug: (...a) => emit(type, 'debug', ...a),
-      info:  (...a) => emit(type, 'info',  ...a),
-      warn:  (...a) => emit(type, 'warn',  ...a),
-      error: (...a) => emit(type, 'error', ...a),
+      debug: (...a) => emit(type, 'debug', new Date(), ...a),
+      info:  (...a) => emit(type, 'info', new Date(), ...a),
+      warn:  (...a) => emit(type, 'warn', new Date(), ...a),
+      error: (...a) => emit(type, 'error', new Date(), ...a),
       checker: fileChecker,
     };
   }
@@ -288,7 +291,7 @@ export function createLogger(options = {}) {
   return new Proxy({}, {
     get(_, prop) {
       if (typeof prop !== 'string') return undefined;
-      if (prop === 'log')               return (...a) => emit(getType(REDIRECT_CALL), 'info', ...a);
+      if (prop === 'log')               return (...a) => emit(getType(REDIRECT_CALL), 'info', new Date(), ...a);
       if (prop === 'redirectConsole')   return redirectConsole;
       if (prop === 'writeCrashReport')  return writeCrashReport;
 
@@ -300,11 +303,29 @@ export function createLogger(options = {}) {
 
       if (LEVELS[prop]) {
         const ot = getType(REDIRECT_CALL);
-        return (...a) => emit(ot, prop, ...a);
+        return (...a) => emit(ot, prop, new Date(), ...a);
       }
 
       return undefined;
     },
+  });
+}
+
+import log4js from 'log4js';
+import { putEmit } from './log4js_inject.js';
+/** 注入 Log4js @param {Function} emit */
+function injectLog4js(emit) {
+  putEmit(emit);
+  log4js.configure({
+    appenders: {
+      // 使用自定义 appender
+      cliForward: {
+        type: join(ROOT_PATH, 'src', 'system', 'log4js_inject.js')
+      }
+    },
+    categories: {
+      default: { appenders: ['cliForward'], level: 'all' },
+    }
   });
 }
 

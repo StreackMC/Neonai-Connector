@@ -39,6 +39,8 @@ export const APP_NAME = getConfig(CONFIG_PATHS.app).getString('name', 'neonai-co
 export const APP_VERSION = getConfig(CONFIG_PATHS.app).getString('version', '0.0.0');
 /** PID 锁文件路径 */
 export const PID_FILE_PATH = resolve(ROOT_PATH, '.neonai.pid');
+/** 全局唯一ID */
+export const UniqueID = function uid() { if (typeof uid._ !== 'number') uid._ = 0; uid._ += 1; return uid._; };
 
 // ---- 安全关闭 ----
 
@@ -159,14 +161,14 @@ export async function bootstrap() {
 
   // 顶层未捕获异常：写崩溃报告后走安全关闭流程
   process.on('uncaughtException', (err) => {
-    getLogger().main.error(`未捕获异常: ${err.message}`);
+    getLogger().main.error(`未捕获异常:`, err);
     getLogger().writeCrashReport(err);
-    shutdown('uncaughtException');
+    // shutdown('uncaughtException');
   });
   process.on('unhandledRejection', (reason) => {
     const err = reason instanceof Error ? reason : new Error(String(reason));
-    getLogger().main.error(`未处理的 Promise 拒绝: ${err.message}`);
+    getLogger().main.error(`未处理的 Promise 拒绝异常:`, err);
     getLogger().writeCrashReport(err);
-    shutdown('unhandledRejection');
+    // shutdown('unhandledRejection');
   });
 }
