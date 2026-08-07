@@ -1,7 +1,9 @@
 import qqBotBackend from 'qq-official-bot';
 import { parseString } from '../../system/logger.js';
 import { PlatformQQBot } from './qqbot.js';
-import { resolveReply } from '../../handler/msgin.js';
+import { resolveReply } from '../../handler/msgIn.js';
+import { getConfig } from '../../system/conf.js';
+import { getPlatformManager } from '../../system/platform-manager.js';
 
 /**
  * 好友列表私聊
@@ -10,8 +12,11 @@ import { resolveReply } from '../../handler/msgin.js';
  * @param {PlatformQQBot} pp 
  */
 async function onPrivateMessageIn(event, pp) {
+  /** 实例的 Profile 配置 */
+  const profile_config = getPlatformManager().getProfile(pp.profile);
+  
   pp.logMsgIn('Private:', `from=USR#${event.user_id} | msg=` + parseString(event.message, false));
-  const reply = await resolveReply(toMarkdown(event.message, pp));
+  const reply = await resolveReply(toMarkdown(event.message, pp), { AI: profile_config.useAI, AIlist: profile_config.allowedAI });
   if (reply) {
     pp.logMsgOut('Private:', `to=USR#${event.user_id} | msg=`, reply.replace(/\n/g, "\\n"));
     event.reply(reply);
@@ -25,8 +30,11 @@ async function onPrivateMessageIn(event, pp) {
  * @param {PlatformQQBot} pp 
  */
 async function onGroupMessageIn(event, pp) {
+  /** 实例的 Profile 配置 */
+  const profile_config = getPlatformManager().getProfile(pp.profile);
+
   pp.logMsgIn('Group:', `where=GRP#${event.group_id} | from=USR#${event.user_id} | msg=` + parseString(event.message, false));
-  const reply = await resolveReply(toMarkdown(event.message, pp));
+  const reply = await resolveReply(toMarkdown(event.message, pp), { AI: profile_config.useAI, AIlist: profile_config.allowedAI });
   if (reply) {
     pp.logMsgOut('Group:', `where=GRP#${event.group_id} | to=USR#${event.user_id} | msg=`, reply.replace(/\n/g, "\\n"));
     event.reply(reply);

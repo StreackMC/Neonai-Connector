@@ -12,7 +12,7 @@ import JSON5 from 'json5';
 
 import { registerCommand } from './commandServer.js';
 import { getDebugMode, getLogger } from './logger.js';
-import { CONFIG_PATHS, getConfig } from './conf.js';
+import { Config, CONFIG_PATHS, getConfig } from './conf.js';
 
 // ---- 颜色 ----
 const CYAN   = '\x1b[36m';
@@ -21,6 +21,11 @@ const YELLOW = '\x1b[33m';
 const RED    = '\x1b[31m';
 const DIM    = '\x1b[2m';
 const R      = '\x1b[0m';
+
+/** 语法糖，获取PM */
+export function getPlatformManager() {
+  return PlatformManager.instance;
+}
 
 export class PlatformManager {
   /** @type {PlatformManager | null} */
@@ -44,13 +49,13 @@ export class PlatformManager {
     this._configPath = configPath;
     this._logger = logger;
 
-    /** profileName → Platform class */
+    /** profileName → Platform class @type {Map<String, typeof import('../platform/PlatformInterface.js').Platform>} */
     this._profileClasses = new Map();
-    /** profileName → Profile 配置对象 */
+    /** profileName → Profile 配置对象 @type {Map<String, Config>} */
     this._profiles = new Map();
-    /** profileName → Platform 实例 */
+    /** profileName → Platform 实例 @type {Map<String, import('../platform/PlatformInterface.js').Platform>} */
     this._platforms = new Map();
-    /** profileName → close 函数 */
+    /** profileName → close 函数 @type {Map<String, Function>} */
     this._closers = new Map();
 
     // 加载所有 Profiles 配置

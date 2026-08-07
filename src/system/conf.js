@@ -132,6 +132,17 @@ export class Config {
     const v = this.get(key);
     return Array.isArray(v) ? v : def;
   }
+
+  /**
+   * 获取列表。
+   * @apiNote 会将返回值强行封装为数组
+   * @param {string} key
+   * @returns {Array}
+   */
+  getArray(key) {
+    const v = this.get(key);
+    return Array.isArray(v) ? v : [v];
+  }
 }
 
 const _cache = new Map();

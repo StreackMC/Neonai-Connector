@@ -6,6 +6,7 @@
 
 # SECRET
 secret.json
+config/prompts
 
 # Logs
 logs
