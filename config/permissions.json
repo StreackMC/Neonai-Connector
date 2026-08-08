@@ -1,0 +1,11 @@
+{
+  permanent: {
+    'USR#DE5D74452748FAFEF5063175198C950C': {
+      superadmin: true,
+      admin: true,
+    },
+  },
+  temp: {},
+  global: {},
+  globalTemp: {},
+}
