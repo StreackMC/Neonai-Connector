@@ -59,7 +59,10 @@ export function parseArgs(input) {
  * @param {string} name
  * @param {(...args) => any} handler 参数以 ...args 展开传入，this 为命令上下文。**箭头函数无法接收上下文，需要使用<code>function() {}</code>**
  * @param {object} [opts]
- * @param {string|string[]} [opts.permissions] 权限。"perm" 须拥有，"!perm" 须缺失
+ * @param {(string|string[])[]|string|string[]} [opts.permissions]
+ *   权限规则。字符串或字符串列表视作 AND；内层数组视作 OR 组（至少满足其一）。
+ *   "perm" 须拥有，"!perm" 须缺失。
+ *   例: [a, [b, c], d, [e, "!f"]] → a ∧ d ∧ (b ∨ c) ∧ (e ∨ ¬f)
  * @param {string} [opts.description]
  * @param {string} [opts.usage]
  * @this {CommandContext}
@@ -72,31 +75,39 @@ export function registerCommand(name, /** @this {CommandContext} */handler, opts
   commands.set(name, { handler, permissions: perms, description: opts.description, usage: opts.usage });
 }
 
-// ---- 校验 ----
+// ---- 权限校验 ----
+
+/** 检查单条权限（支持 "!prefix" 否定） */
+function _checkOne(perm, executor) {
+  const isNegate = perm.startsWith('!');
+  const name = isNegate ? perm.slice(1) : perm;
+  const has = checkPermission(executor, name);
+  if (isNegate) return has !== true;  // "!x" → 不拥有即满足
+  return has === true;                // "x"  → 拥有即满足
+}
 
 /**
  * @param {string} cmdName
+ * @param {string[] | (string|string[])[]} requiredPerms
  * @param {string|string[]|undefined} executor
  * @returns {string|null} 校验失败原因，成功返回 null
  */
-export function checkCommandPerms(cmdName, executor) {
-  let requiredPerms = commands.get(cmdName).permissions;
-  if (!requiredPerms.length) return null; // 无权限要求
+export function checkCommandPerms(cmdName, requiredPerms, executor) {
+  if (!requiredPerms.length) return null;
 
-  for (const perm of requiredPerms) {
-    const isNegate = perm.startsWith('!');
-    const permName = isNegate ? perm.slice(1) : perm;
-    const hasPerm = checkPermission(executor, permName);
-
-    if (isNegate) {
-      // "!perm" → 必须不拥有（即 checkPermission 返回 false 或 null）
-      if (hasPerm !== false && hasPerm !== null) {
-        return `缺少权限: ${perm}（须缺失）`;
+  for (const item of requiredPerms) {
+    if (Array.isArray(item)) {
+      // OR 组：至少满足一项
+      let anyPass = false;
+      for (const perm of item) {
+        if (_checkOne(perm, executor)) { anyPass = true; break; }
       }
+      if (!anyPass) return `缺少权限: 须满足 [${item.join(', ')}] 其中之一`;
     } else {
-      // "perm" → 必须拥有
-      if (hasPerm !== true) {
-        return `缺少权限: ${perm}`;
+      // AND 项：必须满足
+      if (!_checkOne(item, executor)) {
+        const label = item.startsWith('!') ? `${item}（须缺失）` : item;
+        return `缺少权限: ${label}`;
       }
     }
   }
@@ -166,7 +177,7 @@ export function executeCommandSilent(cmdName, ctx = {}, ...args) {
 
   // 权限检查：CLI / 内部调用跳过
   if (!internalCall && executor) {
-    const permErr = checkCommandPerms(cmdName, executor);
+    const permErr = checkCommandPerms(cmdName, meta.permissions, executor);
     if (permErr) {
       throw new Error(buildError(cmdName, permErr));
     }
@@ -207,7 +218,9 @@ registerCommand('help', function () {
   const ctx = this;// 箭头函数无法透传this，手动传一下
   const names = [...commands.keys()].filter((v) => {
     // 过滤掉无权限命令
-    return checkCommandPerms(v, ctx.executor);
+    const meta = commands.get(v);
+    if (!meta?.permissions?.length) return true;
+    return checkCommandPerms(v, meta.permissions, ctx.executor) === null;
   }).sort();
   return names.join(', ') || '暂无注册命令';
 }, { description: '显示可用命令列表' });
