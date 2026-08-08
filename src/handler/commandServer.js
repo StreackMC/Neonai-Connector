@@ -75,11 +75,11 @@ export function registerCommand(name, handler, opts = {}) {
 
 /**
  * @param {string} cmdName
- * @param {string[]} requiredPerms
  * @param {string|string[]|undefined} executor
  * @returns {string|null} 校验失败原因，成功返回 null
  */
-function checkCommandPerms(cmdName, requiredPerms, executor) {
+function checkCommandPerms(cmdName, executor) {
+  let requiredPerms = commands.get(cmdName).permissions;
   if (!requiredPerms.length) return null; // 无权限要求
 
   for (const perm of requiredPerms) {
@@ -155,7 +155,7 @@ export function executeCommandSilent(cmdName, ctx = {}, ...args) {
 
   // 权限检查：CLI / 内部调用跳过
   if (!internalCall && executor) {
-    const permErr = checkCommandPerms(cmdName, meta.permissions, executor);
+    const permErr = checkCommandPerms(cmdName, executor);
     if (permErr) {
       throw new Error(buildError(cmdName, permErr));
     }
@@ -192,6 +192,9 @@ export function getCommands() { return commands; }
 // ---- 内置命令 ----
 
 registerCommand('help', function () {
-  const names = [...commands.keys()].sort();
+  const names = [...commands.keys()].filter((v) => {
+    // 过滤掉无权限命令
+    return checkCommandPerms(v, this.executor);
+  }).sort();
   return names.join(', ') || '暂无注册命令';
 }, { description: '显示可用命令列表' });
