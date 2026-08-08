@@ -59,7 +59,7 @@ export function startCLI() {
     const trimmed = line.trim();
     if (trimmed) {
       try {
-        const result = await executeCommandSilent(trimmed);
+        const result = await executeCommandSilent(trimmed, { internalCall: true });
         if (result) getLogger().main.info(`${result}`);
       } catch (err) {
         getLogger().main.error(err.message);

@@ -128,7 +128,7 @@ export async function bootstrap() {
   if (DEBUGING) {
     // 调试模式：console 走原生输出，设置全局标志位，启用 $()
     setDebugMode(true);
-    globalThis.$ = (input) => executeCommand(String(input));
+    globalThis.$ = (input) => executeCommand(String(input), { internalCall: true });
     getLogger().main.info('调试模式已启用，$(cmd) 可用');
   } else {
     // 正常模式：劫持 console 到日志系统

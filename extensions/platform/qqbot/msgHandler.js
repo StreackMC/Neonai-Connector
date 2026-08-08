@@ -34,7 +34,7 @@ async function onGroupMessageIn(event, pp) {
   const profile_config = getPlatformManager().getProfile(pp.profile);
 
   pp.logMsgIn('Group:', `where=GRP#${event.group_id} | from=USR#${event.user_id} | msg=` + parseString(event.message, false));
-  const reply = await resolveReply(toMarkdown(event.message, pp), { AI: profile_config.useAI, AIlist: profile_config.allowedAI, resolveCommandAs: `USR#${event.user_id}` });
+  const reply = await resolveReply(toMarkdown(event.message, pp), { AI: profile_config.useAI, AIlist: profile_config.allowedAI, resolveCommandAs: [`USR#${event.user_id}`, `GRP#${event.group_id}`] });
   if (reply) {
     pp.logMsgOut('Group:', `where=GRP#${event.group_id} | to=USR#${event.user_id} | msg=`, reply.replace(/\n/g, "\\n"));
     event.reply(reply);
