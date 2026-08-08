@@ -57,7 +57,7 @@ export function parseArgs(input) {
 
 /**
  * @param {string} name
- * @param {(args: string[]) => any} handler
+ * @param {(...args: string[]) => any} handler 参数以 ...args 展开传入，this 为命令上下文
  * @param {object} [opts]
  * @param {string|string[]} [opts.permissions] 权限。"perm" 须拥有，"!perm" 须缺失
  * @param {string} [opts.description]
@@ -172,7 +172,7 @@ export function executeCommandSilent(input, ctx = {}, ...params) {
   };
 
   try {
-    return meta.handler.call(context, cmdArgs, ...params);
+    return meta.handler.call(context, ...cmdArgs, ...params);
   } catch (err) {
     throw new Error(buildError(cmdName, `执行失败: ${err.message}`));
   }
