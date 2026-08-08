@@ -57,13 +57,14 @@ export function parseArgs(input) {
 
 /**
  * @param {string} name
- * @param {(...args: string[]) => any} handler 参数以 ...args 展开传入，this 为命令上下文。**箭头函数无法接收上下文，需要使用<code>function() {}</code>**
+ * @param {(...args) => any} handler 参数以 ...args 展开传入，this 为命令上下文。**箭头函数无法接收上下文，需要使用<code>function() {}</code>**
  * @param {object} [opts]
  * @param {string|string[]} [opts.permissions] 权限。"perm" 须拥有，"!perm" 须缺失
  * @param {string} [opts.description]
  * @param {string} [opts.usage]
+ * @this {CommandContext}
  */
-export function registerCommand(name, handler, opts = {}) {
+export function registerCommand(name, /** @this {CommandContext} */handler, opts = {}) {
   if (commands.has(name)) throw new Error(`命令 "${name}" 已被注册`);
   const perms = opts.permissions
     ? (Array.isArray(opts.permissions) ? opts.permissions : [opts.permissions])
@@ -117,16 +118,22 @@ function buildError(cmdName, reason, usage) {
     : `${BOLD}${cmdName}${R}${RED}: ${reason}${R}`;
 }
 
-// ---- 执行（公开 API）----
+// ---- 执行 ----
+
+/**
+ * @typedef {Object} CommandContext
+ * @property {string[]|string} executor 执行者
+ * @property {boolean} internalCall 命令调用是否来自内部：来自内部的命令会绕过权限检查
+ * @property {Date} timestamp 命令开始执行时的时间
+ * @property {Object|undefined} this 命令执行时上下文，可以透传类对象。
+ */
 
 /**
  * 执行命令（自动 catch，错误打印到终端）。
  * @param {string} cmdName 命令名
- * @param {object} [ctx] 上下文
- * @param {string|string[]} [ctx.executor] 执行者
- * @param {boolean} [ctx.internalCall] 是否由 CLI/内部发起（跳过权限校验）
- * @param {*} [ctx.this] 原始 this
+ * @param {CommandContext} [ctx] 上下文，无法设置 timestamp 属性
  * @param {...*} args 命令参数（调用方负责解析）
+ * @returns {*|Promise<*>}
  */
 export function executeCommand(cmdName, ctx, ...args) {
   try {
@@ -139,12 +146,9 @@ export function executeCommand(cmdName, ctx, ...args) {
 /**
  * 执行命令（不 catch，throw 错误）。
  * @param {string} cmdName 命令名
- * @param {object} [ctx] 上下文
- * @param {string|string[]} [ctx.executor] 执行者
- * @param {boolean} [ctx.internalCall] 是否绕过权限校验
- * @param {*} [ctx.this] 原始 this
+ * @param {CommandContext} [ctx] 上下文，无法设置 timestamp 属性
  * @param {...*} args 命令参数
- * @returns {*}
+ * @returns {*|Promise<*>}
  * @throws {Error}
  */
 export function executeCommandSilent(cmdName, ctx = {}, ...args) {
@@ -199,9 +203,11 @@ export function getCommands() { return commands; }
 // ---- 内置命令 ----
 
 registerCommand('help', function () {
+  /** @type {CommandContext} */
+  const ctx = this;// 箭头函数无法透传this，手动传一下
   const names = [...commands.keys()].filter((v) => {
     // 过滤掉无权限命令
-    return checkCommandPerms(v, this.executor);
+    return checkCommandPerms(v, ctx.executor);
   }).sort();
   return names.join(', ') || '暂无注册命令';
 }, { description: '显示可用命令列表' });
