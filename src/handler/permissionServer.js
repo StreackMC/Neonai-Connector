@@ -104,38 +104,73 @@ function ensure(tempOrPermanent, user) {
 // ---- 检查 ----
 
 /**
- * 测试用户是否有指定权限。
- * @param {string|string[]|null} user 用户标识，null/空 → global ("*")。
- *   string[] 时从左到右检查，未设时继承下一级。
- * @param {string} permission 权限名。"*" 始终返回 false。
- * @returns {boolean|null} boolean: 明确结果 | null: 所有层级均未设置
+ * 检查用户对单条权限（无 AND/OR）的原始结果。
+ * @returns {boolean|null}
  */
-export function checkPermission(user, permission) {
-  if (!permission || permission === '*') return false;
-
-  // 数组 → 逐级检查，未设时继承
+function _test(user, permission) {
   if (Array.isArray(user)) {
     for (let i = 0; i < user.length; i++) {
       const r = _checkSingle(user[i], permission);
       if (r !== null) return r;
     }
-    // 最后 Fallback → global
     return _checkSingle('*', permission);
   }
-
-  // 单用户
   return _checkSingle(user || '*', permission);
 }
 
 /**
- * 测试上下文是否有指定权限。
- * @param {import('./commandServer.js').CommandContext} ctx 上下文
- * @param {string} permission 权限名。"*" 始终返回 false。
- * @returns {boolean|null} boolean: 明确结果 | null: 所有层级均未设置
+ * 检查单条权限（支持 "!" 否定前缀）。
+ * @returns {boolean} true = 通过
+ */
+function _checkOne(user, permission) {
+  const isNegate = permission.startsWith('!');
+  const name = isNegate ? permission.slice(1) : permission;
+  if (!name || name === '*') return false;
+  const has = _test(user, name);
+  return isNegate ? has !== true : has === true;
+}
+
+/**
+ * 测试用户是否满足权限规则（支持 AND/OR 嵌套）。
+ * @param {string|string[]|null} user 用户标识
+ * @param {string|(string|string[])[]} permission 权限规则
+ *   - 字符串 → 单条（支持 "!" 否定）
+ *   - 数组 → 外层 AND，内层 OR
+ * @returns {boolean|null}
+ *   true/false: 明确结果 | null: 所有层级均未设置（仅单条查询时）
+ */
+export function checkPermission(user, permission) {
+  if (!permission || permission === '*') return false;
+
+  // AND/OR 嵌套语法
+  if (Array.isArray(permission)) {
+    for (const item of permission) {
+      if (Array.isArray(item)) {
+        // OR 组：至少一项通过
+        if (!item.some((p) => _checkOne(user, p))) return false;
+      } else {
+        // AND 项：必须通过
+        if (!_checkOne(user, item)) return false;
+      }
+    }
+    return true;
+  }
+
+  // 单条字符串
+  return _test(user, permission);
+}
+
+/**
+ * 测试命令上下文是否满足权限规则。
+ * CLI/internalCall 始终返回 true。
+ * @param {import('./commandServer.js').CommandContext} ctx
+ * @param {string|(string|string[])[]} permission
+ * @returns {boolean}
  */
 export function checkPermissionFromContext(ctx, permission) {
   if (ctx?.internalCall) return true;
-  return checkPermission(ctx?.executor, permission);
+  const result = checkPermission(ctx?.executor, permission);
+  return result === true;
 }
 
 /** 对单用户检查 4 层权限 */
