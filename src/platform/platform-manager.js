@@ -125,6 +125,7 @@ export class PlatformManager {
     }, {
       description: '平台 Profile 生命周期管理',
       usage: 'platform start|stop|enable|disable|list [name]',
+      permissions: [["admin", "neonaic.commmand.platform"]]
     });
   }
 

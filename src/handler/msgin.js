@@ -2,7 +2,7 @@
  * 消息入口 —— 通过输入消息获取 AI 回复
  */
 
-import { askAI } from './ai.js';
+import { askAI } from '../../extensions/handler/ai/index.js';
 import { getLogger } from '../system/logger/logger.js';
 import { CONFIG_PATHS, getConfig } from '../system/conf.js';
 

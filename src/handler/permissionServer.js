@@ -127,6 +127,17 @@ export function checkPermission(user, permission) {
   return _checkSingle(user || '*', permission);
 }
 
+/**
+ * 测试上下文是否有指定权限。
+ * @param {import('./commandServer.js').CommandContext} ctx 上下文
+ * @param {string} permission 权限名。"*" 始终返回 false。
+ * @returns {boolean|null} boolean: 明确结果 | null: 所有层级均未设置
+ */
+export function checkPermissionFromContext(ctx, permission) {
+  if (ctx?.internalCall) return true;
+  return checkPermission(ctx?.executor, permission);
+}
+
 /** 对单用户检查 4 层权限 */
 function _checkSingle(user, permission) {
   const key = String(user ?? '*');

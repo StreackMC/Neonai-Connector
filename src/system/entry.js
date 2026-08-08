@@ -21,6 +21,7 @@ import { registerCommand, executeCommand, parseArgs } from '../handler/commandSe
 import { startCLI, stopCLI, erasePrompt, redrawPrompt } from './cli.js';
 import { PlatformManager } from '../platform/platform-manager.js';
 import { loadExtensions } from './extensionLoader.js';
+import { checkPermission, checkPermissionFromContext } from '../handler/permissionServer.js';
 
 // ---- 常量 ----
 
@@ -76,7 +77,7 @@ async function shutdown(signal) {
 // ---- 系统级 CLI 命令 ----
 
 registerCommand('status', function () {
-  return `${APP_NAME} v${APP_VERSION}\n` + `PID: ${process.pid}\n`;
+  return `${APP_NAME} v${APP_VERSION}\n` + (checkPermissionFromContext(this, "admin")) ? `PID: ${process.pid}\n` : "";
 }, { description: '查看服务运行状态' });
 
 registerCommand('version', function () {
@@ -105,17 +106,17 @@ registerCommand('version', function () {
     `  ${B}License${R}   ${LICENSE}\n` +
     `  ${B}       ${R}   ${CPR}` +
     `  ${B}Repo${R}      ${REPO}\n` +
-    `  ${D}----------------------------${R}\n` +
+    `  ${D}----------------------------${R}\n` + (checkPermissionFromContext(this)) ? (
     `  ${B}Node.js${R}   ${nodeVer}\n` +
     `  ${B}OS${R}        ${osVer}\n` +
     `  ${B}CWD${R}       ${cwd}\n` +
-    `  ${B}Temp${R}      ${tmp}\n`
+    `  ${B}Temp${R}      ${tmp}\n`) : ""
   );
 }, { description: '显示版本与版权信息' });
 
 registerCommand('stop', () => {
   shutdown('COMMAND');
-}, { description: '安全关闭服务' });
+}, { description: '安全关闭服务', permissions: [["superadmin", "neonaic.commmand.stop"]] });
 
 // ---- 启动 ----
 
