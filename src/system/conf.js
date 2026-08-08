@@ -10,10 +10,13 @@
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import JSON5 from 'json5';
-import { ROOT_PATH } from './entry.js';
 
+// 本模块自算项目根路径，避免与 entry.js 形成循环依赖
+// conf.js 位于 <根>/src/system/，故向上 2 层为项目根
+const ROOT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
 /** 内部名 → 配置文件相对路径 */
 export const CONFIG_PATHS = Object.freeze({

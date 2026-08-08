@@ -9,11 +9,16 @@
  */
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 import { getConfig, CONFIG_PATHS } from '../conf.js';
-import { DEBUGING, ROOT_PATH } from '../entry.js';
+
+// 本模块自算项目根路径，避免与 entry.js 形成循环依赖
+// logger.js 位于 <根>/src/system/logger/，故向上 3 层为项目根
+const ROOT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+const DEBUGING = process.argv.some((a) => a === '--debug=true' || a === '--debug');
 
 // ---- 常量与工具函数 ----
 const LEVELS = { debug: 'DEBUG', info: 'INFO', warn: 'WARN', error: 'ERROR' };

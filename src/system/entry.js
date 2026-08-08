@@ -77,7 +77,9 @@ async function shutdown(signal) {
 // ---- 系统级 CLI 命令 ----
 
 registerCommand('status', function () {
-  return `${APP_NAME} v${APP_VERSION}\n` + (checkPermissionFromContext(this, "admin")) ? `PID: ${process.pid}\n` : "";
+  const ctx = this;
+  const pidLine = checkPermissionFromContext(ctx, 'admin') ? `PID: ${process.pid}\n` : '';
+  return `${APP_NAME} v${APP_VERSION}\n${pidLine}`;
 }, { description: '查看服务运行状态' });
 
 registerCommand('version', function () {
@@ -99,6 +101,13 @@ registerCommand('version', function () {
   const D = '\x1b[2m';
   const R = '\x1b[0m';
 
+  const mayShowSys = checkPermissionFromContext(this);
+  const sysLine = mayShowSys ? (
+    `  ${B}Node.js${R}   ${nodeVer}\n` +
+    `  ${B}OS${R}        ${osVer}\n` +
+    `  ${B}CWD${R}       ${cwd}\n` +
+    `  ${B}Temp${R}      ${tmp}\n`) : '';
+
   return (
     `${C}  \\  /\\  /${R}  ${B}${PROJECT}${R} v${version}\n` +
     `${C}   \\/  \\/${R}   ${D}----------------------------${R}\n` +
@@ -106,11 +115,7 @@ registerCommand('version', function () {
     `  ${B}License${R}   ${LICENSE}\n` +
     `  ${B}       ${R}   ${CPR}` +
     `  ${B}Repo${R}      ${REPO}\n` +
-    `  ${D}----------------------------${R}\n` + (checkPermissionFromContext(this)) ? (
-    `  ${B}Node.js${R}   ${nodeVer}\n` +
-    `  ${B}OS${R}        ${osVer}\n` +
-    `  ${B}CWD${R}       ${cwd}\n` +
-    `  ${B}Temp${R}      ${tmp}\n`) : ""
+    `  ${D}----------------------------${R}\n` + sysLine
   );
 }, { description: '显示版本与版权信息' });
 

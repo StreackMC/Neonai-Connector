@@ -15,7 +15,7 @@
  *   { executor, internalCall, timestamp, this: originalThis }
  */
 
-import { checkPermission } from './permissionServer.js';
+import { checkSinglePermission } from './permissionServer.js';
 import { getLogger } from '../system/logger/logger.js';
 
 // ---- 颜色 ----
@@ -77,15 +77,6 @@ export function registerCommand(name, /** @this {CommandContext} */handler, opts
 
 // ---- 权限校验 ----
 
-/** 检查单条权限（支持 "!prefix" 否定） */
-function _checkOne(perm, executor) {
-  const isNegate = perm.startsWith('!');
-  const name = isNegate ? perm.slice(1) : perm;
-  const has = checkPermission(executor, name);
-  if (isNegate) return has !== true;  // "!x" → 不拥有即满足
-  return has === true;                // "x"  → 拥有即满足
-}
-
 /**
  * @param {string} cmdName
  * @param {string[] | (string|string[])[]} requiredPerms
@@ -100,12 +91,12 @@ export function checkCommandPerms(cmdName, requiredPerms, executor) {
       // OR 组：至少满足一项
       let anyPass = false;
       for (const perm of item) {
-        if (_checkOne(perm, executor)) { anyPass = true; break; }
+        if (checkSinglePermission(executor, perm)) { anyPass = true; break; }
       }
       if (!anyPass) return `缺少权限: 须满足 [${item.join(', ')}] 其中之一`;
     } else {
       // AND 项：必须满足
-      if (!_checkOne(item, executor)) {
+      if (!checkSinglePermission(executor, item)) {
         const label = item.startsWith('!') ? `${item}（须缺失）` : item;
         return `缺少权限: ${label}`;
       }
@@ -115,11 +106,11 @@ export function checkCommandPerms(cmdName, requiredPerms, executor) {
 }
 
 /**
- * 获取是否存在目标命令
+ * 获取是否存在目标命令。
  * @param {string} cmd 命令
  * @returns {boolean}
  */
-export function hasCommand(cmd) { return commands.includes(cmd); };
+export function hasCommand(cmd) { return commands.has(cmd); }
 
 // ---- 错误格式化 ----
 

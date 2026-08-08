@@ -120,9 +120,10 @@ function _test(user, permission) {
 
 /**
  * 检查单条权限（支持 "!" 否定前缀）。
+ * 供 commandServer 等复用，统一否定语义。
  * @returns {boolean} true = 通过
  */
-function _checkOne(user, permission) {
+export function checkSinglePermission(user, permission) {
   const isNegate = permission.startsWith('!');
   const name = isNegate ? permission.slice(1) : permission;
   if (!name || name === '*') return false;
@@ -147,10 +148,10 @@ export function checkPermission(user, permission) {
     for (const item of permission) {
       if (Array.isArray(item)) {
         // OR 组：至少一项通过
-        if (!item.some((p) => _checkOne(user, p))) return false;
+        if (!item.some((p) => checkSinglePermission(user, p))) return false;
       } else {
         // AND 项：必须通过
-        if (!_checkOne(user, item)) return false;
+        if (!checkSinglePermission(user, item)) return false;
       }
     }
     return true;
@@ -216,10 +217,10 @@ function _checkSingle(user, permission) {
  * @param {string|string[]} user
  * @param {string} permission
  * @param {boolean} [status=true]
- * @returns {'invaild_user'|'successfully'}
+ * @returns {'invalid_user'|'successfully'}
  */
 export function setPermission(user, permission, status = true) {
-  if (!user || !permission) return 'invaild_user';
+  if (!user || !permission) return 'invalid_user';
   const map = ensure('permanent', user);
   map[permission] = !!status;
   _save();
@@ -232,10 +233,10 @@ export function setPermission(user, permission, status = true) {
  * @param {string} permission
  * @param {boolean} [status=true]
  * @param {number|Date} [until] 过期时间（时间戳 ms 或 Date）
- * @returns {'invaild_user'|'successfully'}
+ * @returns {'invalid_user'|'successfully'}
  */
 export function setTempPermission(user, permission, status = true, until) {
-  if (!user || !permission) return 'invaild_user';
+  if (!user || !permission) return 'invalid_user';
   const map = ensure('temp', user);
   const ts = until instanceof Date ? until.getTime() : (typeof until === 'number' ? until : 0);
   map[permission] = { status: !!status, until: ts || 0 };
@@ -247,10 +248,10 @@ export function setTempPermission(user, permission, status = true, until) {
  * 设置全局权限。
  * @param {string} permission
  * @param {boolean} [status=true]
- * @returns {'invaild_perm'|'successfully'}
+ * @returns {'invalid_perm'|'successfully'}
  */
 export function setGlobalPermission(permission, status = true) {
-  if (!permission) return 'invaild_perm';
+  if (!permission) return 'invalid_perm';
   store.global.set(permission, !!status);
   _save();
   return 'successfully';
@@ -261,7 +262,7 @@ export function setGlobalPermission(permission, status = true) {
  * @param {string} permission
  * @param {boolean} [status=true]
  * @param {number|Date} [until]
- * @returns {'invaild_user'|'successfully'}
+ * @returns {'invalid_perm'|'successfully'}
  */
 export function setGlobalTempPermission(permission, status = true, until) {
   if (!permission) return 'invaild_perm';
@@ -277,10 +278,10 @@ export function setGlobalTempPermission(permission, status = true, until) {
  * 清除指定用户的永久权限。
  * @param {string|string[]|null} user 用户标识
  * @param {string} permission 权限名；"*" 清除该用户全部永久权限
- * @returns {'invail_user'|'successfully'}
+ * @returns {'invalid_user'|'successfully'}
  */
 export function clearPermission(user, permission) {
-  if (!user) return 'invail_user';
+  if (!user) return 'invalid_user';
   const key = userKey(user);
   let changed = false;
   if (permission === '*') {
@@ -299,10 +300,10 @@ export function clearPermission(user, permission) {
  * @param {string|string[]|null} user 用户标识
  * @param {string} permission 权限名；"*" 清除该用户全部临时权限
  * @param {number} [until=-1] 若权限的语义过期时间晚于该时间戳则不删除
- * @returns {'invail_user'|'successfully'}
+ * @returns {'invalid_user'|'successfully'}
  */
 export function clearTempPermission(user, permission, until = -1) {
-  if (!user) return 'invail_user';
+  if (!user) return 'invalid_user';
   const key = userKey(user);
   let changed = false;
   if (permission === '*') {
