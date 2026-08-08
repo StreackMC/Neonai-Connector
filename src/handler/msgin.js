@@ -3,7 +3,7 @@
  */
 
 import { askAI } from './ai.js';
-import { getLogger } from '../system/logger.js';
+import { getLogger } from '../system/logger/logger.js';
 import { CONFIG_PATHS, getConfig } from '../system/conf.js';
 
 const getName = () => getConfig(CONFIG_PATHS.main).getString("name");

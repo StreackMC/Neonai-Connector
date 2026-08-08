@@ -5,8 +5,8 @@
  * 运行时配置通过 PlatformManager.getProfile(this.profile) 获取。
  */
 
-import { PlatformManager, registerPlatform } from '../../system/platform-manager.js';
-import { Platform } from '../PlatformInterface.js';
+import { PlatformManager, registerPlatform } from '../../../src/platform/platform-manager.js';
+import { Platform } from '../../../src/platform/PlatformInterface.js';
 import qqBotBackend from 'qq-official-bot';
 const { Bot } = qqBotBackend;
 import MsgHandler from "./msgHandler.js";

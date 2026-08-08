@@ -15,11 +15,11 @@ import { fileURLToPath } from 'node:url';
 import { platform, release, tmpdir } from 'node:os';
 
 import { getConfig, CONFIG_PATHS } from './conf.js';
-import { setDebugMode, setConsoleHooks, getLogger } from './logger.js';
+import { setDebugMode, setConsoleHooks, getLogger } from './logger/logger.js';
 import { acquirePidLock, releasePidLock } from './pid.js';
-import { registerCommand, executeCommand } from './commandServer.js';
+import { registerCommand, executeCommand } from '../handler/commandServer.js';
 import { startCLI, stopCLI, erasePrompt, redrawPrompt } from './cli.js';
-import { PlatformManager } from './platform-manager.js';
+import { PlatformManager } from '../platform/platform-manager.js';
 
 // ---- 常量 ----
 
@@ -149,7 +149,7 @@ export async function bootstrap() {
   setConsoleHooks(erasePrompt, redrawPrompt);
 
   // 导入平台模块（触发 registerPlatform 注册）
-  await import('../platform/qqbot/qqbot.js');
+  await import('../../extensions/platform/qqbot/index.js');
 
   // 按配置启动已启用的平台
   PlatformManager.instance.loadEnabled();

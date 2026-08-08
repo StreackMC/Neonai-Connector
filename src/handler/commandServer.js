@@ -9,7 +9,7 @@
  *   getCommands()                     — 获取所有已注册命令
  */
 
-import { getLogger } from "./logger.js";
+import { getLogger } from "../system/logger/logger.js";
 
 // ---- 颜色常量（仅 executeCommand 错误输出用）----
 const RED   = '\x1b[31m';

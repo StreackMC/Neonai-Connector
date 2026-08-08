@@ -12,8 +12,8 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, 
 import { dirname, join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
-import { getConfig, CONFIG_PATHS } from './conf.js';
-import { DEBUGING, ROOT_PATH } from './entry.js';
+import { getConfig, CONFIG_PATHS } from '../conf.js';
+import { DEBUGING, ROOT_PATH } from '../entry.js';
 
 // ---- 常量与工具函数 ----
 const LEVELS = { debug: 'DEBUG', info: 'INFO', warn: 'WARN', error: 'ERROR' };
@@ -320,7 +320,7 @@ function injectLog4js(emit) {
     appenders: {
       // 使用自定义 appender
       cliForward: {
-        type: join(ROOT_PATH, 'src', 'system', 'log4js_inject.js')
+        type: join(ROOT_PATH, 'src', 'system', 'logger', 'log4js_inject.js')
       }
     },
     categories: {

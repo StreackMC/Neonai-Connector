@@ -10,8 +10,8 @@
  */
 
 import { createInterface } from 'node:readline';
-import { executeCommandSilent, inferNext } from './commandServer.js';
-import { getLogger } from './logger.js';
+import { executeCommandSilent, inferNext } from '../handler/commandServer.js';
+import { getLogger } from './logger/logger.js';
 
 // ---- 颜色 ----
 const CYAN   = '\x1b[36m';

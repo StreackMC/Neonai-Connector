@@ -1,9 +1,9 @@
 import qqBotBackend from 'qq-official-bot';
-import { parseString } from '../../system/logger.js';
-import { PlatformQQBot } from './qqbot.js';
-import { resolveReply } from '../../handler/msgIn.js';
-import { getConfig } from '../../system/conf.js';
-import { getPlatformManager } from '../../system/platform-manager.js';
+import { parseString } from '../../../src/system/logger/logger.js';
+import { PlatformQQBot } from './index.js';
+import { resolveReply } from '../../../src/handler/msgIn.js';
+import { getConfig } from '../../../src/system/conf.js';
+import { getPlatformManager } from '../../../src/platform/platform-manager.js';
 
 /**
  * 好友列表私聊
