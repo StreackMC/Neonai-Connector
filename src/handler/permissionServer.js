@@ -14,6 +14,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import JSON5 from 'json5';
+import { registerCommand } from './commandServer.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const PERM_FILE = resolve(ROOT, 'config/permissions.json');
@@ -350,6 +351,119 @@ export function clearGlobalTempPermission(permission, until = -1) {
 }
 
 // ---- 与命令交互 ----
-// 权限管理命令由 commandServer 方调用 permissionServer API；此处仅实现功能。
-// function cmd(param) { }
-// registerCommand('permission', cmd)
+
+/**
+ * 权限管理命令。
+ *
+ * 用法：
+ *   permission set <user|*> <perm> [true|false] [lasting]   设置权限
+ *   permission unset <user|*> <perm>                        清除权限
+ *
+ *   - <user|*>: "*" 表示全局权限，否则为指定用户的权限
+ *   - [true|false]: 权限值，默认 true
+ *   - [lasting]: 持续时间（临时权限），如 '1y2M3d4h5m6s'（年/月/天/时/分/秒）。
+ *                提供时写入临时权限层（过期时间 = 当前 + 持续），否则写入永久权限层
+ *
+ * @param {string} type     'set' | 'unset'
+ * @param {string} user     用户标识或 '*'
+ * @param {string} permission 权限名
+ * @param {string} [status] 'true' | 'false'（仅 set）
+ * @param {string} [lasting] 持续时间（仅 set）
+ * @this {import('./commandServer.js').CommandContext}
+ * @returns {string} 执行结果描述
+ */
+function cmd(type, user, permission, status, lasting) {
+  /** @type {import('./commandServer.js').CommandContext} */
+  const ctx = this;
+
+  if (!type || (type !== 'set' && type !== 'unset')) {
+    return `用法: ${cmd.meta.usage}`;
+  }
+  if (!user || !permission) {
+    return `用法: ${cmd.meta.usage}`;
+  }
+
+  const isGlobal = user === '*';
+
+  // ---- set ----
+  if (type === 'set') {
+    const bool = status === undefined ? true : /^(true|1|yes|on)$/i.test(String(status));
+    let until = 0;
+
+    // 解析持续时间（若有）→ 过期时间 = 当前 + 持续
+    if (lasting !== undefined) {
+      const ms = parseDuration(lasting);
+      if (ms == null) {
+        return `无法解析持续时间: "${lasting}"（如 '1y2M3d4h5m6s'）`;
+      }
+      until = Date.now() + ms;
+    }
+
+    if (isGlobal) {
+      if (until) {
+        setGlobalTempPermission(permission, bool, until);
+        return `已设置全局临时权限 ${permission}=${bool}，持续 ${lasting}，过期 ${new Date(until).toLocaleString()}`;
+      }
+      setGlobalPermission(permission, bool);
+      return `已设置全局权限 ${permission}=${bool}`;
+    }
+
+    if (until) {
+      setTempPermission(user, permission, bool, until);
+      return `已设置 ${user} 的临时权限 ${permission}=${bool}，持续 ${lasting}，过期 ${new Date(until).toLocaleString()}`;
+    }
+    setPermission(user, permission, bool);
+    return `已设置 ${user} 的权限 ${permission}=${bool}`;
+  }
+
+  // ---- unset ----
+  if (isGlobal) {
+    clearGlobalTempPermission(permission);
+    clearGlobalPermission(permission);
+    return `已清除全局权限 ${permission}`;
+  }
+  clearTempPermission(user, permission);
+  clearPermission(user, permission);
+  return `已清除 ${user} 的权限 ${permission}`;
+}
+
+/**
+ * 解析持续时间字符串，如 '1y2M3d4h5m6s'。
+ * 单位（区分大小写）：y=年，M=月，d=天，h=时，m=分，s=秒。
+ * @param {string} input 持续时间，如 '1y'、'2h30m'、'1y2M3d4h5m6s'
+ * @returns {number|null} 对应的毫秒数；无法解析返回 null
+ */
+export function parseDuration(input) {
+  if (!input) return null;
+  const s = String(input).trim();
+  if (!s) return null;
+
+  const UNIT_MS = {
+    y: 365 * 24 * 60 * 60 * 1000,   // 年（按 365 天计）
+    M: 30 * 24 * 60 * 60 * 1000,    // 月（按 30 天计）
+    d: 24 * 60 * 60 * 1000,         // 天
+    h: 60 * 60 * 1000,              // 时
+    m: 60 * 1000,                   // 分
+    s: 1000,                        // 秒
+  };
+
+  // 至少一段 "数字+单位"，可重复拼接；单位仅限定 y/M/d/h/m/s，不允许空段
+  if (!/^(\d+(?:[yMdhm]|s))+$/.test(s)) return null;
+
+  let total = 0;
+  const re = /(\d+)(?:([yMdhm])|(s))/g;
+  let m;
+  while ((m = re.exec(s))) {
+    const unit = m[2] || m[3];
+    total += Number(m[1]) * UNIT_MS[unit];
+  }
+  return total;
+}
+
+cmd.meta = {
+  permissions: [["superadmin", "neonaic.command.permission"]],
+  description: "控制权限",
+  usage: "permission <set|unset> <user|*> <perm> [true|false] [lasting]"
+};
+registerCommand('permission', cmd, cmd.meta);
+registerCommand('perm', cmd, cmd.meta);
