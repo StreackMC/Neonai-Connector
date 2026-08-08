@@ -74,7 +74,16 @@ export async function askAI(userMessage, AIlist) {
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userMessage },
       ],
+      temperature: 0.25,
+      top_p: 0.9,
     };
+    // const body = {
+    //   model: provider.model,
+    //   input: systemPrompt + userMessage,
+    //   temperature: 0.25,
+    //   top_p: 0.9,
+    //   tools: [{ type: "web_search" }]
+    // };
 
     getLogger().toolAi.debug(`→`, provider.name, ` 向 ${provider.address}#${provider.model} 发送请求`);
 
