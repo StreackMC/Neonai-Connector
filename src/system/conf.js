@@ -4,11 +4,12 @@
  * 按路径创建 Config 实例：`new Config(path)` 读取单个配置文件，
  * 或 `getConfig(path)` 获取（按路径缓存的）单例。
  * 支持点号嵌套路径（如 "qqbot.appid"），每个 getter 均有默认值回退。
+ * 通过 set(key, value) + save() 支持写回文件。
  *
  * 仅支持 JSON5 格式（覆盖 JSON / JSONC）。
  */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import JSON5 from 'json5';
 import { ROOT_PATH } from './entry.js';
@@ -44,6 +45,18 @@ function getNested(map, key) {
   return getNested(child, rest);
 }
 
+/** 向嵌套 Map 中写入值，沿途创建空对象 */
+function setNested(map, key, value) {
+  const idx = dotIndex(key);
+  if (idx === -1) { map[key] = value; return; }
+  const first = key.slice(0, idx);
+  const rest  = key.slice(idx + 1);
+  if (!map[first] || typeof map[first] !== 'object' || Array.isArray(map[first])) {
+    map[first] = {};
+  }
+  setNested(map[first], rest, value);
+}
+
 // ---- Config 类 ----
 
 export class Config {
@@ -52,8 +65,35 @@ export class Config {
    * @param {string} path 配置文件路径（相对项目根或绝对路径）
    */
   constructor(path) {
-    this._ = JSON5.parse(readFileSync(resolve(ROOT_PATH, path), 'utf8'));
+    this._path = resolve(ROOT_PATH, path);
+    this._data = JSON5.parse(readFileSync(this._path, 'utf8'));
+    this._dirty = false;
   }
+
+  // ---- 写入 ----
+
+  /**
+   * 设置值（点号嵌套路径，如 "platforms.0.enabled"）。
+   * 修改仅在内存中生效，需调用 save() 持久化。
+   * @param {string} key
+   * @param {*} value
+   */
+  set(key, value) {
+    setNested(this._data, key, value);
+    this._dirty = true;
+  }
+
+  /**
+   * 将变更写回文件。未变更时跳过。
+   */
+  save() {
+    if (!this._dirty) return;
+    writeFileSync(this._path, JSON5.stringify(this._data, null, 2), 'utf8');
+    this._dirty = false;
+  }
+
+  /** @returns {boolean} 是否有未持久化的变更 */
+  get dirty() { return this._dirty; }
 
   /**
    * 获取顶层 section（整个配置源）。
@@ -61,7 +101,7 @@ export class Config {
    * @returns {object}
    */
   section(name) {
-    return this._[name] ?? {};
+    return this._data[name] ?? {};
   }
 
   // ---- 类型化 getter ----
@@ -108,7 +148,7 @@ export class Config {
    * @param {*} [def=undefined]
    */
   get(key, def) {
-    const v = getNested(this._, key);
+    const v = getNested(this._data, key);
     return v !== undefined ? v : def;
   }
 
