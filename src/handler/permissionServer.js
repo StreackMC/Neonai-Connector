@@ -3,12 +3,20 @@
  *
  * 优先级（高 → 低）：
  *   临时权限 > 永久权限 > 全局临时权限 > 全局权限
- *   四层互不冲突，高层覆盖低层。未显式设置时向上继承。
+ *   持久化到 config/permissions.json，每次变更自动写盘。
  *
  * 执行者链：["USR#xxx", "GRP#xxx"]
  *   最左侧最近，最后总隐式接 global ("*")。
  *   权限检查从最近开始，未设置时顺次向上继承。
  */
+
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import JSON5 from 'json5';
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const PERM_FILE = resolve(ROOT, 'config/permissions.json');
 
 // ---- 4 层存储 ----
 const store = {
@@ -21,6 +29,62 @@ const store = {
   /** permission → boolean */
   global:     new Map(),
 };
+
+// ---- 持久化 ----
+
+let _loaded = false;
+
+function _load() {
+  if (_loaded) return;
+  _loaded = true;
+  if (!existsSync(PERM_FILE)) return;
+  try {
+    const raw = JSON5.parse(readFileSync(PERM_FILE, 'utf8'));
+    if (raw.permanent) {
+      for (const [user, perms] of Object.entries(raw.permanent)) {
+        store.permanent.set(user, { ...perms });
+      }
+    }
+    if (raw.temp) {
+      for (const [user, perms] of Object.entries(raw.temp)) {
+        const m = {};
+        for (const [k, v] of Object.entries(perms)) {
+          m[k] = { status: !!v.status, until: v.until || 0 };
+        }
+        store.temp.set(user, m);
+      }
+    }
+    if (raw.global) {
+      for (const [k, v] of Object.entries(raw.global)) {
+        store.global.set(k, !!v);
+      }
+    }
+    if (raw.globalTemp) {
+      for (const [k, v] of Object.entries(raw.globalTemp)) {
+        store.globalTemp.set(k, { status: !!v.status, until: v.until || 0 });
+      }
+    }
+  } catch {
+    // 损坏的权限文件 → 从头开始
+  }
+}
+
+function _save() {
+  const out = {
+    permanent: Object.fromEntries(
+      [...store.permanent].map(([k, v]) => [k, { ...v }]),
+    ),
+    temp: Object.fromEntries(
+      [...store.temp].map(([k, v]) => [k, { ...v }]),
+    ),
+    global: Object.fromEntries(store.global),
+    globalTemp: Object.fromEntries(store.globalTemp),
+  };
+  writeFileSync(PERM_FILE, JSON5.stringify(out, null, 2), 'utf8');
+}
+
+// 模块加载时读取已有数据
+_load();
 
 // ---- 内部 ----
 
@@ -112,6 +176,7 @@ export function setPermission(user, permission, status = true) {
   if (!user || !permission) return 'invaild_user';
   const map = ensure('permanent', user);
   map[permission] = !!status;
+  _save();
   return 'successfully';
 }
 
@@ -128,6 +193,7 @@ export function setTempPermission(user, permission, status = true, until) {
   const map = ensure('temp', user);
   const ts = until instanceof Date ? until.getTime() : (typeof until === 'number' ? until : 0);
   map[permission] = { status: !!status, until: ts || 0 };
+  _save();
   return 'successfully';
 }
 
@@ -140,6 +206,7 @@ export function setTempPermission(user, permission, status = true, until) {
 export function setGlobalPermission(permission, status = true) {
   if (!permission) return 'invaild_perm';
   store.global.set(permission, !!status);
+  _save();
   return 'successfully';
 }
 
@@ -154,6 +221,7 @@ export function setGlobalTempPermission(permission, status = true, until) {
   if (!permission) return 'invaild_perm';
   const ts = until instanceof Date ? until.getTime() : (typeof until === 'number' ? until : 0);
   store.globalTemp.set(permission, { status: !!status, until: ts || 0 });
+  _save();
   return 'successfully';
 }
 
@@ -168,12 +236,15 @@ export function setGlobalTempPermission(permission, status = true, until) {
 export function clearPermission(user, permission) {
   if (!user) return 'invail_user';
   const key = userKey(user);
+  let changed = false;
   if (permission === '*') {
     store.permanent.delete(key);
-    return 'successfully';
+    changed = true;
+  } else {
+    const map = store.permanent.get(key);
+    if (map) { delete map[permission]; changed = true; }
   }
-  const map = store.permanent.get(key);
-  if (map) delete map[permission];
+  if (changed) _save();
   return 'successfully';
 }
 
@@ -187,15 +258,18 @@ export function clearPermission(user, permission) {
 export function clearTempPermission(user, permission, until = -1) {
   if (!user) return 'invail_user';
   const key = userKey(user);
+  let changed = false;
   if (permission === '*') {
     store.temp.delete(key);
-    return 'successfully';
+    changed = true;
+  } else {
+    const map = store.temp.get(key);
+    if (map) {
+      if (until !== -1 && map[permission]?.until && map[permission].until > until) return 'successfully';
+      delete map[permission]; changed = true;
+    }
   }
-  const map = store.temp.get(key);
-  if (map) {
-    if (until !== -1 && map[permission]?.until && map[permission].until > until) return 'successfully';
-    delete map[permission];
-  }
+  if (changed) _save();
   return 'successfully';
 }
 
@@ -205,8 +279,9 @@ export function clearTempPermission(user, permission, until = -1) {
  * @returns {'successfully'}
  */
 export function clearGlobalPermission(permission) {
-  if (permission === '*') { store.global.clear(); return 'successfully'; }
+  if (permission === '*') { store.global.clear(); _save(); return 'successfully'; }
   store.global.delete(permission);
+  _save();
   return 'successfully';
 }
 
@@ -217,11 +292,12 @@ export function clearGlobalPermission(permission) {
  * @returns {'successfully'}
  */
 export function clearGlobalTempPermission(permission, until = -1) {
-  if (permission === '*') { store.globalTemp.clear(); return 'successfully'; }
+  if (permission === '*') { store.globalTemp.clear(); _save(); return 'successfully'; }
   if (until !== -1) {
     const v = store.globalTemp.get(permission);
     if (v?.until && v.until > until) return 'successfully';
   }
   store.globalTemp.delete(permission);
+  _save();
   return 'successfully';
 }
