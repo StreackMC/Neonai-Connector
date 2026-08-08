@@ -10,10 +10,10 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 
-import { CONFIG_PATHS, getConfig } from '../system/conf.js';
-import { getLogger, parseString } from '../system/logger.js';
+import { CONFIG_PATHS, getConfig } from '../../../src/system/conf.js';
+import { getLogger, parseString } from '../../../src/system/logger/logger.js';
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 
 /** @type {Map<string, string>} provider 名 → 提示词 */
 const _promptCache = new Map();

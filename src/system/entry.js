@@ -20,6 +20,7 @@ import { acquirePidLock, releasePidLock } from './pid.js';
 import { registerCommand, executeCommand } from '../handler/commandServer.js';
 import { startCLI, stopCLI, erasePrompt, redrawPrompt } from './cli.js';
 import { PlatformManager } from '../platform/platform-manager.js';
+import { loadExtensions } from './extensionLoader.js';
 
 // ---- 常量 ----
 
@@ -148,8 +149,8 @@ export async function bootstrap() {
   // 日志输出与 REPL 提示符协作：每次输出先清掉旧提示符，输出后重绘新提示符
   setConsoleHooks(erasePrompt, redrawPrompt);
 
-  // 导入平台模块（触发 registerPlatform 注册）
-  await import('../../extensions/platform/qqbot/index.js');
+  // 自动发现并加载扩展（无需硬编码路径）
+  await loadExtensions();
 
   // 按配置启动已启用的平台
   PlatformManager.instance.loadEnabled();
