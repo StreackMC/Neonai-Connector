@@ -71,14 +71,14 @@ export function registerCommand(name, handler, opts = {}) {
   commands.set(name, { handler, permissions: perms, description: opts.description, usage: opts.usage });
 }
 
-// ---- 权限校验 ----
+// ---- 校验 ----
 
 /**
  * @param {string} cmdName
  * @param {string|string[]|undefined} executor
  * @returns {string|null} 校验失败原因，成功返回 null
  */
-function checkCommandPerms(cmdName, executor) {
+export function checkCommandPerms(cmdName, executor) {
   let requiredPerms = commands.get(cmdName).permissions;
   if (!requiredPerms.length) return null; // 无权限要求
 
@@ -101,6 +101,13 @@ function checkCommandPerms(cmdName, executor) {
   }
   return null;
 }
+
+/**
+ * 获取是否存在目标命令
+ * @param {string} cmd 命令
+ * @returns {boolean}
+ */
+export function hasCommand(cmd) { return commands.includes(cmd); };
 
 // ---- 错误格式化 ----
 
