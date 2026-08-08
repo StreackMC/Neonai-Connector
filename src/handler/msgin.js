@@ -1,43 +1,67 @@
-/** 
- * 消息入口 —— 通过输入消息获取 AI 回复
+/**
+ * 消息入口 —— 命令 → AI 双层回复
+ *
+ * 1. 匹配 main.json.prefix 作为命令前缀 → 执行命令
+ * 2. 无匹配 → AI 回复
  */
 
+import { executeCommandSilent, parseArgs } from './commandServer.js';
 import { askAI } from '../../extensions/handler/ai/index.js';
 import { getLogger } from '../system/logger/logger.js';
 import { CONFIG_PATHS, getConfig } from '../system/conf.js';
 
-const getName = () => getConfig(CONFIG_PATHS.main).getString("name");
-const getSubname = () => getConfig(CONFIG_PATHS.main).getString("subname");
+const getName = () => getConfig(CONFIG_PATHS.main).getString('name');
+const getSubname = () => getConfig(CONFIG_PATHS.main).getString('subname');
 
 /**
- * 根据输入消息获取回复。
- * @param {string} msg 用户输入
- * @param {object} [options] 配置
- * @param {boolean} [options.AI=true] 是否允许 AI 回复
- * @param {string[]|string} [options.AIlist="*"] 要使用的 AI Profile，"*" 表示全部允许
- * @param {boolean} [options.resolveCommand=true] 是否要执行命令
- * @param {string} [options.resolveCommandAs=""] 以谁的身份执行？
+ * @param {string} msg
+ * @param {object} [options]
+ * @param {boolean} [options.AI=true]
+ * @param {string[]|string} [options.AIlist="*"]
+ * @param {boolean} [options.resolveCommand=true]
+ * @param {string|string[]} [options.resolveCommandAs=""] 执行者标识
  * @returns {Promise<string>}
  */
 export async function resolveReply(msg, options) {
-  /** 默认配置 */
-  const default_config = {
+  const config = Object.assign({
     AI: true,
-    AIlist: "*",
+    AIlist: '*',
     resolveCommand: true,
-    resolveCommandAs: "",
-  };
-  /** 最终配置 */
-  const config = Object.assign({}, default_config, options);
+    resolveCommandAs: '',
+  }, options ?? {});
 
-  // 守护服主的贞洁用
-  // if (config.resolveCommandAs == /* hzc */"USR#4C48AEC137FEAA4B94954DCB4EF36389") return "hzcyq_Crazy 是香香软软的小南娘，快来一起吃团子喵！我来准备下糯米，你就准备艾草喵！"
-  // AI 回复兜底
-  if (!config.AI) return "（${getName()}静静地看着你，并对你发来的消息感到疑惑）";
+  const trimmed = msg.trimStart();
+
+  // ---- 命令匹配 ----
+  if (config.resolveCommand && trimmed) {
+    const prefixes = getConfig(CONFIG_PATHS.main).getList('prefix');
+    for (const prefix of prefixes) {
+      if (typeof prefix !== 'string' || !prefix) continue;
+      if (!trimmed.startsWith(prefix)) continue;
+
+      const cmdStr = trimmed.slice(prefix.length).trimStart();
+      const args = parseArgs(cmdStr);
+      if (!args.length) return `❌ 未知命令（空输入）`;
+
+      const [cmdName, ...cmdArgs] = args;
+      const executor = config.resolveCommandAs || undefined;
+
+      try {
+        const result = await executeCommandSilent(cmdName, { executor }, ...cmdArgs);
+        return result != null ? String(result) : '✅ 命令已执行';
+      } catch (err) {
+        getLogger().cmd.warn(`[${executor}] 命令执行失败: ${err.message}`);
+        return `❌ ${err.message}`;
+      }
+    }
+  }
+
+  // ---- AI 兜底 ----
+  if (!config.AI) return `（${getName()}静静地看着你，并未言语）`;
   try {
     return await askAI(msg, config.AIlist);
   } catch (err) {
-    getLogger().toolAi.error(`无法使用 AI 回复：${err.message}`);
+    getLogger().toolAi.error(`AI 回复失败: ${err.message}`);
     return `（${getName()}静静地看着你，并未言语）`;
   }
 }
