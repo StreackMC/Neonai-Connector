@@ -301,3 +301,8 @@ export function clearGlobalTempPermission(permission, until = -1) {
   _save();
   return 'successfully';
 }
+
+// ---- 与命令交互 ----
+// 权限管理命令由 commandServer 方调用 permissionServer API；此处仅实现功能。
+// function cmd(param) { }
+// registerCommand('permission', cmd)

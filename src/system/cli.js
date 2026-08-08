@@ -10,7 +10,7 @@
  */
 
 import { createInterface } from 'node:readline';
-import { executeCommandSilent, inferNext } from '../handler/commandServer.js';
+import { executeCommandSilent, inferNext, parseArgs } from '../handler/commandServer.js';
 import { getLogger } from './logger/logger.js';
 
 // ---- 颜色 ----
@@ -58,8 +58,10 @@ export function startCLI() {
   _rl.on('line', async (line) => {
     const trimmed = line.trim();
     if (trimmed) {
+      const args = parseArgs(trimmed);
+      const [cmdName, ...cmdArgs] = args;
       try {
-        const result = await executeCommandSilent(trimmed, { internalCall: true });
+        const result = await executeCommandSilent(cmdName, { internalCall: true }, ...cmdArgs);
         if (result) getLogger().main.info(`${result}`);
       } catch (err) {
         getLogger().main.error(err.message);

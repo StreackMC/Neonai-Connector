@@ -17,7 +17,7 @@ import { platform, release, tmpdir } from 'node:os';
 import { getConfig, CONFIG_PATHS } from './conf.js';
 import { setDebugMode, setConsoleHooks, getLogger } from './logger/logger.js';
 import { acquirePidLock, releasePidLock } from './pid.js';
-import { registerCommand, executeCommand } from '../handler/commandServer.js';
+import { registerCommand, executeCommand, parseArgs } from '../handler/commandServer.js';
 import { startCLI, stopCLI, erasePrompt, redrawPrompt } from './cli.js';
 import { PlatformManager } from '../platform/platform-manager.js';
 import { loadExtensions } from './extensionLoader.js';
@@ -75,11 +75,11 @@ async function shutdown(signal) {
 
 // ---- 系统级 CLI 命令 ----
 
-registerCommand('status', () => {
+registerCommand('status', function () {
   return `${APP_NAME} v${APP_VERSION}\n` + `PID: ${process.pid}\n`;
 }, { description: '查看服务运行状态' });
 
-registerCommand('version', () => {
+registerCommand('version', function () {
   // ---- 硬编码 ----
   const PROJECT = T + 'nai' + '-' + 'Connector';
   const AUTHOR  = 'kdxiaoyi' + ' & ' + 'StreackMC' + ' Tea' + 'm';
@@ -129,7 +129,11 @@ export async function bootstrap() {
   if (DEBUGING) {
     // 调试模式：console 走原生输出，设置全局标志位，启用 $()
     setDebugMode(true);
-    globalThis.$ = (input) => executeCommand(String(input), { internalCall: true });
+    globalThis.$ = (input) => {
+      const args = parseArgs(String(input));
+      const [cmdName, ...cmdArgs] = args;
+      executeCommand(cmdName, { internalCall: true }, ...cmdArgs);
+    };
     getLogger().main.info('调试模式已启用，$(cmd) 可用');
   } else {
     // 正常模式：劫持 console 到日志系统

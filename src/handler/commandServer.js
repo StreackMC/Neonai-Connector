@@ -3,9 +3,9 @@
  *
  * 提供：
  *   registerCommand(name, handler, opts) — 注册命令（含权限）
- *   executeCommand(input, ctx, ...params) — 执行 + auto-catch
- *   executeCommandSilent(input, ctx, ...params) — 执行 + throw
- *   inferNext(input) / getCommands() — 补全 & 工具
+ *   executeCommand(cmdName, ctx, ...args) — 执行 + auto-catch
+ *   executeCommandSilent(cmdName, ctx, ...args) — 执行 + throw
+ *   parseArgs(input) / inferNext(input) / getCommands() — 工具
  *
  * 权限：
  *   opts.permissions: "perm" (须拥有) | "!perm" (须缺失) | ["perm", "!other"]
@@ -57,7 +57,7 @@ export function parseArgs(input) {
 
 /**
  * @param {string} name
- * @param {(...args: string[]) => any} handler 参数以 ...args 展开传入，this 为命令上下文
+ * @param {(...args: string[]) => any} handler 参数以 ...args 展开传入，this 为命令上下文。**箭头函数无法接收上下文，需要使用<code>function() {}</code>**
  * @param {object} [opts]
  * @param {string|string[]} [opts.permissions] 权限。"perm" 须拥有，"!perm" 须缺失
  * @param {string} [opts.description]
@@ -114,16 +114,16 @@ function buildError(cmdName, reason, usage) {
 
 /**
  * 执行命令（自动 catch，错误打印到终端）。
- * @param {string} input
+ * @param {string} cmdName 命令名
  * @param {object} [ctx] 上下文
  * @param {string|string[]} [ctx.executor] 执行者
  * @param {boolean} [ctx.internalCall] 是否由 CLI/内部发起（跳过权限校验）
  * @param {*} [ctx.this] 原始 this
- * @param {...*} params 额外参数
+ * @param {...*} args 命令参数（调用方负责解析）
  */
-export function executeCommand(input, ctx, ...params) {
+export function executeCommand(cmdName, ctx, ...args) {
   try {
-    return executeCommandSilent(input, ctx, ...params);
+    return executeCommandSilent(cmdName, ctx, ...args);
   } catch (err) {
     getLogger().cmd.error(err.message);
   }
@@ -131,20 +131,18 @@ export function executeCommand(input, ctx, ...params) {
 
 /**
  * 执行命令（不 catch，throw 错误）。
- * @param {string} input
+ * @param {string} cmdName 命令名
  * @param {object} [ctx] 上下文
  * @param {string|string[]} [ctx.executor] 执行者
  * @param {boolean} [ctx.internalCall] 是否绕过权限校验
  * @param {*} [ctx.this] 原始 this
- * @param {...*} params 额外参数
+ * @param {...*} args 命令参数
  * @returns {*}
  * @throws {Error}
  */
-export function executeCommandSilent(input, ctx = {}, ...params) {
-  if (typeof input !== 'string' || !input.trim()) return;
+export function executeCommandSilent(cmdName, ctx = {}, ...args) {
+  if (typeof cmdName !== 'string' || !cmdName) return;
 
-  const args = parseArgs(input.trim());
-  const [cmdName, ...cmdArgs] = args;
   const meta = commands.get(cmdName);
 
   if (!meta) {
@@ -172,7 +170,7 @@ export function executeCommandSilent(input, ctx = {}, ...params) {
   };
 
   try {
-    return meta.handler.call(context, ...cmdArgs, ...params);
+    return meta.handler.call(context, ...args);
   } catch (err) {
     throw new Error(buildError(cmdName, `执行失败: ${err.message}`));
   }
