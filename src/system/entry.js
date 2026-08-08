@@ -18,10 +18,10 @@ import { getConfig, CONFIG_PATHS } from './conf.js';
 import { setDebugMode, setConsoleHooks, getLogger } from './logger/logger.js';
 import { acquirePidLock, releasePidLock } from './pid.js';
 import { registerCommand, executeCommand, parseArgs } from '../handler/commandServer.js';
+import { installPermissionCommands, checkPermission, checkPermissionFromContext } from '../handler/permissionServer.js';
 import { startCLI, stopCLI, erasePrompt, redrawPrompt } from './cli.js';
 import { PlatformManager } from '../platform/platform-manager.js';
 import { loadExtensions } from './extensionLoader.js';
-import { checkPermission, checkPermissionFromContext } from '../handler/permissionServer.js';
 
 // ---- 常量 ----
 
@@ -161,6 +161,9 @@ export async function bootstrap() {
 
   // 自动发现并加载扩展（无需硬编码路径）
   await loadExtensions();
+
+  // 安装权限管理命令（permission/perm）：需在 commandServer 就绪后，避免循环依赖
+  installPermissionCommands(registerCommand);
 
   // 按配置启动已启用的平台
   PlatformManager.instance.loadEnabled();

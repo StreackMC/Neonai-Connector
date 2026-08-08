@@ -14,7 +14,9 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import JSON5 from 'json5';
-import { registerCommand } from './commandServer.js';
+
+// 注：本模块不 import commandServer.js，避免循环依赖。
+// 权限命令由组合根（entry.js）通过 installPermissionCommands(registerCommand) 安装。
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const PERM_FILE = resolve(ROOT, 'config/permissions.json');
@@ -465,5 +467,12 @@ cmd.meta = {
   description: "控制权限",
   usage: "permission <set|unset> <user|*> <perm> [true|false] [lasting]"
 };
-registerCommand('permission', cmd, cmd.meta);
-registerCommand('perm', cmd, cmd.meta);
+
+/**
+ * 安装权限管理命令（由组合根在 commandServer 就绪后调用，避免循环依赖）。
+ * @param {(name: string, handler: Function, meta?: object) => void} register 命令注册函数（commandServer.registerCommand）
+ */
+export function installPermissionCommands(register) {
+  register('permission', cmd, cmd.meta);
+  register('perm', cmd, cmd.meta);
+}
