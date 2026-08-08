@@ -14,6 +14,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import JSON5 from 'json5';
+import { parseString } from '../system/logger/logger.js';
 
 // 注：本模块不 import commandServer.js，避免循环依赖。
 // 权限命令由组合根（entry.js）通过 installPermissionCommands(registerCommand) 安装。
@@ -475,4 +476,16 @@ cmd.meta = {
 export function installPermissionCommands(register) {
   register('permission', cmd, cmd.meta);
   register('perm', cmd, cmd.meta);
+  register('whoami', function () {
+    /** @type {import('./commandServer.js').CommandContext} */
+    const ctx = this;
+    //TODO: 优化逻辑
+    const singalExecutor = (ctx.executor instanceof Array) ? (ctx.executor.length > 0) ? ctx.executor[0] : undefined : ctx.executor;
+    let result = `你正以"${singalExecutor}"的身份执行命令，具备上下文：${parseString(ctx.executor)}\n\n`;
+    result += (checkPermission(singalExecutor, "admin")) ? "✓ 你的身份是管理员\n" : "× 你的身份不是管理员\n";
+    result += (checkPermission(singalExecutor, "superadmin")) ? "✓ 你的身份是超级管理员\n" : "× 你的身份不是超级管理员\n";
+    result += (checkPermissionFromContext(ctx, "admin")) ? "✓ 你的上下文是管理员\n" : "× 你的上下文不是管理员\n";
+    result += (checkPermissionFromContext(ctx, "superadmin")) ? "✓ 你的上下文是超级管理员\n" : "× 你的上下文不是超级管理员\n";
+    return result;
+  }, {});
 }
