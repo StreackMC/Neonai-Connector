@@ -137,10 +137,10 @@ export function parseString(val, short) {
   if (typeof val === 'string') return val;
   if (val instanceof Error) return val.message ?? String(val);
   if (Array.isArray(val)) {
-    if (!short) return `[${val.map(parseString).join(', ').replace(/\n/g, '\\n')}]`;
+    if (!short) return `['${val.map(parseString).join('\', \'').replace(/\n/g, '\\n')}']`;
     const head = val.slice(0, 3).map(parseString);
     const tail = val.length > 3 ? ` ... (+${val.length - 3})` : '';
-    return `[${head.join(', ').replace(/\n/g, '\\n') }${tail}]`;
+    return `['${head.join('\', \'').replace(/\n/g, '\\n') }'${tail}]`;
   }
   if (typeof val === 'object') {
     const keys = Object.keys(val);

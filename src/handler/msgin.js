@@ -30,7 +30,7 @@ export async function resolveReply(msg, options) {
     resolveCommandAs: '',
   }, options ?? {});
 
-  const trimmed = msg.trimStart();
+  const trimmed = msg.trim();
 
   // ---- 命令匹配 ----
   if (config.resolveCommand && trimmed) {
@@ -41,17 +41,17 @@ export async function resolveReply(msg, options) {
 
       const cmdStr = trimmed.slice(prefix.length).trimStart();
       const args = parseArgs(cmdStr);
-      if (!args.length) return `❌ 未知命令（空输入）`;
+      if (!args.length) return `× 未知命令（空输入）`;
 
       const [cmdName, ...cmdArgs] = args;
       const executor = config.resolveCommandAs || undefined;
 
       try {
         const result = await executeCommandSilent(cmdName, { executor }, ...cmdArgs);
-        return result != null ? String(result) : '✅ 命令已执行';
+        return result != null ? String(result).trim() : '✓ 操作成功完成';
       } catch (err) {
         getLogger().cmd.warn(`[${executor}] 命令执行失败: ${err.message}`);
-        return `❌ ${err.message}`;
+        return `× ${err.message}`;
       }
     }
   }
@@ -59,7 +59,7 @@ export async function resolveReply(msg, options) {
   // ---- AI 兜底 ----
   if (!config.AI) return `（${getName()}静静地看着你，并未言语）`;
   try {
-    return await askAI(msg, config.AIlist);
+    return (await askAI(msg, config.AIlist)).trim();
   } catch (err) {
     getLogger().toolAi.error(`AI 回复失败: ${err.message}`);
     return `（${getName()}静静地看着你，并未言语）`;
