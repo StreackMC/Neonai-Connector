@@ -199,3 +199,12 @@ export function getConfig(path) {
   if (!_cache.has(path)) _cache.set(path, new Config(path));
   return _cache.get(path);
 }
+
+/** 语法糖：获取机器人名称 */
+export function getBotName() {
+  return getConfig(CONFIG_PATHS.main).getString('name');
+}
+/** 语法糖：获取机器人次要名称 */
+export function getBotSubName() {
+  return getConfig(CONFIG_PATHS.main).getString('subname');
+}

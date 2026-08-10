@@ -76,12 +76,6 @@ async function shutdown(signal) {
 
 // ---- 系统级 CLI 命令 ----
 
-registerCommand('status', function () {
-  const ctx = this;
-  const pidLine = checkPermissionFromContext(ctx, 'admin') ? `PID: ${process.pid}\n` : '';
-  return `${APP_NAME} v${APP_VERSION}\n${pidLine}`;
-}, { description: '查看服务运行状态' });
-
 registerCommand('version', function () {
   // ---- 硬编码 ----
   const PROJECT = T + 'nai' + '-' + 'Connector';
@@ -106,10 +100,12 @@ registerCommand('version', function () {
     `  ${B}Node.js${R}   ${nodeVer}\n` +
     `  ${B}OS${R}        ${osVer}\n` +
     `  ${B}CWD${R}       ${cwd}\n` +
-    `  ${B}Temp${R}      ${tmp}\n`) : '';
+    `  ${B}PID${R}       ${process.pid}\n` +
+    `  ${B}Temp${R}      ${tmp}\n`
+  ) : '';
 
   return (
-    `${C}  \\  /\\  /${R}  ${B}${PROJECT}${R} v${version}\n` +
+    `${C}  \\  /\\  /${R}  ${B}${PROJECT}${R} v${APP_VERSION}\n` +
     `${C}   \\/  \\/${R}   ${D}----------------------------${R}\n` +
     `  ${B}Author${R}    ${AUTHOR}\n` +
     `  ${B}License${R}   ${LICENSE}\n` +

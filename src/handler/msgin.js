@@ -5,10 +5,11 @@
  * 2. 无匹配 → AI 回复
  */
 
-import { executeCommandSilent, parseArgs } from './commandServer.js';
+import { executeCommandSilent, hasCommand, parseArgs } from './commandServer.js';
 import { askAI } from '../../extensions/handler/ai/index.js';
 import { getLogger } from '../system/logger/logger.js';
 import { CONFIG_PATHS, getConfig } from '../system/conf.js';
+import stripAnsi from 'strip-ansi';
 
 const getName = () => getConfig(CONFIG_PATHS.main).getString('name');
 const getSubname = () => getConfig(CONFIG_PATHS.main).getString('subname');
@@ -39,27 +40,30 @@ export async function resolveReply(msg, options) {
       if (typeof prefix !== 'string' || !prefix) continue;
       if (!trimmed.startsWith(prefix)) continue;
 
+      /** 无前缀的命令文本 */
       const cmdStr = trimmed.slice(prefix.length).trimStart();
+      /** 解析完成的参数列表 */
       const args = parseArgs(cmdStr);
-      if (!args.length) return `× 未知命令（空输入）`;
-
+      if (!args.length) return `无法执行“${trimmed}”，因为“${getName()}”无法理解这个命令。`;
+      
       const [cmdName, ...cmdArgs] = args;
       const executor = config.resolveCommandAs || undefined;
+      if (!hasCommand(cmdName)) return `无法执行“${cmdName}”，因为“${getName()}”无法理解这个命令。`;
 
       try {
         const result = await executeCommandSilent(cmdName, { executor }, ...cmdArgs);
-        return result != null ? String(result).trim() : '✓ 操作成功完成';
+        return result != null ? stripAnsi(String(result)).trim() : `“${getName()}”成功执行了“${cmdName}”`;
       } catch (err) {
         getLogger().cmd.warn(`[${executor}] 命令执行失败: ${err.message}`);
-        return `× ${err.message}`;
+        return stripAnsi(`无法执行“${cmdName}”，因为“${stripAnsi(err.message)}”。`);
       }
     }
   }
 
   // ---- AI 兜底 ----
-  if (!config.AI) return `（${getName()}静静地看着你，并未言语）`;
+  if (!config.AI) return `（${getName()}可能在看着你，但并未言语）`;
   try {
-    return (await askAI(msg, config.AIlist)).trim();
+    return stripAnsi(await askAI(msg, config.AIlist)).trim();
   } catch (err) {
     getLogger().toolAi.error(`AI 回复失败: ${err.message}`);
     return `（${getName()}静静地看着你，并未言语）`;

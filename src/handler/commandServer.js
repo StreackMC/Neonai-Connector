@@ -105,13 +105,6 @@ export function checkCommandPerms(cmdName, requiredPerms, executor) {
   return null;
 }
 
-/**
- * 获取是否存在目标命令。
- * @param {string} cmd 命令
- * @returns {boolean}
- */
-export function hasCommand(cmd) { return commands.has(cmd); }
-
 // ---- 错误格式化 ----
 
 function buildError(cmdName, reason, usage) {
@@ -200,18 +193,30 @@ export function inferNext(input) {
 
 // ---- 工具 ----
 
+/** 获取命令列表 */
 export function getCommands() { return commands; }
+
+/**
+ * 获取是否存在目标命令。
+ * @param {string} cmd 命令
+ * @returns {boolean}
+ */
+export function hasCommand(cmd) { return commands.has(cmd); }
 
 // ---- 内置命令 ----
 
 registerCommand('help', function () {
   /** @type {CommandContext} */
-  const ctx = this;// 箭头函数无法透传this，手动传一下
+  const ctx = this;
   const names = [...commands.keys()].filter((v) => {
     // 过滤掉无权限命令
     const meta = commands.get(v);
     if (!meta?.permissions?.length) return true;
     return checkCommandPerms(v, meta.permissions, ctx.executor) === null;
+  }).map((v, i) => {
+    // 添加描述文本
+    const meta = commands.get(v);
+    return (meta?.description) ? `${v}: ${meta.description}` : v;
   }).sort();
-  return names.join(', ') || '暂无注册命令';
+  return names.join('\n') || '暂无注册命令';
 }, { description: '显示可用命令列表' });
