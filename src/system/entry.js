@@ -28,8 +28,7 @@ import { loadExtensions } from './extensionLoader.js';
 const CYAN = '\x1b[36m';
 const DIM = '\x1b[2m';
 const R = '\x1b[0m';
-
-const T = "Neo";
+const T = 'Neo';
 
 /** 当前是否在调试 */
 export const DEBUGING = process.argv.some((a) => a === '--debug=true' || a === '--debug');
@@ -77,8 +76,23 @@ async function shutdown(signal) {
 // ---- 系统级 CLI 命令 ----
 
 registerCommand('neonaic', 'version', function () {
+  /** @type {import('../handler/commandServer.js').CommandContext} */
+  const ctx = this;
+
   // ---- 硬编码 ----
-  const PROJECT = T + 'nai' + '-' + 'Connector';
+  let projectName = "\n" +
+    `  _   _                        _     \n` +
+    ` | \\ | | ___  ___  _ __   __ _(_)    \n` +
+    ` |  \\| |/ _ \\/ _ \\| '_ \\ / _\` | |    \n` +
+    ` | |\\  |  __/ (_) | | | | (_| | |    \n` +
+    ` |_| \\_|\\___|\\___/|_| |_|\\__,_|_|    \n` +
+    `   ____ ___  _   _ _____ _____ ____  \n` +
+    `  / ___/ _ \\| \\ | |_   _| ____|  _ \\ \n` +
+    ` | |  | | | |  \\| | | | |  _| | |_) |\n` +
+    ` | |__| |_| | |\\  | | | | |___|  _ < \n` +
+    `  \\____\\___/|_| \\_| |_| |_____|_| \\_\\\n\n`;
+  if (!ctx.internalCall) projectName = T + 'nai' + 'Connector';
+
   const AUTHOR  = 'kdxiaoyi' + ' & ' + 'StreackMC' + ' Tea' + 'm';
   const CPR     = 'Copy' + 'right ' + (/\u00A9/.test('\u00A9') ? '\u00A9' : '(c)') + ' 2026 ' + AUTHOR.split(' & ')[0] + ', ' + AUTHOR.split(' & ')[1];
   const LICENSE = 'AGPL' + '-3.0' + ' (with a' + 'dditional terms)';
@@ -97,21 +111,22 @@ registerCommand('neonaic', 'version', function () {
 
   const mayShowSys = checkPermissionFromContext(this);
   const sysLine = mayShowSys ? (
-    `  ${B}Node.js${R}   ${nodeVer}\n` +
-    `  ${B}OS${R}        ${osVer}\n` +
-    `  ${B}CWD${R}       ${cwd}\n` +
-    `  ${B}PID${R}       ${process.pid}\n` +
-    `  ${B}Temp${R}      ${tmp}\n`
+    `${B}Node.js${R}   ${nodeVer}\n` +
+    `${B}OS${R}        ${osVer}\n` +
+    `${B}CWD${R}       ${cwd}\n` +
+    `${B}PID${R}       ${process.pid}\n` +
+    `${B}Temp${R}      ${tmp}\n`
   ) : '';
 
   return (
-    `${C}  \\  /\\  /${R}  ${B}${PROJECT}${R} v${APP_VERSION}\n` +
-    `${C}   \\/  \\/${R}   ${D}----------------------------${R}\n` +
-    `  ${B}Author${R}    ${AUTHOR}\n` +
-    `  ${B}License${R}   ${LICENSE}\n` +
-    `  ${B}       ${R}   ${CPR}` +
-    `  ${B}Repo${R}      ${REPO}\n` +
-    `  ${D}----------------------------${R}\n` + sysLine
+    
+    `${B}${projectName}${R} v${APP_VERSION}\n` +
+    `${D}----------------------------${R}\n` +
+    `${B}Author${R}    ${AUTHOR}\n` +
+    `${B}License${R}   ${LICENSE}\n` +
+    `${B}       ${R}   ${CPR}\n` +
+    `${B}Repo${R}      ${REPO}\n` +
+    `${D}----------------------------${R}\n` + sysLine
   );
 }, { description: '显示版本与版权信息' });
 
