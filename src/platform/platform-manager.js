@@ -87,7 +87,7 @@ export class PlatformManager {
   }
 
   _registerCLI() {
-    registerCommand('platform', async (args) => {
+    registerCommand('neonaic', 'platform', async (args) => {
       const [sub, name] = args;
       if (!sub) {
         getLogger().platM.info(

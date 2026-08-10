@@ -25,8 +25,26 @@ const DIM   = '\x1b[2m';
 const BOLD  = '\x1b[1m';
 const R     = '\x1b[0m';
 
-/** @type {Map<string, { handler: Function, permissions: string[], description?: string, usage?: string }>} */
-const commands = new Map();
+/**
+ * 命令条目。
+ * @typedef {object} CommandMeta
+ * @property {string} namespace 命名空间（'' 表示全局）
+ * @property {string} name 原名
+ * @property {string[]} aliases 别名列表
+ * @property {Function} handler
+ * @property {string[]} permissions
+ * @property {string} [description]
+ * @property {string} [usage]
+ */
+
+/** 所有命令（去重，按注册顺序） */
+const allCommands = [];
+/** 全局原名 -> 命令（可被新命令别名覆盖） */
+const globalNames = new Map();
+/** 全局别名 -> 命令 */
+const globalAliases = new Map();
+/** 命名空间限定名（ns:name / ns:alias）-> 命令（穿透覆盖，永不丢失） */
+const fqns = new Map();
 
 // ---- 参数解析 ----
 
@@ -67,12 +85,86 @@ export function parseArgs(input) {
  * @param {string} [opts.usage]
  * @this {CommandContext}
  */
-export function registerCommand(name, /** @this {CommandContext} */handler, opts = {}) {
-  if (commands.has(name)) throw new Error(`命令 "${name}" 已被注册`);
+/**
+ * 注册命令。
+ *
+ * 命名空间与别名：
+ *   - opts.namespace: 命令所属命名空间（默认 '' 全局）。命名空间限定的命令仍注册全局名，
+ *     同时可通过 "ns:name" / "ns:alias" 精确访问（穿透覆盖）。
+ *   - opts.alias: 别名（string | string[]）。无命名空间输入时，别名可代替原名使用。
+ *
+ * 冲突规则（先到先得 + 唯一覆盖例外）：
+ *   - 新命令「别名」与已有「原名」冲突 → 覆盖：该别名占据那个全局原名槽，
+ *     原命令仅可经命名空间限定访问（若无命名空间则被完全覆盖）。
+ *   - 其余冲突（原名冲突、别名冲突、命名空间限定名冲突等）→ 不注册，返回冲突命令列表。
+ *
+ * @param {string} name 命令原名
+ * @param {(...args) => any} handler 参数以 ...args 展开传入，this 为命令上下文
+ * @param {object} [opts]
+ * @param {string|string[]} [opts.alias]
+ * @param {(string|string[])[]|string|string[]} [opts.permissions]
+ * @param {string} [opts.description]
+ * @param {string} [opts.usage]
+ * @returns {null|CommandMeta[]} 成功返回 null；冲突返回冲突命令列表
+ * @throws 命名空间、命名或处理器无效
+ */
+export function registerCommand(namespace, name, /** @this {CommandContext} */handler, opts = {}) {
+  if (!namespace) throw new Error("命令具有无效的命名空间：" + namespace);
+  if (!name) throw new Error("命令具有无效的命名：" + name);
+  if (!(typeof handler === 'function')) throw new Error("命令具有无效的处理器：" + handler);
+  const aliases = opts.alias ? (Array.isArray(opts.alias) ? opts.alias : [opts.alias]) : [];
   const perms = opts.permissions
     ? (Array.isArray(opts.permissions) ? opts.permissions : [opts.permissions])
     : [];
-  commands.set(name, { handler, permissions: perms, description: opts.description, usage: opts.usage });
+
+  const cmd = {
+    namespace, name, aliases: [...aliases],
+    handler, permissions: perms,
+    description: opts.description, usage: opts.usage,
+  };
+
+  // ---- 冲突检测（先到先得；别名撞原名属覆盖例外）----
+  const conflicts = [];
+  const seen = new Set();
+  const addConflict = (c) => { if (!seen.has(c)) { seen.add(c); conflicts.push(c); } };
+
+  // 原名冲突
+  if (globalNames.has(name)) addConflict(globalNames.get(name));
+  if (globalAliases.has(name)) addConflict(globalAliases.get(name));
+
+  // 别名冲突（别名撞原名 → 覆盖例外不冲突；别名撞别名 → 冲突）
+  for (const a of aliases) {
+    if (a === name) continue; // 别名与原名相同：同槽，无冲突
+    if (globalAliases.has(a)) addConflict(globalAliases.get(a));
+  }
+
+  // 命名空间限定名冲突（仅非全局命令）
+  if (namespace) {
+    if (fqns.has(`${namespace}:${name}`)) addConflict(fqns.get(`${namespace}:${name}`));
+    for (const a of aliases) {
+      if (fqns.has(`${namespace}:${a}`)) addConflict(fqns.get(`${namespace}:${a}`));
+    }
+  }
+
+  if (conflicts.length) return conflicts;
+
+  // ---- 注册 ----
+  // 覆盖例外：新命令别名占据已有全局原名槽
+  for (const a of aliases) {
+    if (a === name) continue;
+    if (globalNames.has(a)) globalNames.set(a, cmd); // 覆盖：别名替代该原名
+  }
+
+  globalNames.set(name, cmd);
+  for (const a of aliases) {
+    if (a !== name) globalAliases.set(a, cmd);
+  }
+  if (namespace) {
+    fqns.set(`${namespace}:${name}`, cmd);
+    for (const a of aliases) fqns.set(`${namespace}:${a}`, cmd);
+  }
+  allCommands.push(cmd);
+  return null;
 }
 
 // ---- 权限校验 ----
@@ -139,6 +231,25 @@ export function executeCommand(cmdName, ctx, ...args) {
 }
 
 /**
+ * 解析命令引用（支持别名与命名空间）。
+ * @param {string} ref 命令引用，如 'name' / 'alias' / 'ns:name' / 'ns:alias'
+ * @returns {CommandMeta|null}
+ */
+export function resolveCommand(ref) {
+  if (typeof ref !== 'string' || !ref) return null;
+  const idx = ref.indexOf(':');
+  if (idx === -1) {
+    // 全局：原名优先，再别名
+    return globalNames.get(ref) ?? globalAliases.get(ref) ?? null;
+  }
+  const ns = ref.slice(0, idx);
+  const key = ref.slice(idx + 1);
+  if (!key) return null;
+  // 命名空间限定：fqn 精确查找（原名优先，再别名）
+  return fqns.get(`${ns}:${key}`) ?? null;
+}
+
+/**
  * 执行命令（不 catch，throw 错误）。
  * @param {string} cmdName 命令名
  * @param {CommandContext} [ctx] 上下文，无法设置 timestamp 属性
@@ -149,7 +260,7 @@ export function executeCommand(cmdName, ctx, ...args) {
 export function executeCommandSilent(cmdName, ctx = {}, ...args) {
   if (typeof cmdName !== 'string' || !cmdName) return;
 
-  const meta = commands.get(cmdName);
+  const meta = resolveCommand(cmdName);
 
   if (!meta) {
     throw new Error(buildError(cmdName, '未知命令'));
@@ -184,39 +295,42 @@ export function executeCommandSilent(cmdName, ctx = {}, ...args) {
 
 // ---- TAB 建议 ----
 
+/** 所有可解析的名字（全局原名 + 全局别名 + 命名空间限定名） */
+function allNames() {
+  const names = new Set(globalNames.keys());
+  for (const a of globalAliases.keys()) names.add(a);
+  for (const f of fqns.keys()) names.add(f);
+  return names;
+}
+
 export function inferNext(input) {
   const trimmed = input.trimStart();
   if (!trimmed || trimmed.includes(' ')) return { hits: [], prefix: trimmed };
-  const hits = [...commands.keys()].filter(n => n.startsWith(trimmed));
+  const hits = [...allNames()].filter(n => n.startsWith(trimmed));
   return { hits, prefix: trimmed };
 }
 
 // ---- 工具 ----
 
-/** 获取命令列表 */
-export function getCommands() { return commands; }
+/** 获取所有已注册命令（按注册顺序） */
+export function getCommands() { return allCommands; }
 
-/**
- * 获取是否存在目标命令。
- * @param {string} cmd 命令
- * @returns {boolean}
- */
-export function hasCommand(cmd) { return commands.has(cmd); }
+/** 获取是否存在可解析的目标命令（含别名与命名空间） */
+export function hasCommand(cmd) { return resolveCommand(cmd) != null; }
 
 // ---- 内置命令 ----
 
-registerCommand('help', function () {
+registerCommand('neonaic', 'help', function () {
   /** @type {CommandContext} */
   const ctx = this;
-  const names = [...commands.keys()].filter((v) => {
+  const names = allCommands.filter((meta) => {
     // 过滤掉无权限命令
-    const meta = commands.get(v);
     if (!meta?.permissions?.length) return true;
-    return checkCommandPerms(v, meta.permissions, ctx.executor) === null;
-  }).map((v, i) => {
-    // 添加描述文本
-    const meta = commands.get(v);
-    return (meta?.description) ? `${v}: ${meta.description}` : v;
+    return checkCommandPerms(meta.name, meta.permissions, ctx.executor) === null;
+  }).map((meta) => {
+    const label = meta.namespace ? `${meta.namespace}:${meta.name}` : meta.name;
+    const aliasTxt = meta.aliases.length ? ` [别名: ${meta.aliases.join(', ')}]` : '';
+    return meta?.description ? `${label}${aliasTxt}: ${meta.description}` : `${label}${aliasTxt}`;
   }).sort();
   return names.join('\n') || '暂无注册命令';
 }, { description: '显示可用命令列表' });

@@ -76,7 +76,7 @@ async function shutdown(signal) {
 
 // ---- 系统级 CLI 命令 ----
 
-registerCommand('version', function () {
+registerCommand('neonaic', 'version', function () {
   // ---- 硬编码 ----
   const PROJECT = T + 'nai' + '-' + 'Connector';
   const AUTHOR  = 'kdxiaoyi' + ' & ' + 'StreackMC' + ' Tea' + 'm';
@@ -115,7 +115,7 @@ registerCommand('version', function () {
   );
 }, { description: '显示版本与版权信息' });
 
-registerCommand('stop', () => {
+registerCommand('neonaic', 'stop', () => {
   shutdown('COMMAND');
 }, { description: '安全关闭服务', permissions: [["superadmin", "neonaic.commmand.stop"]] });
 

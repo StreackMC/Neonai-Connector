@@ -3,7 +3,7 @@
  *
  * 通过扩展加载器（system/extensionLoader.js）自动发现：
  *   启动时扫描 extensions/handler/<name>/index.js 并动态 import，
- *   本模块在 import 时即注册 "mc" 命令，无需在入口硬编码。
+ *   本模块在 import 时即注册 "mc" 命令（命名空间 streackserver），无需在入口硬编码。
  *
  * 行为：
  *   - 命令 "mc" 向 ADDRESS 发起状态查询；
@@ -132,10 +132,10 @@ function formatStatus(data) {
 }
 
 /**
- * 命令 "mc" — 查询 Streack 服务器状态。
+ * 命令 "mc" — 查询 Streack 服务器状态（命名空间 streackserver）。
  * 查询失败（网络错误 / 超时 / 接口非 2xx / 显式离线）一律返回 "× 服务器离线"。
  */
-registerCommand('mc', async function () {
+registerCommand('streackserver', 'mc', async function () {
   try {
     const res = await fetchWithTimeout(ADDRESS, TIMEOUT_MS);
     if (!res.ok) {

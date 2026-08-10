@@ -471,12 +471,12 @@ cmd.meta = {
 
 /**
  * 安装权限管理命令（由组合根在 commandServer 就绪后调用，避免循环依赖）。
- * @param {(name: string, handler: Function, meta?: object) => void} register 命令注册函数（commandServer.registerCommand）
+ * @param {(namespace: string, name: string, handler: Function, meta?: object) => void} register 命令注册函数（commandServer.registerCommand）
  */
 export function installPermissionCommands(register) {
-  register('permission', cmd, cmd.meta);
-  register('perm', cmd, cmd.meta);
-  register('whoami', function () {
+  register('neonaic', 'permission', cmd, cmd.meta);
+  register('neonaic', 'perm', cmd, cmd.meta);
+  register('neonaic', 'whoami', function () {
     /** @type {import('./commandServer.js').CommandContext} */
     const ctx = this;
     //TODO: 优化逻辑
