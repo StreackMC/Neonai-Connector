@@ -12,6 +12,7 @@
  */
 
 import { registerCommand } from '../../../src/handler/commandServer.js';
+import { getBotName } from '../../../src/system/conf.js';
 import { getLogger } from '../../../src/system/logger/logger.js';
 
 /** 服务器状态接口地址（查询目标） */
@@ -19,6 +20,9 @@ const ADDRESS = 'http://localhost:8080/api/status';
 
 /** 请求超时（毫秒） */
 const TIMEOUT_MS = 5000;
+
+/** 展示玩家列表的最大数量，最小1 */
+const MAX_PLAYER_LISTED = 3;
 
 /**
  * 带超时的 fetch，避免服务器无响应时长时间挂起。
@@ -60,19 +64,23 @@ function formatDateTime(ts) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
-/** 字节数转为易读单位（自动 GB / MB / KB） */
-function formatBytes(bytes) {
-  if (typeof bytes !== 'number') return valToString(bytes);
-  const gb = bytes / 1024 ** 3;
-  if (gb >= 1) return `${gb.toFixed(2)} GB`;
-  const mb = bytes / 1024 ** 2;
-  if (mb >= 1) return `${mb.toFixed(1)} MB`;
-  return `${Math.round(bytes / 1024)} KB`;
-}
-
 /** TPS 数值格式化：负数（如 -1 表示无数据）显示为 N/A */
 function fmtTps(v) {
   return (typeof v === 'number' && v >= 0) ? v.toFixed(1) : 'N/A';
+}
+
+/**
+ * 断言数据存在并尝试插入数组
+ * @template T
+ * @template V
+ * @param {(value:T) => V} func 数据存在时的函数，如果数据存在会把返回值插入数组中
+ * @param {T|null|undefined} which 数据
+ * @param {Array<V>} array 目标数组
+ * @returns {number} 插入后目标数组的长度；插入失败为 -1 。
+ */
+function assertDataAndInsert(which, func, array) {
+  if (!(array instanceof Array) || (!(typeof func === 'function')) || !which) return -1;
+  return array.push(func.call(this, which));
 }
 
 /**
@@ -82,69 +90,42 @@ function fmtTps(v) {
  * @returns {string}
  */
 function formatStatus(data) {
-  if (data == null) return '✓ 服务器在线（无附加信息）';
+  if (data == null) return '“栈流Streack”可能正在运行；没有可用的额外信息。';
 
-  // 显式离线标记（接口返回但声明离线）
-  if (data.online === false || data.state === 'offline' || data.status === 'offline') {
-    return '× 服务器离线';
+  if (!data.online) {
+    return `“栈流Streack”已离线；如果这不是计划维护，请向 Staff 报告。`;
   }
 
-  const lines = [];
-  const online = data.online === true || data.state === 'online' || data.status === 'online';
-  lines.push(online ? '✓ 服务器在线' : '✓ 服务器状态');
+  const lines = ["“栈流Streack”正在运行；"];
 
-  if (data.version != null) lines.push(`版本: ${valToString(data.version)}`);
-  if (data.host != null) lines.push(`地址: ${data.host}${data.port != null ? ':' + data.port : ''}`);
+  // TPS
+  if (data?.tps?.avg_5m) lines.push(`最近5分钟的TPS：${data?.tps?.avg_5m}`);
 
-  // 玩家信息：可能嵌套在 players 对象或扁平字段
-  const players = data.players;
-  if (players && typeof players === 'object') {
-    const now = players.online ?? players.now ?? players.current;
-    const max = players.max ?? players.maxPlayers;
-    if (now != null || max != null) lines.push(`玩家: ${now ?? '?'} / ${max ?? '?'}`);
-  } else if (players != null) {
-    lines.push(`玩家: ${players}`);
+  // 玩家列表
+  if (data?.players?.max && data?.players?.online) {
+    lines.push(`在线冒险家：${data?.players?.online}/${data?.players?.max}`);
+    if (data?.players?.list instanceof Array) {
+      let playerListText = [];
+      for (let index = 0; index < data.players.list.length; index++) {
+        // 枚举可展示玩家
+        const player = data.players.list[index];
+        if (player?.name?.text) playerListText.push("→ " + player.name.text);
+        if (playerListText.length >= MAX_PLAYER_LISTED) {
+          // 达到展示上限
+          if (index < (data.players.list.length - 1)) {
+            // 说明不是最后一个，计算余下量
+            playerListText.push(`……以及另外${data.players.list.length - playerListText.length}位冒险家`);
+          }
+          break;
+        }
+      }
+      lines.push(...playerListText, "");
+    }
   }
 
-  if (data.motd != null) lines.push(`MOTD: ${valToString(data.motd)}`);
-  else if (data.description != null) lines.push(`简介: ${valToString(data.description)}`);
-
-  if (data.latency != null || data.ping != null) {
-    lines.push(`延迟: ${data.latency ?? data.ping} ms`);
-  }
-
-  // 内存（已用 / 上限 + 占用率）
-  const memory = data.memory;
-  if (memory && typeof memory === 'object' && memory.used != null && memory.max != null) {
-    const pct = memory.max ? Math.round((memory.used / memory.max) * 100) : '?';
-    lines.push(`内存: ${formatBytes(memory.used)} / ${formatBytes(memory.max)}（占用 ${pct}%）`);
-  } else if (memory != null) {
-    lines.push(`内存: ${valToString(memory)}`);
-  }
-
-  // 更新时间（retrieved_at，毫秒时间戳 → 中文式时间）
-  if (data.retrieved_at != null) {
-    const ts = typeof data.retrieved_at === 'number' ? data.retrieved_at : Date.parse(data.retrieved_at);
-    if (!Number.isNaN(ts)) lines.push(`更新时间: ${formatDateTime(ts)}`);
-  }
-
-  // TPS（实时 / 1m / 5m / 15m 均值）
-  const tps = data.tps;
-  if (tps && typeof tps === 'object') {
-    lines.push(`TPS: 实时 ${fmtTps(tps.live)} | 1m ${fmtTps(tps.avg_1m)} | 5m ${fmtTps(tps.avg_5m)} | 15m ${fmtTps(tps.avg_15m)}`);
-  } else if (tps != null) {
-    lines.push(`TPS: ${valToString(tps)}`);
-  }
-
-  // 兜底：未识别字段附加展示（expires_at 等冗余字段不展示）
-  const known = new Set([
-    'online', 'state', 'status', 'version', 'host', 'port', 'players', 'motd', 'description',
-    'latency', 'ping', 'memory', 'retrieved_at', 'tps', 'expires_at',
-  ]);
-  const extra = Object.entries(data).filter(([k]) => !known.has(k));
-  if (extra.length) {
-    lines.push('其他:');
-    for (const [k, v] of extra) lines.push(`  ${k}: ${valToString(v)}`);
+  // 时间
+  if (data?.expires_at) {
+    lines.push(`下次更新应晚于${formatDateTime(data.expires_at)}。`);
   }
 
   return lines.join('\n');
@@ -159,23 +140,23 @@ registerCommand('mc', async function () {
     const res = await fetchWithTimeout(ADDRESS, TIMEOUT_MS);
     if (!res.ok) {
       getLogger().main.warn(`[mc] 状态接口返回非 2xx: ${res.status}`);
-      return '× 服务器离线';
+      return formatStatus({ online: false, retrieved_at: new Date().getTime(), expires_at: new Date().getTime() });
     }
 
     const text = await res.text();
-    if (!text.trim()) return '× 服务器离线';
+    if (!text.trim()) return formatStatus({ online: false, retrieved_at: new Date().getTime(), expires_at: new Date().getTime() });
 
     let data;
     try {
       data = JSON.parse(text);
     } catch {
       // 非 JSON：原样作为在线信息展示
-      return `✓ 服务器在线\n${text.trim()}`;
+      return `${formatStatus({ online: false, retrieved_at: new Date().getTime(), expires_at: new Date().getTime() })}\n以下附加信息可能会起作用：${text.trim()}`;
     }
     return formatStatus(data);
   } catch (err) {
     // 网络错误 / 超时（AbortError）/ DNS 失败等
     getLogger().main.warn(`[mc] 查询服务器状态失败: ${err.message}`);
-    return '× 服务器离线';
+    return `“${getBotName()}”无法查询“栈流Streack”的状态，因为“${err.message}”。`;
   }
 }, { description: '查询 Streack 服务器在线状态', usage: 'mc' });
