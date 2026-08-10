@@ -16,7 +16,7 @@
 | 层 | 目录 | 职责 |
 |----|------|------|
 | **System** | `src/system/` | 底层基础设施：bootstrap、config、logger、CLI、PID 锁 |
-| **Handler** | `src/Handler/` | IN→OUT 中转：调用 AI/Tool 将输入转换为输出 |
+| **Handler** | `src/handler/` | IN→OUT 中转：调用 AI/Tool 将输入转换为输出 |
 | **Platform** | `src/platform/` | 平台适配：接收消息流（IN），调用 Handler 获取回复（OUT），发回平台 |
 
 ### 模块清单
@@ -45,6 +45,16 @@ options 包含：`description`（帮助文本）、`argsCount`（参数数量校
 
 设计原则：声明式（模块顶部硬编码映射表）、解耦（子模块互不引用，经组合根注入）、惰性单例（import 无副作用）、优雅关闭（5s 超时强制退出）。
 
+## 扩展系统 (Extensions)
+
+项目通过 **扩展自动发现** 实现插件化，无需在入口硬编码路径：
+
+- 加载器：`src/system/extensionLoader.js` 的 `loadExtensions()`，在 `entry.js` 启动流程中调用。
+- 扫描目录：`extensions/handler/` 与 `extensions/platform/` 下的**一级子目录**，每个子目录的 `index.js` 即入口，被动态 `import()` 加载。
+- **约定**：handler 扩展放 `extensions/handler/<name>/index.js`，platform 扩展放 `extensions/platform/<name>/index.js`。模块在 import 时自注册（`registerCommand` / `registerPlatform`）。
+- 扩展内导入内核模块用 `../../../src/...`（相对本文件向上三层）。
+- 注意：扩展文件必须叫 `index.js` 且位于子目录中；`extensions/handler/<name>.js` 这种扁平文件**不会被加载**。
+
 ## 配置文件
 
 - `config/main.json` — 监听平台开关、console 重定向开关（JSONC）
@@ -70,5 +80,5 @@ options 包含：`description`（帮助文本）、`argsCount`（参数数量校
 
 ## 已知待办
 
-- Handler 层待实现（当前仅为空目录，暂未填充实际 IN→OUT 逻辑）
-- 平台层目前仅支持 QQBot，后续可扩展其他平台适配器
+- Handler 层已实现：`src/handler/` 含 commandServer（命令引擎）、permissionServer（权限）、ai.js（OpenAI 兼容问答）、msgin.js（命令→AI 双层回复）；扩展 `extensions/handler/ai`（askAI）、`extensions/handler/streackserver`（mc 服务器状态命令）。
+- 平台层：QQBot 适配器已迁移至 `extensions/platform/qqbot/`；后续可照此约定扩展其他平台。
