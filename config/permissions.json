@@ -9,6 +9,18 @@
       admin: true,
       hzc: true,
     },
+    '$admin': {
+      superadmin: false,
+      admin: true,
+    },
+    '$superadmin': {
+      superadmin: true,
+      admin: true,
+    },
+    '$superadminonly': {
+      superadmin: true,
+      admin: false,
+    },
   },
   temp: {},
   global: {},
