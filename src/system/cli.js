@@ -61,7 +61,10 @@ export function startCLI() {
       const args = parseArgs(trimmed);
       const [cmdName, cmdArgs] = args;
       try {
-        const result = await executeCommandSilent(cmdName, { internalCall: true, privateExecutor: true }, ...cmdArgs);
+        const result = await executeCommandSilent(cmdName, {
+          internalCall: true, privateExecutor: true,
+          executor: "@console"
+        }, ...cmdArgs);
         if (result) getLogger().main.info(`${result}`);
       } catch (err) {
         getLogger().main.error(err.message);

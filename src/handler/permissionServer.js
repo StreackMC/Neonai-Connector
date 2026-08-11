@@ -463,29 +463,58 @@ export function parseDuration(input) {
   return total;
 }
 
-cmd.meta = {
-  permissions: [["superadmin", "neonaic.command.permission"]],
-  description: "控制权限",
-  usage: "permission <set|unset> <user|*> <perm> [true|false] [lasting]"
-};
-
 /**
- * 安装权限管理命令（由组合根在 commandServer 就绪后调用，避免循环依赖）。
- * @param {(namespace: string, name: string, handler: Function, meta?: object) => void} register 命令注册函数（commandServer.registerCommand）
+ * 注册权限管理与控制命令
+ * @apiNote 由组合根在 commandServer 就绪后调用，避免循环依赖
+ * @param {(namespace: string, name: string, handler: Function, meta?: import('./commandServer.js').CommandRegisterOptions) => void} registerCommand 命令注册函数（commandServer.registerCommand）
  */
-export function installPermissionCommands(register) {
-  register('neonaic', 'permission', cmd, cmd.meta);
-  register('neonaic', 'perm', cmd, cmd.meta);
-  register('neonaic', 'whoami', function () {
+export function installPermissionCommands(registerCommand) {
+  registerCommand('neonaic', 'permission', cmd, {
+    permissions: [["superadmin", "neonaic.command.permission"]],
+    description: "控制权限",
+    usage: "permission <set|unset> <user|*> <perm> [true|false] [lasting]",
+    alias: ["perm"]
+  });
+  registerCommand('neonaic', 'whoami', function () {
     /** @type {import('./commandServer.js').CommandContext} */
     const ctx = this;
-    //TODO: 优化逻辑
     const singalExecutor = (ctx.executor instanceof Array) ? (ctx.executor.length > 0) ? ctx.executor[0] : undefined : ctx.executor;
-    let result = `你正以"${singalExecutor}"的身份执行命令，具备上下文：${parseString(ctx.executor)}\n\n`;
+    let result = '';
+    if (ctx.privateExecutor) {
+      // 非公开场景
+      result += `你正以"${singalExecutor}"的身份执行命令，具备上下文：${parseString(ctx.executor)}\n\n`;
+    } else {
+      // 公开场景，模糊化一些信息
+      const blurredExecutor = ctx.executor.map((v) => blurText(v, 5, 1));
+      result += `你正以"${blurText(singalExecutor, 5, 1)}"的身份执行命令，具备上下文：${parseString(blurredExecutor)}\n\n`;
+    }
+
     result += (checkPermission(singalExecutor, "admin")) ? "✓ 你的身份是管理员\n" : "× 你的身份不是管理员\n";
     result += (checkPermission(singalExecutor, "superadmin")) ? "✓ 你的身份是超级管理员\n" : "× 你的身份不是超级管理员\n";
-    result += (checkPermissionFromContext(ctx, "admin")) ? "✓ 你的上下文是管理员\n" : "× 你的上下文不是管理员\n";
-    result += (checkPermissionFromContext(ctx, "superadmin")) ? "✓ 你的上下文是超级管理员\n" : "× 你的上下文不是超级管理员\n";
+    if (ctx.internalCall) {
+      result += "✓ 你的上下文可以无视大部分权限检查";
+    } else {
+      result += (checkPermissionFromContext(ctx, "admin")) ? "✓ 你的上下文是管理员\n" : "× 你的上下文不是管理员\n";
+      result += (checkPermissionFromContext(ctx, "superadmin")) ? "✓ 你的上下文是超级管理员\n" : "× 你的上下文不是超级管理员\n";
+    }
     return result;
-  }, {});
+  }, {
+    description: "查询当前上下文身份以及特权令牌",
+  });
+}
+
+/**
+ * 模糊文本
+ * @param {String} [origin=""] 原文本
+ * @param {number} [keptStart=1] 开头保留数量
+ * @param {number} [keptEnd=1] 结尾保留数量
+ * @param {number} [castRate=.6] 被屏蔽文本的保留数量，最终中间*号的个数是原文本数量乘以本数值并向上取整
+ * @returns {String} 模糊后的文本。如果原文本长度太短不会模糊。
+ */
+function blurText(origin = "", keptStart = 1, keptEnd = 1, castRate = 0.6) {
+  if (origin.length <= (keptEnd + keptStart)) return origin;
+  if (typeof origin !== 'string') origin = parseString(origin);
+
+  const [start, end, middle] = [origin.slice(keptStart), origin.slice(-keptEnd), origin.slice(keptStart + 1, keptEnd)];
+  return start + '*'.repeat(Math.ceil(middle.length)) + end;
 }

@@ -82,17 +82,13 @@ export function parseArgs(input) {
 // ---- 注册 ----
 
 /**
- * @param {string} name
- * @param {(...args) => any} handler 参数以 ...args 展开传入，this 为命令上下文。**箭头函数无法接收上下文，需要使用<code>function() {}</code>**
- * @param {object} [opts]
- * @param {(string|string[])[]|string|string[]} [opts.permissions]
- *   权限规则。字符串或字符串列表视作 AND；内层数组视作 OR 组（至少满足其一）。
- *   "perm" 须拥有，"!perm" 须缺失。
- *   例: [a, [b, c], d, [e, "!f"]] → a ∧ d ∧ (b ∨ c) ∧ (e ∨ ¬f)
- * @param {string} [opts.description]
- * @param {string} [opts.usage]
- * @this {CommandContext}
+ * @typedef {Object} CommandRegisterOptions
+ * @property {string|string[]} [alias=[]] 别名设置
+ * @property {(string|string[])[]|string|string[]} [permissions=[]] 需求权限：第一层数组间为 AND 关系，第二层数组间为 OR 关系；有 ! 前缀表示需要缺失该权限。
+ * @property {string} [description=""] 命令描述
+ * @property {string} [usage=""] 命令用法
  */
+
 /**
  * 注册命令。
  *
@@ -108,11 +104,7 @@ export function parseArgs(input) {
  *
  * @param {string} name 命令原名
  * @param {(...args) => any} handler 参数以 ...args 展开传入，this 为命令上下文
- * @param {object} [opts] 命令附加信息
- * @param {string|string[]} [opts.alias] 别名设置
- * @param {(string|string[])[]|string|string[]} [opts.permissions] 需求权限：第一层数组间为 AND 关系，第二层数组间为 OR 关系；有 ! 前缀表示需要缺失该权限。
- * @param {string} [opts.description] 命令描述
- * @param {string} [opts.usage] 命令用法
+ * @param {CommandRegisterOptions} opts 命令附加信息
  * @returns {null|CommandMeta[]} 成功返回 null；冲突返回冲突命令列表
  * @throws 命名空间、命名或处理器无效
  */
