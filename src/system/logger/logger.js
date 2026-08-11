@@ -31,14 +31,14 @@ const COLORS = {
 
 /** 声明式日志类型 */
 const LOG_TYPES = {
-  Main: { console: true, file: true, call: 'main' },
-  Other: { console: true, file: true, call: 'other' },
+  "Main": { console: true, file: true, call: 'main' },
+  "Other": { console: true, file: true, call: 'other' },
   "Chat:Received": { console: true, file: true, call: 'chatIn' },
   "Chat:Sent": { console: true, file: true, call: 'chatOut' },
-  "Toolcall:AI": { console: true, file: true, call: 'toolAi' },
+  "Toolcall": { console: true, file: true, call: 'tool' },
   "Platform:Manager": { console: true, file: true, call: 'platM' },
   "Platform:Profile": { console: true, file: true, call: 'platP' },
-  Command: { console: true, file: true, call: 'cmd' },
+  "Command": { console: true, file: true, call: 'cmd' },
 };
 
 /**
@@ -50,7 +50,7 @@ const LOG_TYPES = {
  * @property {LoggerInstance} chatOut
  * @property {LoggerInstance} platM
  * @property {LoggerInstance} platP
- * @property {LoggerInstance} toolAi
+ * @property {LoggerInstance} tool
  * @property {LoggerInstance} cmd
  * @property {(...args: any[]) => void} log         无类型默认日志（走 Other）
  * @property {(err?: Error) => void} writeCrashReport

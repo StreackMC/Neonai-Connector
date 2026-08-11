@@ -24,7 +24,7 @@ function loadSystemPrompt(providerName) {
     prompt = readFileSync(resolve(ROOT, `config/prompts/${providerName}.md`), 'utf8').trim();
   } catch {
     prompt = '你是一个有用的 AI 助手。';
-    getLogger().toolAi.debug(`未找到提示词文件: config/prompts/${providerName}.md，使用默认`);
+    getLogger().tool.debug(`未找到提示词文件: config/prompts/${providerName}.md，使用默认`);
   }
   _promptCache.set(providerName, prompt);
   return prompt;
@@ -50,7 +50,7 @@ export async function askAI(userMessage, AIlist) {
   const errors = new Map();
   for (const provider of oaiList) {
     if (!provider.address) {
-      getLogger().toolAi.debug(`× ${provider.name}: 无有效地址`);
+      getLogger().tool.debug(`× ${provider.name}: 无有效地址`);
       errors.set(provider.name, '无有效地址');
       continue;
     }
@@ -66,7 +66,7 @@ export async function askAI(userMessage, AIlist) {
       top_p: 0.9,
     };
 
-    getLogger().toolAi.debug(`→ ${provider.name}: ${provider.address}#${provider.model}`);
+    getLogger().tool.debug(`→ ${provider.name}: ${provider.address}#${provider.model}`);
 
     const res = await fetch(provider.address, {
       method: 'POST',
@@ -76,14 +76,14 @@ export async function askAI(userMessage, AIlist) {
 
     if (!res.ok) {
       const errText = await res.text().catch(() => '');
-      getLogger().toolAi.debug(`× ${provider.name}: ${res.status} ${errText}`);
+      getLogger().tool.debug(`× ${provider.name}: ${res.status} ${errText}`);
       errors.set(provider.name, `${res.status}: ${errText}`);
       continue;
     }
 
     const data = await res.json();
     const reply = data.choices?.[0]?.message?.content ?? '';
-    getLogger().toolAi.debug(`← ${provider.name}: ${reply.length} 字符`);
+    getLogger().tool.debug(`← ${provider.name}: ${reply.length} 字符`);
     return reply;
   }
 

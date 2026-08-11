@@ -24,6 +24,7 @@ const getSubname = () => getConfig(CONFIG_PATHS.main).getString('subname');
  * @returns {Promise<string>}
  */
 export async function resolveReply(msg, options) {
+  getLogger().tool.debug('[msgIn] 正为消息生成回复：', { msg, options });
   const config = Object.assign({
     AI: true,
     AIlist: '*',
@@ -58,7 +59,7 @@ export async function resolveReply(msg, options) {
         const result = await executeCommandSilent(cmdName, ctx, ...cmdArgs);
         return result != null ? stripAnsi(String(result)).trim() : `“${getName()}”成功执行了“${cmdName}”`;
       } catch (err) {
-        getLogger().cmd.warn(`无法以“`, ctx,`”命令“${cmdName}”: ${err.message}`);
+        getLogger().cmd.warn(`[msgIn] 无法以“`, ctx,`”执行命令“${cmdName}”: ${err.message}`);
         return stripAnsi(`“${getBotName()}”无法执行“${cmdName}”，因为“${stripAnsi(err.message)}”。`);
       }
     }
@@ -69,7 +70,7 @@ export async function resolveReply(msg, options) {
   try {
     return stripAnsi(await askAI(msg, config.AIlist)).trim();
   } catch (err) {
-    getLogger().toolAi.error(`AI 回复失败: ${err.message}`);
+    getLogger().tool.error(`[msgIn] AI 回复失败: ${err.message}`);
     return `（${getName()}静静地看着你，并未言语）`;
   }
 }
