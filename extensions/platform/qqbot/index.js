@@ -14,20 +14,21 @@ import { EVENTS, INTENTS } from "./enums.js";
 
 export class PlatformQQBot extends Platform {
   static type = 'qqbot';
+  #botInstance = null;
 
   constructor(profile) {
     super(profile);
     /** @type {import('qq-official-bot').Bot | null} */
-    this._bot = null;
   }
 
-  get bot() { return this._bot; }
+  /** 获取机器人对象，不支持 setter @return {qqBotBackend.Bot|null} */
+  get bot() { return this.#botInstance; }
 
   async start() {
     const cfg = PlatformManager.instance.getProfile(this.profile);
     if (!cfg) throw new Error(`Profile "${this.profile}" 配置不存在`);
 
-    this._bot = new Bot({
+    this.#botInstance = new Bot({
       appid: cfg.appid ?? '',
       secret: cfg.appsecret ?? '',
       sandbox: cfg.sandbox ?? false,
@@ -41,16 +42,16 @@ export class PlatformQQBot extends Platform {
         INTENTS.common.INTERACTION,
       ],
     });
-    this._bot.on(EVENTS.message.group, (e) => MsgHandler.onGroupMessageIn(e, this));
-    this._bot.on(EVENTS.message.private, (e) => MsgHandler.onPrivateMessageIn(e, this));
-    await this._bot.start();
+    this.#botInstance.on(EVENTS.message.group, (e) => MsgHandler.onGroupMessageIn(e, this));
+    this.#botInstance.on(EVENTS.message.private, (e) => MsgHandler.onPrivateMessageIn(e, this));
+    await this.#botInstance.start();
     return { close: () => this.stop() };
   }
 
   async stop() {
-    if (this._bot) {
-      this._bot.stop();
-      this._bot = null;
+    if (this.#botInstance) {
+      this.#botInstance.stop();
+      this.#botInstance = null;
     }
   }
 }

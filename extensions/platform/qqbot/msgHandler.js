@@ -1,10 +1,11 @@
 import qqBotBackend from 'qq-official-bot';
-import { parseString } from '../../../src/system/logger/logger.js';
+import { getLogger, parseString } from '../../../src/system/logger/logger.js';
 import { PlatformQQBot } from './index.js';
 import { resolveReply } from '../../../src/handler/msgIn.js';
-import { getConfig } from '../../../src/system/conf.js';
+import { getBotName, getConfig } from '../../../src/system/conf.js';
 import { getPlatformManager } from '../../../src/platform/platform-manager.js';
 import { fromQQElement } from './emoji.js';
+import { registerCommand } from '../../../src/handler/commandServer.js';
 
 /**
  * 好友列表私聊
@@ -55,6 +56,48 @@ async function onGroupMessageIn(event, pp) {
     event.reply("\n" + reply);
   }
 }
+
+/**
+ * 向对象发送消息
+ * @param {PlatformQQBot} instance QQ机器人实例
+ * @param {string} who 目标对象
+ * @param {qqBotBackend.Sendable|String} msg 消息内容
+ * @returns {qqBotBackend.Message.Ret|null} 结果
+ * @throws 无法识别参数
+ */
+export async function sendMsg(instance, who, msg) {
+  if (!(instance instanceof PlatformQQBot)) throw new Error("指定的 Platform 无效");
+  who = parseString(who).trim();
+  let result = null;
+  if (who.startsWith('USR#')) {
+    // 私聊
+    result = await instance.bot?.sendPrivateMessage(who.slice(4), msg);
+  } else if (who.startsWith('GRP#')) {
+    // 群聊
+    result = await instance.bot?.sendGroupMessage(who.slice(4), msg);
+  } else {
+    // 无效用户
+    throw new Error("无法识别的用户："+parseString(who));
+  }
+  return result;
+}
+
+registerCommand('qqbot', 'qqsend', async function (profile, who, ...msg) {
+  // 获取实例
+  const instance = getPlatformManager().getPlatform(parseString(profile));
+  if (!(instance instanceof PlatformQQBot)) throw new Error("指定的 Platform Profile 无效");
+  // 发送消息
+  const result = await sendMsg(instance, who, msg.map(v => parseString(v, false)).join(''));
+  getLogger().platP.debug(`[qqbot] 向`, who, `@`, profile, `发送消息`, msg, `：`, result);
+  if (result.success) {
+    // 成功
+    instance.logMsgOut('Command:', `to=${who} | msg=`, reply.replace(/\n/g, "\\n"));
+    return `“${getBotName()}”成功向[${who}]发送指定消息：${result?.data}`;
+  } else {
+    // 失败
+    return `“${getBotName()}”无法向[${who}]发送指定消息，因为“${result?.error?.message}”`;
+  }
+})
 
 /**
  * @param {qqBotBackend.Sendable} raw 原始信息
