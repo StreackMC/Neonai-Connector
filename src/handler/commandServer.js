@@ -16,7 +16,7 @@
  */
 
 import { checkSinglePermission } from './permissionServer.js';
-import { getLogger } from '../system/logger/logger.js';
+import { getLogger, parseString } from '../system/logger/logger.js';
 
 // ---- 颜色 ----
 const RED   = '\x1b[31m';
@@ -209,12 +209,20 @@ function buildError(cmdName, reason, usage) {
 
 /**
  * @typedef {Object} CommandContext
- * @property {string[]|string} executor 执行者
+ * @property {string[]} [executor=['$unknown']] 执行者：请不要传入'$'开头的，因为被内部使用；同时请勿完全信任本处内容。'$console'表示控制台，'$unknown'表示未知。
  * @property {boolean} [privateExecutor=false] 命令执行是否处于私密场景（如私聊），非私密场景如群聊中其他成员可见
  * @property {boolean} [internalCall=false] 命令调用是否来自内部：来自内部的命令会绕过权限检查
  * @property {Date} timestamp 命令开始执行时的时间
  * @property {Object|undefined} this 命令执行时上下文，可以透传类对象。
  */
+
+/** 命令系统的一些枚举名 */
+export const COMMAND_ENUMS = {
+  /** 控制台执行的执行者名 @apiNote 请使用 {@link CommandContext.internalCall} 确认本点，以明确语义和避免恶意攻击。 */
+  FROM_CONSOLE: '$console',
+  /** 未知执行者，这一般表示当前上下文的某一层出现了不正确指定的执行者 */
+  FROM_UNKNOW: '$unknown',
+}
 
 /**
  * 执行命令（自动 catch，错误打印到终端）。
@@ -267,10 +275,23 @@ export function executeCommandSilent(cmdName, ctx = {}, ...args) {
     throw new Error(buildError(cmdName, '未知命令'));
   }
 
-  const executor = ctx.executor;
   const internalCall = !!ctx.internalCall;
   const originalThis = ctx.this;
   const privateExecutor = !!ctx.privateExecutor;
+
+  // 处理执行者
+  function executorResolver(stringLike) {
+    /* 如果是 null/undefined 直接记作未知 */if (stringLike === undefined || stringLike === null) return COMMAND_ENUMS.FROM_UNKNOW;
+    /* 否则转为文本并删掉首尾空格 */if (typeof stringLike !== 'string') stringLike = parseString(stringLike).trim();
+    /* 空文本也视作未知 */if (stringLike.length == 0) return COMMAND_ENUMS.FROM_UNKNOW;
+    return stringLike;
+  }
+  let executor = ctx.executor;
+  if (Array.isArray(executor)) {
+    executor = executor.map(executorResolver);
+  } else {
+    executor = [executorResolver(executor)];
+  }
 
   // 权限检查：CLI / 内部调用跳过
   if (!internalCall && executor) {
@@ -282,7 +303,7 @@ export function executeCommandSilent(cmdName, ctx = {}, ...args) {
 
   // 构建执行上下文
   const context = {
-    executor: executor ?? undefined,
+    executor: executor,
     internalCall, privateExecutor,
     timestamp: new Date(),
     this: originalThis,

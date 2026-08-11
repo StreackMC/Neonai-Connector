@@ -10,7 +10,7 @@
  */
 
 import { createInterface } from 'node:readline';
-import { executeCommandSilent, inferNext, parseArgs } from '../handler/commandServer.js';
+import { COMMAND_ENUMS, executeCommandSilent, inferNext, parseArgs } from '../handler/commandServer.js';
 import { getLogger } from './logger/logger.js';
 
 // ---- 颜色 ----
@@ -63,7 +63,7 @@ export function startCLI() {
       try {
         const result = await executeCommandSilent(cmdName, {
           internalCall: true, privateExecutor: true,
-          executor: "@console"
+          executor: COMMAND_ENUMS.FROM_CONSOLE
         }, ...cmdArgs);
         if (result) getLogger().main.info(`${result}`);
       } catch (err) {
