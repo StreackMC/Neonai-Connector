@@ -325,7 +325,7 @@ registerCommand('neonaic', 'help', function () {
   const ctx = this;
   const names = allCommands.filter((meta) => {
     // 过滤掉无权限命令
-    if (!meta?.permissions?.length) return true;
+    if (!meta?.permissions?.length || ctx.internalCall) return true;
     return checkCommandPerms(meta.name, meta.permissions, ctx.executor) === null;
   }).map((meta) => {
     const label = meta.namespace ? `${meta.namespace}:${meta.name}` : meta.name;
