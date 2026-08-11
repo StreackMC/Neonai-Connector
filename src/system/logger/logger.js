@@ -131,17 +131,23 @@ export function setConsoleHooks(before, after) {
  * @param {boolean} [short] 是否要截断:会只枚举前3个属性/对象；当调试模式时默认禁用，反之同理。**必须显式指定布尔值类型才可覆盖**
  */
 export function parseString(val, short) {
+  // 先处理截断需求
   if (typeof short !== 'boolean') short = !(DEBUGING || getConfig(CONFIG_PATHS.main).getBoolean('detailedLog', false));
+  // 处理一些常见不存在值
   if (val === null) return 'null';
   if (val === undefined) return 'undefined';
+  // String 不做处理
   if (typeof val === 'string') return val;
+  // Error 直接转错误消息
   if (val instanceof Error) return val.message ?? String(val);
+  // 数组处理
   if (Array.isArray(val)) {
     if (!short) return `['${val.map(parseString).join('\', \'').replace(/\n/g, '\\n')}']`;
     const head = val.slice(0, 3).map(parseString);
     const tail = val.length > 3 ? ` ... (+${val.length - 3})` : '';
     return `['${head.join('\', \'').replace(/\n/g, '\\n') }'${tail}]`;
   }
+  // 对象处理
   if (typeof val === 'object') {
     const keys = Object.keys(val);
     if (!short) {
@@ -153,6 +159,7 @@ export function parseString(val, short) {
     const tail = keys.length > 3 ? ` ... (+${keys.length - 3})` : '';
     return `{${pairs.join(', ').replace(/\n/g, '\\n') }${tail}}`;
   }
+  // 回退
   return String(val);
 }
 
