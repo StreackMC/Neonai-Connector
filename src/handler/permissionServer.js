@@ -15,6 +15,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import JSON5 from 'json5';
 import { parseString } from '../system/logger/logger.js';
+import { getBotName } from '../system/conf.js';
 
 // 注：本模块不 import commandServer.js，避免循环依赖。
 // 权限命令由组合根（entry.js）通过 installPermissionCommands(registerCommand) 安装。
@@ -378,6 +379,9 @@ export function clearGlobalTempPermission(permission, until = -1) {
 function cmd(type, user, permission, status, lasting) {
   /** @type {import('./commandServer.js').CommandContext} */
   const ctx = this;
+
+  // 不允许大庭广众下进行权限操作
+  if (!ctx.privateExecutor) return `“${getBotName()}”未能完成操作，因为当前上下文不是私密的。`;
 
   if (!type || (type !== 'set' && type !== 'unset')) {
     return `用法: ${cmd.meta.usage}`;
