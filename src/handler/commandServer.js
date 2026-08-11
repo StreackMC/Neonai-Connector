@@ -222,6 +222,10 @@ export const COMMAND_ENUMS = {
   FROM_CONSOLE: '$console',
   /** 未知执行者，这一般表示当前上下文的某一层出现了不正确指定的执行者 */
   FROM_UNKNOW: '$unknown',
+  /** 管理员权限 */
+  PERM_ADMIN: 'admin',
+  /** 超级管理员权限 */
+  PERM_SUPERADMIN: 'superadmin'
 }
 
 /**
@@ -280,12 +284,6 @@ export function executeCommandSilent(cmdName, ctx = {}, ...args) {
   const privateExecutor = !!ctx.privateExecutor;
 
   // 处理执行者
-  function executorResolver(stringLike) {
-    /* 如果是 null/undefined 直接记作未知 */if (stringLike === undefined || stringLike === null) return COMMAND_ENUMS.FROM_UNKNOW;
-    /* 否则转为文本并删掉首尾空格 */if (typeof stringLike !== 'string') stringLike = parseString(stringLike).trim();
-    /* 空文本也视作未知 */if (stringLike.length == 0) return COMMAND_ENUMS.FROM_UNKNOW;
-    return stringLike;
-  }
   let executor = ctx.executor;
   if (Array.isArray(executor)) {
     executor = executor.map(executorResolver);
@@ -341,6 +339,14 @@ export function getCommands() { return allCommands; }
 /** 获取是否存在可解析的目标命令（含别名与命名空间） */
 export function hasCommand(cmd) { return resolveCommand(cmd) != null; }
 
+/** 尝试解析执行者 */
+function executorResolver(stringLike) {
+  /* 如果是 null/undefined 直接记作未知 */if (stringLike === undefined || stringLike === null) return COMMAND_ENUMS.FROM_UNKNOW;
+  /* 否则转为文本并删掉首尾空格 */if (typeof stringLike !== 'string') stringLike = parseString(stringLike).trim();
+  /* 空文本也视作未知 */if (stringLike.length == 0) return COMMAND_ENUMS.FROM_UNKNOW;
+  return stringLike;
+}
+
 // ---- 内置命令 ----
 
 registerCommand('neonaic', 'help', function () {
@@ -357,3 +363,35 @@ registerCommand('neonaic', 'help', function () {
   }).sort();
   return names.join('\n') || '暂无注册命令';
 }, { description: '显示可用命令列表' });
+
+function sudoOrRunuser(inherit, who, cmd, ...args) {
+  /** @type {CommandContext} */
+  const ctx = this;
+  const targetCmd = typeof cmd === 'string' ? cmd.trim() : '';
+  if (/* 不检查who是考虑到部分情形下可能有转到匿名上下文的可能 */!targetCmd) throw new Error("参数不完整，应为 [sudo|runuser] <who> <cmd> [...args]");
+  if (/* 嵌套保护 */targetCmd === 'sudo' || targetCmd === 'runuser' || targetCmd === 'neonaic:sudo' || targetCmd === 'neonaic:runuser') {
+    throw new Error("要执行的命令不能是 sudo 或 runuser");
+  }
+  // 切换到目标用户执行命令
+  const currentExecutor = Array.isArray(ctx.executor) ? ctx.executor : (ctx.executor ? [ctx.executor] : []);
+  const nextExecutor = inherit
+    ? [executorResolver(who), ...currentExecutor]
+    : [executorResolver(who)];
+  return executeCommandSilent(targetCmd, { ...ctx, executor: nextExecutor }, ...args);
+}
+
+registerCommand('neonaic', 'sudo', function (who, cmd, ...args) {
+  return sudoOrRunuser.call(this, true, who, cmd, ...args);
+}, {
+  description: '以某个身份执行命令，会继承当前上下文。',
+  usage: "sudo <who> <cmd> [args]",
+  permissions: [[COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.command.sudo"]],
+});
+
+registerCommand('neonaic', 'runuser', function (who, cmd, ...args) {
+  return sudoOrRunuser.call(this, false, who, cmd, ...args);
+}, {
+  description: '切换到某个身份并执行命令，会重置上下文。',
+  usage: "runuser <who> <cmd> [args]",
+  permissions: [[COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.command.sudo"]],
+});
