@@ -44,18 +44,18 @@ export async function resolveReply(msg, options) {
       const cmdStr = trimmed.slice(prefix.length).trimStart();
       /** 解析完成的参数列表 */
       const args = parseArgs(cmdStr);
-      if (!args.length) return `无法执行“${trimmed}”，因为“${getName()}”无法理解这个命令。`;
+      if (!args.length) return `“${getBotName()}”无法执行“${trimmed}”，因为“${getName()}”无法理解这个命令。`;
       
       const [cmdName, ...cmdArgs] = args;
       const ctx = config.resolveCommandWith || undefined;
-      if (!hasCommand(cmdName)) return `无法执行“${cmdName}”，因为“${getName()}”无法理解这个命令。`;
+      if (!hasCommand(cmdName)) return `“${getBotName()}”无法执行“${cmdName}”，因为“${getName()}”无法理解这个命令。`;
 
       try {
         const result = await executeCommandSilent(cmdName, ctx, ...cmdArgs);
         return result != null ? stripAnsi(String(result)).trim() : `“${getName()}”成功执行了“${cmdName}”`;
       } catch (err) {
         getLogger().cmd.warn(`无法以“`, ctx,`”命令“${cmdName}”: ${err.message}`);
-        return stripAnsi(`无法执行“${cmdName}”，因为“${stripAnsi(err.message)}”。`);
+        return stripAnsi(`“${getBotName()}”无法执行“${cmdName}”，因为“${stripAnsi(err.message)}”。`);
       }
     }
   }
