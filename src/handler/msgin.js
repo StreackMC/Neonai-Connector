@@ -28,8 +28,12 @@ export async function resolveReply(msg, options) {
     AI: true,
     AIlist: '*',
     resolveCommand: true,
-    resolveCommandWith: '',
-  }, options ?? {});
+    /** @type {import('./commandServer.js').CommandContext} */
+    resolveCommandWith: {
+      executor: [this],
+      this: this,
+    },
+  }, (typeof options === 'object') ? options : {});
 
   const trimmed = msg.trim();
 
@@ -45,11 +49,11 @@ export async function resolveReply(msg, options) {
       /** 解析完成的参数列表 */
       const args = parseArgs(cmdStr);
       if (/* 没有解析到命令 */!args[0]) return `“${getBotName()}”无法执行“${trimmed}”，因为“${getName()}”无法理解这个命令。`;
-      
+
       const [cmdName, cmdArgs] = args;
-      const ctx = config.resolveCommandWith || undefined;
       if (/* 命令不存在 */!hasCommand(cmdName)) return `“${getBotName()}”无法执行“${cmdName}”，因为“${getName()}”无法理解这个命令。`;
 
+      const ctx = config.resolveCommandWith || {};
       try {
         const result = await executeCommandSilent(cmdName, ctx, ...cmdArgs);
         return result != null ? stripAnsi(String(result)).trim() : `“${getName()}”成功执行了“${cmdName}”`;
