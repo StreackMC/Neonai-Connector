@@ -5,7 +5,7 @@ import { resolveReply } from '../../../src/handler/msgIn.js';
 import { getBotName, getConfig } from '../../../src/system/conf.js';
 import { getPlatformManager } from '../../../src/platform/platform-manager.js';
 import { fromQQElement } from './emoji.js';
-import { registerCommand } from '../../../src/handler/commandServer.js';
+import { COMMAND_ENUMS, registerCommand } from '../../../src/handler/commandServer.js';
 
 /**
  * 好友列表私聊
@@ -82,7 +82,7 @@ export async function sendMsg(instance, who, msg) {
   return result;
 }
 
-registerCommand('qqbot', 'qqsend', async function (profile, who, ...msg) {
+registerCommand('qqbot', 'qbsend', async function (profile, who, ...msg) {
   // 获取实例
   const instance = getPlatformManager().getPlatform(parseString(profile));
   if (!(instance instanceof PlatformQQBot)) throw new Error("指定的 Platform Profile 无效");
@@ -97,6 +97,10 @@ registerCommand('qqbot', 'qqsend', async function (profile, who, ...msg) {
     // 失败
     return `“${getBotName()}”无法向[${who}]发送指定消息，因为“${result?.error?.message}”`;
   }
+}, {
+  permissions: [[COMMAND_ENUMS.PERM_SUPERADMIN, "qqbot.command.qbsend"]],
+  description: "使用官方QQBOT向指定渠道发送消息，需要对应渠道允许接收机器人消息：群聊需要群主开启推送权限；私聊需要加为好友并开启推送权限。",
+  usage: "qbsend <profile> <who> <...msg>",
 })
 
 /**
