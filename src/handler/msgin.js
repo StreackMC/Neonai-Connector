@@ -11,9 +11,6 @@ import { getLogger } from '../system/logger/logger.js';
 import { CONFIG_PATHS, getBotName, getConfig } from '../system/conf.js';
 import stripAnsi from 'strip-ansi';
 
-const getName = () => getConfig(CONFIG_PATHS.main).getString('name');
-const getSubname = () => getConfig(CONFIG_PATHS.main).getString('subname');
-
 /**
  * @param {string} msg
  * @param {object} [options]
@@ -49,15 +46,15 @@ export async function resolveReply(msg, options) {
       const cmdStr = trimmed.slice(prefix.length)./* 防止 "/ cmd" 这样的输入 */trimStart();
       /** 解析完成的参数列表 */
       const args = parseArgs(cmdStr);
-      if (/* 没有解析到命令 */!args[0]) return `“${getBotName()}”无法执行“${trimmed}”，因为“${getName()}”无法理解这个命令。`;
+      if (/* 没有解析到命令 */!args[0]) return `“${getBotName()}”无法执行“${trimmed}”，因为“${getBotName()}”无法理解这个命令。`;
 
       const [cmdName, cmdArgs] = args;
-      if (/* 命令不存在 */!hasCommand(cmdName)) return `“${getBotName()}”无法执行“${cmdName}”，因为“${getName()}”无法理解这个命令。`;
+      if (/* 命令不存在 */!hasCommand(cmdName)) return `“${getBotName()}”无法执行“${cmdName}”，因为“${getBotName()}”无法理解这个命令。`;
 
       const ctx = config.resolveCommandWith || {};
       try {
         const result = await executeCommandSilent(cmdName, ctx, ...cmdArgs);
-        return result != null ? stripAnsi(String(result)).trim() : `“${getName()}”成功执行了“${cmdName}”`;
+        return result != null ? stripAnsi(String(result)).trim() : `“${getBotName()}”成功执行了“${cmdName}”。`;
       } catch (err) {
         getLogger().cmd.warn(`[msgIn] 无法以“`, ctx,`”执行命令“${cmdName}”: ${err.message}`);
         return stripAnsi(`“${getBotName()}”无法执行“${cmdName}”，因为“${stripAnsi(err.message)}”。`);
@@ -66,11 +63,11 @@ export async function resolveReply(msg, options) {
   }
 
   // ---- AI 兜底 ----
-  if (!config.AI) return `（${getName()}可能在看着你，但并未言语）`;
+  if (!config.AI) return `（${getBotName()}可能在看着你，但并未言语）`;
   try {
     return stripAnsi(await askAI(msg, config.AIlist)).trim();
   } catch (err) {
     getLogger().tool.error(`[msgIn] AI 回复失败: ${err.message}`);
-    return `（${getName()}静静地看着你，并未言语）`;
+    return `（${getBotName()}静静地看着你，并未言语）`;
   }
 }

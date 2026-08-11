@@ -96,7 +96,7 @@ registerCommand('qqbot', 'qbsend', async function (profile, who, ...msg) {
     return `“${getBotName()}”成功向[${who}]发送指定消息。`;
   } else {
     // 失败
-    return `“${getBotName()}”无法向[${who}]发送指定消息，因为“${result?.error?.message ?? "未知错误"}”`;
+    return `“${getBotName()}”无法向[${who}]发送指定消息，因为“${result?.error?.message ?? "未知错误"}”。`;
   }
 }, {
   permissions: [[COMMAND_ENUMS.PERM_SUPERADMIN, "qqbot.command.qbsend"]],
