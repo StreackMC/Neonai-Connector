@@ -108,11 +108,11 @@ export function parseArgs(input) {
  *
  * @param {string} name 命令原名
  * @param {(...args) => any} handler 参数以 ...args 展开传入，this 为命令上下文
- * @param {object} [opts]
- * @param {string|string[]} [opts.alias]
- * @param {(string|string[])[]|string|string[]} [opts.permissions]
+ * @param {object} [opts] 命令附加信息
+ * @param {string|string[]} [opts.alias] 别名设置
+ * @param {(string|string[])[]|string|string[]} [opts.permissions] 需求权限：第一层数组间为 AND 关系，第二层数组间为 OR 关系；有 ! 前缀表示需要缺失该权限。
  * @param {string} [opts.description] 命令描述
- * @param {string} [opts.usage]
+ * @param {string} [opts.usage] 命令用法
  * @returns {null|CommandMeta[]} 成功返回 null；冲突返回冲突命令列表
  * @throws 命名空间、命名或处理器无效
  */
