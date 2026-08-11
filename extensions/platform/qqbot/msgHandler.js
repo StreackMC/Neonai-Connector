@@ -87,15 +87,16 @@ registerCommand('qqbot', 'qbsend', async function (profile, who, ...msg) {
   const instance = getPlatformManager().getPlatform(parseString(profile));
   if (!(instance instanceof PlatformQQBot)) throw new Error("指定的 Platform Profile 无效");
   // 发送消息
-  const result = await sendMsg(instance, who, msg.map(v => parseString(v, false)).join(''));
+  const messageContent = msg.map(v => parseString(v, false)).join('');
+  const result = await sendMsg(instance, who, messageContent);
   getLogger().platP.debug(`[qqbot] 向`, who, `@`, profile, `发送消息`, msg, `：`, result);
-  if (result.success) {
+  if (result?.success) {
     // 成功
-    instance.logMsgOut('Command:', `to=${who} | msg=`, reply.replace(/\n/g, "\\n"));
-    return `“${getBotName()}”成功向[${who}]发送指定消息：${result?.data}`;
+    instance.logMsgOut('Command:', `to=${who} | msg=`, messageContent.replace(/\n/g, "\\n"));
+    return `“${getBotName()}”成功向[${who}]发送指定消息。`;
   } else {
     // 失败
-    return `“${getBotName()}”无法向[${who}]发送指定消息，因为“${result?.error?.message}”`;
+    return `“${getBotName()}”无法向[${who}]发送指定消息，因为“${result?.error?.message ?? "未知错误"}”`;
   }
 }, {
   permissions: [[COMMAND_ENUMS.PERM_SUPERADMIN, "qqbot.command.qbsend"]],

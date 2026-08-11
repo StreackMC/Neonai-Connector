@@ -13,6 +13,8 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import JSON5 from 'json5';
+import { COMMAND_ENUMS, registerCommand } from '../handler/commandServer.js';
+import { getLogger } from './logger/logger.js';
 
 // 本模块自算项目根路径，避免与 entry.js 形成循环依赖
 // conf.js 位于 <根>/src/system/，故向上 2 层为项目根
@@ -188,6 +190,7 @@ export class Config {
   }
 }
 
+/** @type {Map<string, Config>} */
 const _cache = new Map();
 
 /**
@@ -199,6 +202,17 @@ export function getConfig(path) {
   if (!_cache.has(path)) _cache.set(path, new Config(path));
   return _cache.get(path);
 }
+
+registerCommand('neonaic', 'reload', function () {
+  _cache.clear();
+  /** @type {import('../handler/commandServer.js').CommandContext} */
+  const ctx = this;
+  (ctx?.internalCall) ? getLogger().main.info(`配置文件已由控制台权限重载`) : getLogger().main.info(`配置文件已由${ctx?.executor[0]}重载`);
+  return;
+}, {
+  permissions: [[COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.command.reload"]],
+  description: "立即重载配置文件。对部分功能不生效，需要手动重启。",
+});
 
 /** 语法糖：获取机器人名称 */
 export function getBotName() {
