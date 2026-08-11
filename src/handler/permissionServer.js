@@ -476,17 +476,19 @@ export function installPermissionCommands(registerCommand) {
     alias: ["perm"]
   });
   registerCommand('neonaic', 'whoami', function () {
+    const LEFT_CHAR_IF_HIDDING_RATE = .4;
     /** @type {import('./commandServer.js').CommandContext} */
     const ctx = this;
     const singalExecutor = (ctx.executor instanceof Array) ? (ctx.executor.length > 0) ? ctx.executor[0] : undefined : ctx.executor;
     let result = '';
     if (ctx.privateExecutor) {
       // 非公开场景
-      result += `你正以"${singalExecutor}"的身份执行命令，具备上下文：${parseString(ctx.executor)}\n\n`;
+      result += `你正以"${singalExecutor}"的身份执行命令，具备上下文：${parseString(ctx.executor)}\n`;
     } else {
       // 公开场景，模糊化一些信息
-      const blurredExecutor = ctx.executor.map((v) => blurText(v, 5, 1));
-      result += `你正以"${blurText(singalExecutor, 5, 1)}"的身份执行命令，具备上下文：${parseString(blurredExecutor)}\n\n`;
+      const blurredExecutor = ctx.executor.map((v) => blurText(v, 5, 1, LEFT_CHAR_IF_HIDDING_RATE));
+      result += `你正以"${blurText(singalExecutor, 5, 1, LEFT_CHAR_IF_HIDDING_RATE)}"的身份执行命令，具备上下文：${parseString(blurredExecutor)}。\n`;
+      result += `当前上下文不是私密的，已自动抹去一些隐私信息。\n`;
     }
 
     result += (checkPermission(singalExecutor, "admin")) ? "✓ 你的身份是管理员\n" : "× 你的身份不是管理员\n";
