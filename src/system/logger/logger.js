@@ -129,17 +129,18 @@ export function setConsoleHooks(before, after) {
 /**
  * 尝试将输入尽可能地转化为文本
  * @param {boolean} [short] 是否要截断:会只枚举前3个属性/对象；当调试模式时默认禁用，反之同理。**必须显式指定布尔值类型才可覆盖**
+ * @returns {String} 处理后的文本
  */
 export function parseString(val, short) {
-  // 先处理截断需求
-  if (typeof short !== 'boolean') short = !(DEBUGING || getConfig(CONFIG_PATHS.main).getBoolean('detailedLog', false));
+  // String 不做处理
+  if (typeof val === 'string') return val;
   // 处理一些常见不存在值
   if (val === null) return 'null';
   if (val === undefined) return 'undefined';
-  // String 不做处理
-  if (typeof val === 'string') return val;
   // Error 直接转错误消息
   if (val instanceof Error) return val.message ?? String(val);
+  // 处理截断需求
+  if (typeof short !== 'boolean') short = !(DEBUGING || getConfig(CONFIG_PATHS.main).getBoolean('detailedLog', false));
   // 数组处理
   if (Array.isArray(val)) {
     if (!short) return `['${val.map(parseString).join('\', \'').replace(/\n/g, '\\n')}']`;
