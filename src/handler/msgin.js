@@ -41,14 +41,14 @@ export async function resolveReply(msg, options) {
       if (!trimmed.startsWith(prefix)) continue;
 
       /** 无前缀的命令文本 */
-      const cmdStr = trimmed.slice(prefix.length).trimStart();
+      const cmdStr = trimmed.slice(prefix.length)./* 防止 "/ cmd" 这样的输入 */trimStart();
       /** 解析完成的参数列表 */
       const args = parseArgs(cmdStr);
-      if (!args.length) return `“${getBotName()}”无法执行“${trimmed}”，因为“${getName()}”无法理解这个命令。`;
+      if (/* 没有解析到命令 */!args[0]) return `“${getBotName()}”无法执行“${trimmed}”，因为“${getName()}”无法理解这个命令。`;
       
-      const [cmdName, ...cmdArgs] = args;
+      const [cmdName, cmdArgs] = args;
       const ctx = config.resolveCommandWith || undefined;
-      if (!hasCommand(cmdName)) return `“${getBotName()}”无法执行“${cmdName}”，因为“${getName()}”无法理解这个命令。`;
+      if (/* 命令不存在 */!hasCommand(cmdName)) return `“${getBotName()}”无法执行“${cmdName}”，因为“${getName()}”无法理解这个命令。`;
 
       try {
         const result = await executeCommandSilent(cmdName, ctx, ...cmdArgs);

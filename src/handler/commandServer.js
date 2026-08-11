@@ -48,7 +48,7 @@ const fqns = new Map();
 
 // ---- 参数解析 ----
 
-/** 按 POSIX 标准解析参数 */
+/** 按 POSIX 标准解析参数 @returns {[string, string[]]} 首个参数为命令名，第二个为参数列表 */
 export function parseArgs(input) {
   const args = [];
   let current = '', inSingle = false, inDouble = false, escape = false;
@@ -68,7 +68,15 @@ export function parseArgs(input) {
     current += ch;
   }
   if (current.length > 0) args.push(current);
-  return args;
+
+  if (args.length >= 2) {
+    return [args.shift(), args];
+  } else if (args.length == 1) {
+    return [args[0], []];
+  } else {
+    // 数组是空的
+    return ["", []];
+  }
 }
 
 // ---- 注册 ----
@@ -103,7 +111,7 @@ export function parseArgs(input) {
  * @param {object} [opts]
  * @param {string|string[]} [opts.alias]
  * @param {(string|string[])[]|string|string[]} [opts.permissions]
- * @param {string} [opts.description]
+ * @param {string} [opts.description] 命令描述
  * @param {string} [opts.usage]
  * @returns {null|CommandMeta[]} 成功返回 null；冲突返回冲突命令列表
  * @throws 命名空间、命名或处理器无效

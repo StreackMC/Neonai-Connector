@@ -148,7 +148,7 @@ export async function bootstrap() {
     setDebugMode(true);
     globalThis.$ = (input) => {
       const args = parseArgs(String(input));
-      const [cmdName, ...cmdArgs] = args;
+      const [cmdName, cmdArgs] = args;
       return executeCommand(cmdName, { internalCall: true, privateExecutor: true }, ...cmdArgs);
     };
     getLogger().main.info('调试模式已启用，$(cmd) 可用');

@@ -88,7 +88,7 @@ export class PlatformManager {
 
   _registerCLI() {
     const clazzThis = this;
-    registerCommand('neonaic', 'platform', async function (args) {
+    registerCommand('neonaic', 'platform', async function (...args) {
       /** @type {import('../handler/commandServer.js').CommandContext} */
       const ctx = this;
       const [sub, name] = args;
