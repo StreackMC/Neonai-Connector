@@ -5,6 +5,7 @@
       admin: true,
     },
     'USR#4C48AEC137FEAA4B94954DCB4EF36389': {
+      superadmin: true,
       admin: true,
       hzc: true,
     },
