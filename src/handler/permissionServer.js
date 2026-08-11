@@ -483,11 +483,11 @@ export function installPermissionCommands(registerCommand) {
     let result = '';
     if (ctx.privateExecutor) {
       // 非公开场景
-      result += `你正以"${singalExecutor}"的身份执行命令，具备上下文：${parseString(ctx.executor)}\n`;
+      result += `你正以“${singalExecutor}”的身份执行命令，具备上下文：${parseString(ctx.executor)}\n`;
     } else {
       // 公开场景，模糊化一些信息
       const blurredExecutor = ctx.executor.map((v) => blurText(v, 5, 1, LEFT_CHAR_IF_HIDDING_RATE));
-      result += `你正以"${blurText(singalExecutor, 5, 1, LEFT_CHAR_IF_HIDDING_RATE)}"的身份执行命令，具备上下文：${parseString(blurredExecutor)}。\n`;
+      result += `你正以“${blurText(singalExecutor, 5, 1, LEFT_CHAR_IF_HIDDING_RATE)}”的身份执行命令，具备上下文：${parseString(blurredExecutor)}。\n`;
       result += `当前上下文不是私密的，已自动抹去一些隐私信息。\n`;
     }
 
