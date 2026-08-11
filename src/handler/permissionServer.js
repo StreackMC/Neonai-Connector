@@ -508,13 +508,13 @@ export function installPermissionCommands(registerCommand) {
  * @param {String} [origin=""] 原文本
  * @param {number} [keptStart=1] 开头保留数量
  * @param {number} [keptEnd=1] 结尾保留数量
- * @param {number} [castRate=.6] 被屏蔽文本的保留数量，最终中间*号的个数是原文本数量乘以本数值并向上取整
+ * @param {number} [castRate=.6] 被屏蔽文本的数量，最终中间*号的个数是原文本数量乘以本数值并向上取整
  * @returns {String} 模糊后的文本。如果原文本长度太短不会模糊。
  */
 function blurText(origin = "", keptStart = 1, keptEnd = 1, castRate = 0.6) {
-  if (origin.length <= (keptEnd + keptStart)) return origin;
   if (typeof origin !== 'string') origin = parseString(origin);
+  if (origin.length <= (keptEnd + keptStart)) return origin;
 
-  const [start, end, middle] = [origin.slice(keptStart), origin.slice(-keptEnd), origin.slice(keptStart + 1, keptEnd)];
-  return start + '*'.repeat(Math.ceil(middle.length)) + end;
+  const [start, end, middle] = [origin.slice(0, keptStart), origin.slice(-keptEnd), origin.slice(keptStart, -keptEnd)];
+  return start + '*'.repeat(Math./* 理论上这里不会小于1，但是防御一下使意图明确 */max(Math.ceil(middle.length * castRate), 1)) + end;
 }
