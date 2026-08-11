@@ -10,7 +10,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import JSON5 from 'json5';
 
-import { registerCommand } from '../handler/commandServer.js';
+import { COMMAND_ENUMS, registerCommand } from '../handler/commandServer.js';
 import { getDebugMode, getLogger } from '../system/logger/logger.js';
 import { Config, CONFIG_PATHS, getBotName, getConfig } from '../system/conf.js';
 
@@ -123,7 +123,7 @@ export class PlatformManager {
     }, {
       description: '平台 Profile 生命周期管理',
       usage: 'platform start|stop|enable|disable|list [name]',
-      permissions: [["admin", "neonaic.commmand.platform"]],
+      permissions: [[COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.commmand.platform"]],
       alias: ["pm"]
     });
   }

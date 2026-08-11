@@ -17,7 +17,7 @@ import { platform, release, tmpdir } from 'node:os';
 import { getConfig, CONFIG_PATHS } from './conf.js';
 import { setDebugMode, setConsoleHooks, getLogger } from './logger/logger.js';
 import { acquirePidLock, releasePidLock } from './pid.js';
-import { registerCommand, executeCommand, parseArgs } from '../handler/commandServer.js';
+import { registerCommand, executeCommand, parseArgs, COMMAND_ENUMS } from '../handler/commandServer.js';
 import { installPermissionCommands, checkPermission, checkPermissionFromContext } from '../handler/permissionServer.js';
 import { startCLI, stopCLI, erasePrompt, redrawPrompt } from './cli.js';
 import { PlatformManager } from '../platform/platform-manager.js';
@@ -132,7 +132,7 @@ registerCommand('neonaic', 'version', function () {
 
 registerCommand('neonaic', 'stop', () => {
   shutdown('COMMAND');
-}, { description: '安全关闭服务', permissions: [["superadmin", "neonaic.commmand.stop"]] });
+}, { description: '安全关闭服务', permissions: [[COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.commmand.stop"]] });
 
 // ---- 启动 ----
 

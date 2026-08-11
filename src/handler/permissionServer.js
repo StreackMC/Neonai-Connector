@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import JSON5 from 'json5';
 import { parseString } from '../system/logger/logger.js';
 import { getBotName } from '../system/conf.js';
+import { COMMAND_ENUMS } from './commandServer.js';
 
 // 注：本模块不 import commandServer.js，避免循环依赖。
 // 权限命令由组合根（entry.js）通过 installPermissionCommands(registerCommand) 安装。
@@ -478,7 +479,7 @@ export function parseDuration(input) {
  */
 export function installPermissionCommands(registerCommand) {
   registerCommand('neonaic', 'permission', cmd, {
-    permissions: [["superadmin", "neonaic.command.permission"]],
+    permissions: [[COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.command.permission"]],
     description: cmd.meta.description,
     usage: cmd.meta.usage,
     alias: ["perm"]
@@ -499,13 +500,13 @@ export function installPermissionCommands(registerCommand) {
       result += `当前上下文不是私密的，已自动抹去一些隐私信息。\n`;
     }
 
-    result += (checkPermission(singalExecutor, "admin")) ? "✓ 你的身份是管理员\n" : "× 你的身份不是管理员\n";
-    result += (checkPermission(singalExecutor, "superadmin")) ? "✓ 你的身份是超级管理员\n" : "× 你的身份不是超级管理员\n";
+    result += (checkPermission(singalExecutor, COMMAND_ENUMS.PERM_ADMIN)) ? "✓ 你的身份是管理员\n" : "× 你的身份不是管理员\n";
+    result += (checkPermission(singalExecutor, COMMAND_ENUMS.PERM_SUPERADMIN)) ? "✓ 你的身份是超级管理员\n" : "× 你的身份不是超级管理员\n";
     if (ctx.internalCall) {
       result += "✓ 你的上下文可以无视大部分权限检查";
     } else {
-      result += (checkPermissionFromContext(ctx, "admin")) ? "✓ 你的上下文是管理员\n" : "× 你的上下文不是管理员\n";
-      result += (checkPermissionFromContext(ctx, "superadmin")) ? "✓ 你的上下文是超级管理员\n" : "× 你的上下文不是超级管理员\n";
+      result += (checkPermissionFromContext(ctx, COMMAND_ENUMS.PERM_ADMIN)) ? "✓ 你的上下文是管理员\n" : "× 你的上下文不是管理员\n";
+      result += (checkPermissionFromContext(ctx, COMMAND_ENUMS.PERM_SUPERADMIN)) ? "✓ 你的上下文是超级管理员\n" : "× 你的上下文不是超级管理员\n";
     }
     return result;
   }, {

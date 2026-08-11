@@ -220,7 +220,7 @@ export const COMMAND_ENUMS = {
   /** 管理员权限 */
   PERM_ADMIN: 'admin',
   /** 超级管理员权限 */
-  PERM_SUPERADMIN: 'superadmin'
+  PERM_SUPERADMIN: 'superadmin',
 }
 
 /**
