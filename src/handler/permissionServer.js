@@ -433,6 +433,10 @@ function cmd(type, user, permission, status, lasting) {
   clearPermission(user, permission);
   return `已清除 ${user} 的权限 ${permission}`;
 }
+cmd.meta = {
+  usage: "permission <set|unset> <user|*> <perm> [true|false] [lasting]",
+  description: "控制权限"
+}
 
 /**
  * 解析持续时间字符串，如 '1y2M3d4h5m6s'。
@@ -475,8 +479,8 @@ export function parseDuration(input) {
 export function installPermissionCommands(registerCommand) {
   registerCommand('neonaic', 'permission', cmd, {
     permissions: [["superadmin", "neonaic.command.permission"]],
-    description: "控制权限",
-    usage: "permission <set|unset> <user|*> <perm> [true|false] [lasting]",
+    description: cmd.meta.description,
+    usage: cmd.meta.usage,
     alias: ["perm"]
   });
   registerCommand('neonaic', 'whoami', function () {
