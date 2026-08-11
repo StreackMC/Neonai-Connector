@@ -19,8 +19,8 @@ const getSubname = () => getConfig(CONFIG_PATHS.main).getString('subname');
  * @param {object} [options]
  * @param {boolean} [options.AI=true]
  * @param {string[]|string} [options.AIlist="*"]
- * @param {boolean} [options.resolveCommand=true]
- * @param {string|string[]} [options.resolveCommandAs=""] 执行者标识
+ * @param {boolean} [options.resolveCommand=true] 是否要执行命令
+ * @param {import('./commandServer.js').CommandContext} options.resolveCommandWith 执行时命令上下文
  * @returns {Promise<string>}
  */
 export async function resolveReply(msg, options) {
@@ -28,7 +28,7 @@ export async function resolveReply(msg, options) {
     AI: true,
     AIlist: '*',
     resolveCommand: true,
-    resolveCommandAs: '',
+    resolveCommandWith: '',
   }, options ?? {});
 
   const trimmed = msg.trim();
@@ -47,14 +47,14 @@ export async function resolveReply(msg, options) {
       if (!args.length) return `无法执行“${trimmed}”，因为“${getName()}”无法理解这个命令。`;
       
       const [cmdName, ...cmdArgs] = args;
-      const executor = config.resolveCommandAs || undefined;
+      const ctx = config.resolveCommandWith || undefined;
       if (!hasCommand(cmdName)) return `无法执行“${cmdName}”，因为“${getName()}”无法理解这个命令。`;
 
       try {
-        const result = await executeCommandSilent(cmdName, { executor }, ...cmdArgs);
+        const result = await executeCommandSilent(cmdName, ctx, ...cmdArgs);
         return result != null ? stripAnsi(String(result)).trim() : `“${getName()}”成功执行了“${cmdName}”`;
       } catch (err) {
-        getLogger().cmd.warn(`[${executor}] 命令执行失败: ${err.message}`);
+        getLogger().cmd.warn(`无法以“`, ctx,`”命令“${cmdName}”: ${err.message}`);
         return stripAnsi(`无法执行“${cmdName}”，因为“${stripAnsi(err.message)}”。`);
       }
     }

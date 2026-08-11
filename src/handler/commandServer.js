@@ -210,7 +210,8 @@ function buildError(cmdName, reason, usage) {
 /**
  * @typedef {Object} CommandContext
  * @property {string[]|string} executor 执行者
- * @property {boolean} internalCall 命令调用是否来自内部：来自内部的命令会绕过权限检查
+ * @property {boolean} [privateExecutor=false] 命令执行是否处于私密场景（如私聊），非私密场景如群聊中其他成员可见
+ * @property {boolean} [internalCall=false] 命令调用是否来自内部：来自内部的命令会绕过权限检查
  * @property {Date} timestamp 命令开始执行时的时间
  * @property {Object|undefined} this 命令执行时上下文，可以透传类对象。
  */
@@ -269,6 +270,7 @@ export function executeCommandSilent(cmdName, ctx = {}, ...args) {
   const executor = ctx.executor;
   const internalCall = !!ctx.internalCall;
   const originalThis = ctx.this;
+  const privateExecutor = !!ctx.privateExecutor;
 
   // 权限检查：CLI / 内部调用跳过
   if (!internalCall && executor) {
@@ -281,7 +283,7 @@ export function executeCommandSilent(cmdName, ctx = {}, ...args) {
   // 构建执行上下文
   const context = {
     executor: executor ?? undefined,
-    internalCall,
+    internalCall, privateExecutor,
     timestamp: new Date(),
     this: originalThis,
   };
