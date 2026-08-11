@@ -11,8 +11,7 @@ import { readFileSync } from 'node:fs';
 
 import { CONFIG_PATHS, getConfig } from '../system/conf.js';
 import { getLogger, parseString } from '../system/logger/logger.js';
-
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+import { ROOT_PATH } from '../system/entry.js';
 
 /** @type {Map<string, string>} */
 const _promptCache = new Map();
@@ -21,10 +20,10 @@ function loadSystemPrompt(providerName) {
   if (_promptCache.has(providerName)) return _promptCache.get(providerName);
   let prompt;
   try {
-    prompt = readFileSync(resolve(ROOT, `config/prompts/${providerName}.md`), 'utf8').trim();
-  } catch {
+    prompt = readFileSync(resolve(ROOT_PATH, `config/prompts/${providerName}.md`), 'utf8').trim();
+  } catch (e) {
     prompt = '你是一个有用的 AI 助手。';
-    getLogger().tool.debug(`未找到提示词文件: config/prompts/${providerName}.md，使用默认`);
+    getLogger().tool.debug(`无法加载提示词 config/prompts/${providerName}.md：`, e);
   }
   _promptCache.set(providerName, prompt);
   return prompt;

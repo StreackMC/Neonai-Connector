@@ -461,7 +461,7 @@ export function decodeFaceExt(ext) {
     if (json && typeof json.text === 'string') text = json.text.trim();
     // 处理特定包含符
     if (text.startsWith('[')) text = text.slice(1);
-    if (text.endsWith(']')) text = text.slice(-1);
+    if (text.endsWith(']')) text = text.slice(0, -1);
   } catch {
     // 解码失败：text 设为 null
     text = null;
