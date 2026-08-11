@@ -12,7 +12,7 @@ import JSON5 from 'json5';
 
 import { registerCommand } from '../handler/commandServer.js';
 import { getDebugMode, getLogger } from '../system/logger/logger.js';
-import { Config, CONFIG_PATHS, getConfig } from '../system/conf.js';
+import { Config, CONFIG_PATHS, getBotName, getConfig } from '../system/conf.js';
 
 // ---- 颜色 ----
 const CYAN   = '\x1b[36m';
@@ -87,45 +87,44 @@ export class PlatformManager {
   }
 
   _registerCLI() {
-    registerCommand('neonaic', 'platform', async (args) => {
+    const clazzThis = this;
+    registerCommand('neonaic', 'platform', async function (args) {
+      /** @type {import('../handler/commandServer.js').CommandContext} */
+      const ctx = this;
       const [sub, name] = args;
-      if (!sub) {
-        getLogger().platM.info(
-          `${RED}用法: platform ${CYAN}start|stop|enable|disable${R} ${DIM}<name>${R}  或  platform ${CYAN}list${R}\n`
-        );
-        return;
-      }
+      if (!ctx.privateExecutor) return `${RED}“${getBotName()}”无法执行“platform”，因为当前上下文不是私密的。`;
+      if (!sub) return `${RED}用法: platform ${CYAN}start|stop|enable|disable${R} ${DIM}<name>${R}  或  platform ${CYAN}list${R}`;
 
       switch (sub) {
         case 'start':
-          if (!name) { getLogger().platM.info(`${RED}用法: platform start <name>${R}\n`); return; }
-          await this.start(name);
+          if (!name) return `${RED}用法: platform start <name>${R}`;
+          await clazzThis.start(name);
           break;
         case 'stop':
-          if (!name) { getLogger().platM.info(`${RED}用法: platform stop <name>${R}\n`); return; }
-          await this.stop(name);
+          if (!name) return `${RED}用法: platform stop <name>${R}`;
+          await clazzThis.stop(name);
           break;
         case 'enable':
-          if (!name) { getLogger().platM.info(`${RED}用法: platform enable <name>${R}\n`); return; }
-          this.enable(name);
+          if (!name) return `${RED}用法: platform enable <name>${R}`;
+          clazzThis.enable(name);
           break;
         case 'disable':
-          if (!name) { getLogger().platM.info(`${RED}用法: platform disable <name>${R}\n`); return; }
-          await this.disable(name);
+          if (!name) return `${RED}用法: platform disable <name>${R}`;
+          await clazzThis.disable(name);
           break;
         case 'list':
-          this.list();
-          break;
+          return clazzThis.list();
         default:
-          getLogger().platM.warn(
-            `${RED}未知子命令: ${sub}${R}\n` +
-            `${DIM}用法: platform ${CYAN}start|stop|enable|disable${R} ${DIM}<name>  或  platform ${CYAN}list${R}\n`
+          return (
+            `${RED}未知子命令: ${sub}${R}` +
+            `${DIM}用法: platform ${CYAN}start|stop|enable|disable${R} ${DIM}<name>  或  platform ${CYAN}list${R}`
           );
       }
     }, {
       description: '平台 Profile 生命周期管理',
       usage: 'platform start|stop|enable|disable|list [name]',
-      permissions: [["admin", "neonaic.commmand.platform"]]
+      permissions: [["admin", "neonaic.commmand.platform"]],
+      alias: ["pm"]
     });
   }
 
@@ -284,7 +283,7 @@ export class PlatformManager {
           : `${DIM}已禁用${R}`;
       output += `  ${CYAN}${name}${R} (${DIM}${profile.type}${R})  ${status}\n`;
     }
-    getLogger().platM.info(output);
+    return output;
   }
 
   /** 启动所有 enabled 的 Profile */
