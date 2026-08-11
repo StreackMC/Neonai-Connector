@@ -6,7 +6,7 @@
  */
 
 import { executeCommandSilent, hasCommand, parseArgs } from './commandServer.js';
-import { askAI } from '../../extensions/handler/ai/index.js';
+import { askAI } from './ai.js';
 import { getLogger } from '../system/logger/logger.js';
 import { CONFIG_PATHS, getConfig } from '../system/conf.js';
 import stripAnsi from 'strip-ansi';

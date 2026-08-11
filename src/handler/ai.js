@@ -1,8 +1,7 @@
 /**
- * handler/ai.js — AI 交互模块（概念验证）
+ * extensions/handler/ai — AI 交互模块
  *
- * 使用 OpenAI 兼容 API 格式，仅发送系统提示词 + 用户消息，无历史记录。
- * 系统提示词按 OAI provider 名称加载：
+ * 使用 OpenAI 兼容 API 格式，系统提示词按 provider 名加载：
  *   config/prompts/${oai[x].name}.md
  */
 
@@ -15,13 +14,9 @@ import { getLogger, parseString } from '../../../src/system/logger/logger.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 
-/** @type {Map<string, string>} provider 名 → 提示词 */
+/** @type {Map<string, string>} */
 const _promptCache = new Map();
 
-/**
- * @param {string} providerName
- * @returns {string}
- */
 function loadSystemPrompt(providerName) {
   if (_promptCache.has(providerName)) return _promptCache.get(providerName);
   let prompt;
@@ -36,38 +31,31 @@ function loadSystemPrompt(providerName) {
 }
 
 /**
- * 向 AI 发送请求并获取回复。
- * @param {string} userMessage 用户输入
- * @param {string|stirng[]} AIlist 可以使用的AI Profile
- * @returns {Promise<string>} AI 回复文本
+ * @param {string} userMessage
+ * @param {string|string[]} AIlist 允许的 AI Profile 列表，"*" 表示全部
+ * @returns {Promise<string>}
  */
 export async function askAI(userMessage, AIlist) {
-  // 处理 AI 列表
-  if (!(AIlist instanceof Array)) AIlist = [AIlist];
-  AIlist = AIlist.map((value, index, array) => (typeof value === 'string') ? value.trim() : parseString(value, false).trim());
+  if (!Array.isArray(AIlist)) AIlist = [AIlist];
+  AIlist = AIlist.map((v) => (typeof v === 'string' ? v.trim() : parseString(v, false).trim()));
 
-  // 导入配置
-  /** 当前是否允许全部使用 */
-  const isAllAcceptable = AIlist.includes('*');
+  const isAll = AIlist.includes('*');
   const oaiList = getConfig(CONFIG_PATHS.secret).getList('oai').filter((v) => {
-    if (v?.available === false) return false;// 禁用的直接跳过
-    if (isAllAcceptable) return true;// 含有通配符全部允许
-    return AIlist.includes(v?.name);// 查找是否允许调用
+    if (v?.available === false) return false;
+    if (isAll) return true;
+    return AIlist.includes(v?.name);
   });
-  if (oaiList.length == 0) throw new Error('未找到可用的 AI Profile 配置');
+  if (!oaiList.length) throw new Error('未找到可用的 AI Profile');
 
-  // 开始请求
-  let request_result = new Map();
-  for (let i = 0; i < oaiList.length; i++) {
-    const provider = oaiList[i];
-    // 请求配置
-    const systemPrompt = loadSystemPrompt(provider.name);
-    const url = provider.address;
-    if (!url) {
-      getLogger().toolAi.debug(`×→`, provider.name, ` 没有提供有效的 API 地址:`, provider.address);
-      request_result.set(provider.name, `没有提供有效的 API 地址`);
+  const errors = new Map();
+  for (const provider of oaiList) {
+    if (!provider.address) {
+      getLogger().toolAi.debug(`× ${provider.name}: 无有效地址`);
+      errors.set(provider.name, '无有效地址');
       continue;
     }
+
+    const systemPrompt = loadSystemPrompt(provider.name);
     const body = {
       model: provider.model,
       messages: [
@@ -77,44 +65,29 @@ export async function askAI(userMessage, AIlist) {
       temperature: 0.25,
       top_p: 0.9,
     };
-    // const body = {
-    //   model: provider.model,
-    //   input: systemPrompt + userMessage,
-    //   temperature: 0.25,
-    //   top_p: 0.9,
-    //   tools: [{ type: "web_search" }]
-    // };
 
-    getLogger().toolAi.debug(`→`, provider.name, ` 向 ${provider.address}#${provider.model} 发送请求`);
+    getLogger().toolAi.debug(`→ ${provider.name}: ${provider.address}#${provider.model}`);
 
-    const res = await fetch(url, {
+    const res = await fetch(provider.address, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${provider.token}`,
-      },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${provider.token}` },
       body: JSON.stringify(body),
     });
 
     if (!res.ok) {
       const errText = await res.text().catch(() => '');
-      getLogger().toolAi.debug(`←×`, provider.name, ` 请求API失败 (${res.status}):`, errText);
-      request_result.set(provider.name, `请求API失败 (${res.status}): ${errText}`);
+      getLogger().toolAi.debug(`× ${provider.name}: ${res.status} ${errText}`);
+      errors.set(provider.name, `${res.status}: ${errText}`);
       continue;
     }
 
     const data = await res.json();
     const reply = data.choices?.[0]?.message?.content ?? '';
-
-    getLogger().toolAi.debug(`←`, provider.name, ` 收到回复 (${reply.length} 字符)`);
+    getLogger().toolAi.debug(`← ${provider.name}: ${reply.length} 字符`);
     return reply;
   }
 
-  // 请求失败了
-  let joint_result = "对以下 AI_Profile 的尝试都失败了:{";
-  request_result.forEach((value, key) => {
-    joint_result += `${key}:"${value.replace(/\n/g,'\\n')}",`;
-  })
-  joint_result += `}`;
-  throw new Error(joint_result);
+  let detail = '所有 AI Profile 请求失败: ';
+  errors.forEach((v, k) => { detail += `${k}: "${String(v).replace(/\n/g, '\\n')}"; `; });
+  throw new Error(detail);
 }
