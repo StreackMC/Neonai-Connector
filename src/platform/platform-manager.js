@@ -116,7 +116,7 @@ export class PlatformManager {
           return clazzThis.list();
         default:
           return (
-            `${RED}未知子命令: ${sub}${R}` +
+            `${RED}未知子命令: ${sub}${R}\n` +
             `${DIM}用法: platform ${CYAN}start|stop|enable|disable${R} ${DIM}<name>  或  platform ${CYAN}list${R}`
           );
       }
