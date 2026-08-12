@@ -52,8 +52,8 @@
 /**
  * @typedef {Object} QQEmojiElement
  *   qq-official-bot 消息片段中的表情元素。
- * @property {'face'|'emoji'} type
- * @property {number}         id
+ * @property {number} id
+ * @property {string} ext?
  */
 
 /**
@@ -430,22 +430,23 @@ export function toQQElement(type, id) {
 /**
  * 由 qq-official-bot 消息片段元素反查记录。
  * 兼容三类元素：
- *   - 普通小黄脸 { type:'face',  id:N }             → EmojiRecord
+ *   - 普通小黄脸 { type:'face', id:N }             → EmojiRecord
  *   - 普通 Emoji  { type:'emoji', id:codepoint }     → EmojiRecord
  *   - 商城表情     { type:'face', id:'', ext:base64 } → MallEmojiRecord
  *     （ext 为 base64(JSON)，解码得 { text:'表情描述' }，无标准 ID/Unicode）
  * @param {QQEmojiElement} el
+ * @param {'face'|'emoji'} emojiType 
  * @returns {EmojiRecord|MallEmojiRecord|null}
  */
-export function fromQQElement(el) {
-  if (!el || typeof el.type !== 'string') return null;
+export function fromQQElement(el, emojiType) {
+  if (!el || typeof emojiType !== 'string') return null;
   // 商城表情：face 但 id 为空且携带 ext
-  if (el.type === 'face' && (el.id === '' || el.id == null) && typeof el.ext === 'string') {
+  if (emojiType === 'face' && (el.id === '' || el.id == null) && typeof el.ext === 'string') {
     return decodeFaceExt(el.ext);
   }
   if (typeof el.id !== 'number') return null;
-  const type = el.type === 'face' ? EMOJI_TYPES.FACE : el.type === 'emoji' ? EMOJI_TYPES.EMOJI : undefined;
-  return type === undefined ? null : getEmoji(type, el.id);
+  const type = emojiType === 'face' ? EMOJI_TYPES.FACE : emojiType === 'emoji' ? EMOJI_TYPES.EMOJI : undefined;
+  return emojiType === undefined ? null : getEmoji(emojiType, el.id);
 }
 
 /**

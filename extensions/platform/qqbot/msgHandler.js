@@ -1,5 +1,6 @@
 import qqBotBackend from 'qq-official-bot';
 import he from 'he';
+import JSON5 from 'json5';
 import { getLogger, parseString } from '../../../src/system/logger/logger.js';
 import { PlatformQQBot } from './index.js';
 import { resolveReply } from '../../../src/handler/msgIn.js';
@@ -114,31 +115,39 @@ registerCommand('qqbot', 'qbsend', async function (profile, who, ...msg) {
 function toMarkdown(raw, pp) {
   let result = "";
   raw.forEach((piece) => {
-    switch (parseString(piece?.type).trim().toLowerCase()) {
-      case 'text':// 纯文本
-        result += piece.text;
-        break;
-      case 'face':// 表情
-        result += ` :[${fromQQElement(piece)?.text ?? 'Unknown Emoji'}]: `;
-        break;
-      case 'image':// 图片
-        result += ` ![Image:${piece?.name ?? 'Untitled Image'}](${piece?.url ?? '//UnknownUrl'}) `;
-        break;
-      case 'audio':// 音频
-        result += ` <audio controls title="${he.escape(piece?.name ?? 'Untitled Audio')}"><source src="${he.escape(piece?.url ?? '//UnknownUrl')}"></audio> `;
-        break;
-      case 'video':// 视频
-        result += ` <video controls title="${he.escape(piece?.name ?? 'Untitled Video')}"><source src="${he.escape(piece?.url ?? '//UnknownUrl')}"></video> `;
-        break;
-      case 'link':// 链接
-        // Warn: 没有转义
-        result += `[${piece?.text ?? piece?.url ?? '//UnknownUrl'}](${piece?.url ?? '//UnknownUrl'} "${piece?.description ?? 'A link'}")`;
-        break;
+    try {
+      const msgMeta = piece?.data || {};
+      switch (parseString(piece?.type).trim().toLowerCase()) {
+        case 'text':// 纯文本
+          result += msgMeta.text;
+          break;
+        case 'face':// 表情1
+          result += ` :[${fromQQElement(msgMeta, 'face')?.text ?? 'Unknown Emoji'}]: `;
+          break;
+        case 'emoji':// 表情2
+          result += ` :[${fromQQElement(msgMeta, 'emoji')?.text ?? 'Unknown Emoji'}]: `;
+          break;
+        case 'image':// 图片
+          result += ` ![Image:${msgMeta?.name ?? 'Untitled Image'}](${msgMeta?.url ?? '//UnknownUrl'}) `;
+          break;
+        case 'audio':// 音频
+          result += ` <audio controls title="${he.escape(msgMeta?.name ?? 'Untitled Audio')}"><source src="${he.escape(msgMeta?.url ?? '//UnknownUrl')}"></audio> `;
+          break;
+        case 'video':// 视频
+          result += ` <video controls title="${he.escape(msgMeta?.name ?? 'Untitled Video')}"><source src="${he.escape(msgMeta?.url ?? '//UnknownUrl')}"></video> `;
+          break;
+        case 'link':// 链接
+          // Warn: 没有转义
+          result += `[${msgMeta?.text ?? msgMeta?.url ?? '//UnknownUrl'}](${msgMeta?.url ?? '//UnknownUrl'} "${msgMeta?.description ?? 'A link'}")`;
+          break;
 
-      default:
-        //TODO: 还有其他富文本消息类型没有转换
-        pp.log('warn', "无法将消息片段", piece, "转换为 Markdown，未知的消息类型：", piece.type);
-        break;
+        default:
+          //TODO: 还有其他富文本消息类型没有转换
+          pp.log('warn', "无法将消息片段", piece, "转换为 Markdown，未知的消息类型：", piece.type);
+          break;
+      }
+    } catch (error) {
+      pp.log('warn', "无法将消息片段", piece, "转换为 Markdown，无法获取消息内容：", error);
     }
   });
   return result;
