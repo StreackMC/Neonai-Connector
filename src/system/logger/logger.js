@@ -131,14 +131,14 @@ export function setConsoleHooks(before, after) {
 /**
  * 尝试将输入尽可能地转化为文本
  * @param {*} val 输入值
- * @param {boolean} [short] 是否要截断：会只枚举前3个属性/对象；当调试模式时默认禁用，反之同理。
- * @param {boolean} [processString=false] 是否要把文本规整化
+ * @param {boolean} [short] 是否要截断：会只枚举前3个属性/对象；当调试模式时默认禁用，反之同理。**需要严格为真以防传入参数语义不明**
+ * @param {boolean} [processString=false] 是否要把文本规整化。**需要严格为真以防传入参数语义不明**
  * @returns {String} 处理后的文本。Array→[1, 2, ...]  Map→{key=value, k=v, ...}  Set→{1, 2, ...}  Object→.toString()/{key: value, ...}
  */
 export function parseString(val, short = !(DEBUGING || getConfig(CONFIG_PATHS.main).getBoolean('detailedLog', false)), processString = false) {
   // 基础类型：字符串加单引号，并转义特殊字符
   if (typeof val === 'string') {
-    return (!processString) ? val : `'${val.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t')}'`;
+    return (processString === true) ? `'${val.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t')}'` : val;
   }
 
   // 空值与布尔值
@@ -150,29 +150,29 @@ export function parseString(val, short = !(DEBUGING || getConfig(CONFIG_PATHS.ma
 
   // 数组
   if (Array.isArray(val)) {
-    const items = short ? val.slice(0, 3) : val;
+    const items = short === true ? val.slice(0, 3) : val;
     const body = items.map((v) => parseString(v, short, true)).join(', ');
-    const suffix = short && val.length > 3 ? ` ... (+${val.length - 3})` : '';
+    const suffix = short === true && val.length > 3 ? ` ... (+${val.length - 3})` : '';
     return `[${body}${suffix}]`;
   }
 
   // Map
   if (val instanceof Map) {
     const entries = Array.from(val.entries());
-    const visible = short ? entries.slice(0, 3) : entries;
+    const visible = short === true ? entries.slice(0, 3) : entries;
     const body = visible.map(([key, value]) =>
       `${parseString(key, short, true)}=${parseString(value, short, true)}`
     ).join(', ');
-    const suffix = short && val.size > 3 ? ` ... (+${val.size - 3})` : '';
+    const suffix = short === true && val.size > 3 ? ` ... (+${val.size - 3})` : '';
     return `{${body}${suffix}}`;
   }
 
   // Set
   if (val instanceof Set) {
     const items = Array.from(val);
-    const visible = short ? items.slice(0, 3) : items;
+    const visible = short === true ? items.slice(0, 3) : items;
     const body = visible.map(v => parseString(v, short, true)).join(', ');
-    const suffix = short && val.size > 3 ? ` ... (+${val.size - 3})` : '';
+    const suffix = short === true && val.size > 3 ? ` ... (+${val.size - 3})` : '';
     return `{${body}${suffix}}`;
   }
 
@@ -184,11 +184,11 @@ export function parseString(val, short = !(DEBUGING || getConfig(CONFIG_PATHS.ma
   // 对象
   if (typeof val === 'object') {
     const keys = Object.keys(val);
-    const visibleKeys = short ? keys.slice(0, 3) : keys;
+    const visibleKeys = short === true ? keys.slice(0, 3) : keys;
     const body = visibleKeys
       .map((k) => `${k}: ${parseString(val[k], short, true)}`)
       .join(', ');
-    const suffix = short && keys.length > 3 ? ` ... (+${keys.length - 3})` : '';
+    const suffix = short === true && keys.length > 3 ? ` ... (+${keys.length - 3})` : '';
     return `{${body}${suffix}}`;
   }
 
