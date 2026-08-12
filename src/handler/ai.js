@@ -104,11 +104,6 @@ export function registerAITool(namespace, name, definition) {
 
   _toolFqn.set(fqn, def);
   _allTools.push(def);
-  for (const a of aliases) {
-    if (!a || a === name) continue;
-    const afqn = `${namespace}:${a}`;
-    if (!_toolFqn.has(afqn)) _toolFqn.set(afqn, def);
-  }
   return true;
 }
 
@@ -372,8 +367,7 @@ async function aiTool(ctx, ...args) {
       const tools = getAITools();
       if (!tools.length) return '暂无已注册的 AI 工具';
       return tools.map((t) => {
-        const alias = t.aliases.length ? ` [别名: ${t.aliases.join(', ')}]` : '';
-        return `${t.namespace}:${t.name}${alias}${t.description ? ` - ${t.description}` : ''}`;
+        return `${t.namespace}:${t.name}${t.description ? ` - ${t.description}` : ''}`;
       }).join('\n');
     }
     case 'test': {
