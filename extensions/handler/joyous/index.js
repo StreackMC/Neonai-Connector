@@ -14,11 +14,13 @@ const TIMEOUT_MS = 5000;
 /** 展示玩家列表的最大数量，最小1 */
 const MAX_PLAYER_LISTED = 3;
 
+import z from 'zod';
+import { registerAITool } from '../../../src/handler/ai.js';
 // -- import --
 import { registerCommand } from '../../../src/handler/commandServer.js';
 import { getBotName } from '../../../src/system/conf.js';
 import { getLogger } from '../../../src/system/logger/logger.js';
-import { fetchWithTimeout, valToString, formatDateTime } from "./utils.js";
+import { fetchWithTimeout, valToString, formatDateTime, formatMcTime } from "./utils.js";
 
 // -- Tools --
 /** TPS 数值格式化：负数（如 -1 表示无数据）显示为 N/A */
@@ -89,7 +91,7 @@ function formatStatus(data, name) {
   return lines.join('\n');
 }
 
-// -- Command --
+// -- API --
 
 /**
  * 查询 Streack 服务器状态（命名空间 streackserver）；
@@ -123,4 +125,39 @@ registerCommand('joyous', 'mc', async function (address) {
   description: '查询 Minecraft 服务器在线状态',
   usage: 'mc',
   permissions: [],
+});
+
+registerAITool("joyous", "worldMeta", {
+  description: "查询世界天气状况与时间情况。默认从 " + DEFAULT_ADDRESS + " 处获取数据。",
+  inputSchema: z.object({
+    address: z.string().describe("数据来源，需要是Joyous StatusAPI格式。"),
+  }),
+  execute: async ({ address }) => {
+    try {
+      const res = await fetchWithTimeout(address || DEFAULT_ADDRESS, TIMEOUT_MS);
+      if (!res.ok) {
+        getLogger().main.warn(`[mc] 状态接口返回非 2xx: ${res.status}`);
+        return "无法获取，接口响应不对。";
+      }
+
+      let data;
+      try {
+        data = JSON.parse(await res.text());
+      } catch {
+        // 非 JSON：原样作为在线信息展示
+        return "无法获取，接口返回数据格式错误。";
+      }
+      if (data?.worlds?.world) {
+        return (data?.worlds?.world?.has_storm ? "正在下雨雪，" : "未在下雨雪，")
+          + (data?.worlds?.world?.is_thundering ? "正在打雷，" : "未在打雷，")
+          + (data?.worlds?.world?.inday_time ? `现在是24小时制的${formatMcTime(data?.worlds?.world?.inday_time).join(':')}` : "时间未知。");
+      } else if (data?.worlds?.overworld) {
+        return ``;
+      } else return "接口没有返回该信息。";
+    } catch (err) {
+      // 网络错误 / 超时（AbortError）/ DNS 失败等
+      getLogger().main.warn(`[mc] 查询服务器状态失败: ${err.message}`);
+      return "无法获取，请求失败。";
+    }
+  },
 });
