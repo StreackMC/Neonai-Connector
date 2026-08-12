@@ -2,7 +2,9 @@
  * handler/ai.js — AI 交互模块（Vercel AI SDK）
  *
  * 保留 askAI(userMessage, AIlist) 接口，内部全面使用 Vercel AI SDK：
- *   - createOpenAI 构建 provider，可选 chat / responses 端点（responseAPI）
+ *   - createOpenAI 构建 provider，通过 fetch 中间件严格遵循用户配置的完整 address
+ *     （不做 baseURL 自动拼接端点）
+ *   - responseAPI 仅决定请求体格式（responses API vs chat completions）
  *   - generateText / streamText 生成回复（stream 可选流式）
  *   - registerAITool 注册 AI 工具，由 profile 的 tools 配置决定是否暴露给模型
  *
@@ -210,13 +212,15 @@ function buildToolSet(toolList) {
 async function callProvider(provider, userMessage) {
   const systemPrompt = loadSystemPrompt(provider.name);
 
+  // 严格遵循用户配置的完整 address，不依赖 SDK 的 baseURL 自动拼接端点。
+  // 通过 fetch 中间件，将 SDK 拼接出的 URL 统一替换为用户配置的完整地址。
   const client = createOpenAI({
-    baseURL: provider.address,
     apiKey: provider.token,
     name: provider.name,
+    fetch: (url, init) => globalThis.fetch(provider.address, init),
   });
 
-  // 选择端点：responseAPI → responses，否则 chat completions
+  // responseAPI 仅决定请求体格式（responses API vs chat completions），端点由 address 指定
   const model = provider.responseAPI
     ? client.responses(provider.model)
     : client.chat(provider.model);
