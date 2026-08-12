@@ -22,7 +22,7 @@ import JSON5 from 'json5';
 import { CONFIG_PATHS, getConfig } from '../system/conf.js';
 import { getLogger, parseString } from '../system/logger/logger.js';
 import { COMMAND_ENUMS, registerCommand } from './commandServer.js';
-import { clearPermission, checkPermission, setPermission } from './permissionServer.js';
+import { clearPermission, checkPermission, parseDuration, setPermission, setTempPermission } from './permissionServer.js';
 
 // 本模块自算项目根路径，避免与 entry.js 形成循环依赖
 // ai.js 位于 <根>/src/handler/，故向上 2 层为项目根
@@ -357,7 +357,7 @@ registerCommand('neonaic', 'ai', async function (sub, ...args) {
 
 /** ai 命令用法文本 */
 function cmdAIUsage() {
-  return "ai tool list | ai tool test <tool> <json5> | ai profile list | ai profile <enable|disable> <profile> | ai profile test <profile> <msg> | ai ban <user> | ai pardon <user>";
+  return "ai tool list | ai tool test <tool> <json5> | ai profile list | ai profile <enable|disable> <profile> | ai profile test <profile> <msg> | ai ban <user> [time] | ai pardon <user>";
 }
 
 /**
@@ -449,9 +449,20 @@ async function aiProfile(ctx, ...args) {
  * ai ban 子命令：封禁用户使用 AI。
  * @param {import('./commandServer.js').CommandContext} ctx
  * @param {string} user
+ * @param {string} [time] 持续时间（如 '1h'、'2d'、'1y2M3d4h5m6s'），存在则设临时封禁
  */
-function aiBan(ctx, user) {
-  if (!user) return '用法: ai ban <user>';
+function aiBan(ctx, user, time) {
+  if (!user) return '用法: ai ban <user> [time]';
+
+  if (time !== undefined) {
+    // 临时封禁：解析持续时间 → 过期时间 = 当前 + 持续
+    const ms = parseDuration(time);
+    if (ms == null) return `无法解析持续时间: "${time}"（如 '1h'、'2d'、'1y2M3d4h5m6s'）`;
+    const until = Date.now() + ms;
+    setTempPermission(user, AI_BAN_PERMISSION, false, until);
+    return `已临时封禁 ${user} 使用 AI 功能，持续 ${time}，过期 ${new Date(until).toLocaleString()}`;
+  }
+
   setPermission(user, AI_BAN_PERMISSION, false);
   return `已封禁 ${user} 使用 AI 功能`;
 }
