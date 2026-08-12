@@ -8,7 +8,7 @@
 import { PlatformManager, registerPlatform } from '../../../src/platform/platform-manager.js';
 import { Platform } from '../../../src/platform/PlatformInterface.js';
 import qqBotBackend from 'qq-official-bot';
-const { Bot } = qqBotBackend;
+const { Bot, ReceiverMode } = qqBotBackend;
 import MsgHandler from "./msgHandler.js";
 import { EVENTS, INTENTS } from "./enums.js";
 
@@ -36,13 +36,13 @@ export class PlatformQQBot extends Platform {
       logLevel: cfg._debug ? 'debug' : 'warn',
       maxRetry: Math.max(cfg.maxRetry ?? 3, 1),
       intents: [
-        INTENTS.group.GROUP_AT_MESSAGE_CREATE,
-        INTENTS.chat.C2C_MESSAGE_CREATE,
+        INTENTS.message.GROUP_AND_C2C_EVENT,
         INTENTS.common.MESSAGE_AUDIT,
         INTENTS.common.INTERACTION,
       ],
+      mode: ReceiverMode.WEBSOCKET,
     });
-    this.#botInstance.on(EVENTS.message.group, (e) => MsgHandler.onGroupMessageIn(e, this));
+    this.#botInstance.on(EVENTS.message.groupAt, (e) => MsgHandler.onGroupMessageIn(e, this));
     this.#botInstance.on(EVENTS.message.private, (e) => MsgHandler.onPrivateMessageIn(e, this));
     await this.#botInstance.start();
     return { close: () => this.stop() };

@@ -1,4 +1,5 @@
 import qqBotBackend from 'qq-official-bot';
+import he from 'he';
 import { getLogger, parseString } from '../../../src/system/logger/logger.js';
 import { PlatformQQBot } from './index.js';
 import { resolveReply } from '../../../src/handler/msgIn.js';
@@ -62,24 +63,22 @@ async function onGroupMessageIn(event, pp) {
  * @param {PlatformQQBot} instance QQ机器人实例
  * @param {string} who 目标对象
  * @param {qqBotBackend.Sendable|String} msg 消息内容
- * @returns {qqBotBackend.Message.Ret|null} 结果
- * @throws 无法识别参数
+ * @returns {Promise<import('qq-official-bot').SendResult|null>} 结果（发送失败时 throw）
+ * @throws 无法识别参数 / 发送失败
  */
 export async function sendMsg(instance, who, msg) {
   if (!(instance instanceof PlatformQQBot)) throw new Error("指定的 Platform 无效");
+  if (!instance.bot) throw new Error("QQBot 实例尚未启动");
   who = parseString(who).trim();
-  let result = null;
   if (who.startsWith('USR#')) {
     // 私聊
-    result = await instance.bot?.sendPrivateMessage(who.slice(4), msg);
+    return await instance.bot.sendPrivateMessage(who.slice(4), msg);
   } else if (who.startsWith('GRP#')) {
     // 群聊
-    result = await instance.bot?.sendGroupMessage(who.slice(4), msg);
-  } else {
-    // 无效用户
-    throw new Error("无法识别的用户："+parseString(who));
+    return await instance.bot.sendGroupMessage(who.slice(4), msg);
   }
-  return result;
+  // 无效用户
+  throw new Error("无法识别的用户：" + parseString(who));
 }
 
 registerCommand('qqbot', 'qbsend', async function (profile, who, ...msg) {
@@ -88,15 +87,18 @@ registerCommand('qqbot', 'qbsend', async function (profile, who, ...msg) {
   if (!(instance instanceof PlatformQQBot)) throw new Error("指定的 Platform Profile 无效");
   // 发送消息
   const messageContent = msg.map(v => parseString(v, false)).join('');
-  const result = await sendMsg(instance, who, messageContent);
-  getLogger().platP.debug(`[qqbot] 向`, who, `@`, profile, `发送消息`, msg, `：`, result);
-  if (result?.success) {
-    // 成功
+  try {
+    const result = await sendMsg(instance, who, messageContent);
+    getLogger().platP.debug(`[qqbot] 向`, who, `@`, profile, `发送消息`, msg, `：`, result);
     instance.logMsgOut('Command:', `to=${who} | msg=`, messageContent.replace(/\n/g, "\\n"));
+    // SendResult 可能为「消息审核中」状态
+    if (result?.audit_status === 'pending') {
+      return `“${getBotName()}”已向[${who}]发送消息，但消息正在审核中。`;
+    }
     return `“${getBotName()}”成功向[${who}]发送指定消息。`;
-  } else {
-    // 失败
-    return `“${getBotName()}”无法向[${who}]发送指定消息，因为“${result?.error?.message ?? "未知错误"}”。`;
+  } catch (err) {
+    getLogger().platP.debug(`[qqbot] 向`, who, `@`, profile, `发送消息失败：`, err.message);
+    return `“${getBotName()}”无法向[${who}]发送指定消息，因为“${err.message}”。`;
   }
 }, {
   permissions: [[COMMAND_ENUMS.PERM_SUPERADMIN, "qqbot.command.qbsend"]],

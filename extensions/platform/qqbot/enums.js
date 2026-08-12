@@ -1,26 +1,28 @@
 /**
  * QQ 机器人 WebSocket Intents 枚举（按业务分类）。
  *
- * 值均为 qq-official-bot SDK 的 `Intends` 枚举键名（字符串），
+ * 值均为 qq-official-bot SDK (>=1.2.0) 的 `Intent` 类型联合字符串，
  * 可直接用于 Bot 配置对象的 `intents` 数组。
  *
+ * ⚠️ 与旧版（<=1.0.x）不同：旧版 `GROUP_AT_MESSAGE_CREATE` / `C2C_MESSAGE_CREATE`
+ *    两个独立 intent 已合并为 `GROUP_AND_C2C_EVENT`（私聊与群聊消息事件）。
+ *
  * 分类说明：
- * - group    : 群聊（Group）相关。SDK 仅暴露「@机器人」消息一类，
- *              不存在「全部群消息」intent（QQ 仅向机器人推送 @消息）。
- * - chat     : 好友 / 单聊私信（C2C）相关。
- * - qchannel : QQ 频道（Guild / Channel）相关，与「群聊」是不同体系，勿混用。
- * - common   : 通用事件（跨群聊 / 频道 / 私信，不属于上述任一分类）。
+ * - message   : 私聊与群聊消息（群@ + 好友私信，已合并）。
+ * - group     : 群成员变更。
+ * - qchannel  : QQ 频道（Guild / Channel）相关，与「群聊」是不同体系，勿混用。
+ * - common    : 通用事件（跨群聊 / 频道 / 私信，不属于上述任一分类）。
  */
 export const INTENTS = {
-  /** 群聊（Group） */
-  group: {
-    /** 群聊中 @机器人 的消息（QQ 仅向机器人推送 @消息，无「全部群消息」intent） */
-    GROUP_AT_MESSAGE_CREATE: 'GROUP_AT_MESSAGE_CREATE',
+  /** 私聊与群聊消息（群@ 与好友私信已合并） */
+  message: {
+    /** 私聊与群聊消息事件（含群@消息 + 好友私信） */
+    GROUP_AND_C2C_EVENT: 'GROUP_AND_C2C_EVENT',
   },
-  /** 好友 / 单聊私信（C2C） */
-  chat: {
-    /** 好友 / 单聊（私聊机器人）消息 */
-    C2C_MESSAGE_CREATE: 'C2C_MESSAGE_CREATE',
+  /** 群成员变更 */
+  group: {
+    /** 群成员变更事件 */
+    GROUP_MEMBER: 'GROUP_MEMBER',
   },
   /** QQ 频道（Guild / Channel）—— 与「群聊」不同体系，勿混用 */
   qchannel: {
@@ -34,14 +36,10 @@ export const INTENTS = {
     GUILD_MESSAGE_REACTIONS: 'GUILD_MESSAGE_REACTIONS',
     /** 频道私信（注意：这是频道私信，非好友私信） */
     DIRECT_MESSAGE: 'DIRECT_MESSAGE',
-    /** 公开论坛事件 */
-    OPEN_FORUMS_EVENTS: 'OPEN_FORUMS_EVENTS',
-    /** 音频 / 直播频道成员 */
-    AUDIO_OR_LIVE_CHANNEL_MEMBERS: 'AUDIO_OR_LIVE_CHANNEL_MEMBERS',
     /** 论坛事件 */
-    FORUMS_EVENTS: 'FORUMS_EVENTS',
+    FORUMS_EVENT: 'FORUMS_EVENT',
     /** 音频动作 */
-    AUDIO_ACTIONS: 'AUDIO_ACTIONS',
+    AUDIO_ACTION: 'AUDIO_ACTION',
     /** 公开频道消息 */
     PUBLIC_GUILD_MESSAGES: 'PUBLIC_GUILD_MESSAGES',
   },
@@ -75,8 +73,10 @@ export const EVENTS = {
   message: {
     /** 消息全量捕获：会同时收到群聊/私信/频道消息与消息审核事件 */
     root: 'message',
-    /** 群聊 @ 机器人 消息 */
+    /** 群聊消息（⚠️ >=1.2.0 语义变化：这是「群消息」事件，不再是「群@消息」） */
     group: 'message.group',
+    /** 群聊 @机器人 消息（>=1.2.0 起「群@消息」由本事件承载） */
+    groupAt: 'message.group.at',
     /** 私信前缀（频道私信 + 好友私信） */
     private: 'message.private',
     /** 好友 / 单聊（私聊机器人）消息 */
