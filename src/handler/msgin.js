@@ -65,7 +65,7 @@ export async function resolveReply(msg, options) {
   // ---- AI 兜底 ----
   if (!config.AI) return `（${getBotName()}可能在看着你，但并未言语）`;
   try {
-    return stripAnsi(await askAI(msg, config.AIlist)).trim();
+    return stripAnsi(await askAI(msg, config.AIlist, config.resolveCommandWith?.executor)).trim();
   } catch (err) {
     getLogger().tool.error(`[msgIn] AI 回复失败: ${err.message}`);
     return `（${getBotName()}静静地看着你，并未言语）`;

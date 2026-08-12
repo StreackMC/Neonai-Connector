@@ -17,13 +17,19 @@ import { fileURLToPath } from 'node:url';
 
 import { generateText, streamText, tool } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
+import JSON5 from 'json5';
 
 import { CONFIG_PATHS, getConfig } from '../system/conf.js';
 import { getLogger, parseString } from '../system/logger/logger.js';
+import { COMMAND_ENUMS, registerCommand } from './commandServer.js';
+import { clearPermission, checkPermission, setPermission } from './permissionServer.js';
 
 // 本模块自算项目根路径，避免与 entry.js 形成循环依赖
 // ai.js 位于 <根>/src/handler/，故向上 2 层为项目根
 const ROOT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+
+/** 封禁用户使用 AI 的权限名 */
+const AI_BAN_PERMISSION = 'neonaic.toolcall.ai';
 
 // ---- 提示词加载 ----
 
@@ -53,7 +59,6 @@ function loadSystemPrompt(providerName) {
  * @property {string} description 工具描述
  * @property {*} inputSchema 输入 schema（zod schema 或 JSON schema）
  * @property {Function} execute 执行函数
- * @property {string[]} aliases 别名列表
  */
 
 /** 全部工具（按注册顺序，去重） @type {AIToolDef[]} */
@@ -72,11 +77,9 @@ const _toolFqn = new Map();
  * @param {string} [definition.description] 工具描述（会发送给模型）
  * @param {*} definition.inputSchema 输入 schema（zod schema）
  * @param {Function} definition.execute 执行函数，接收模型生成的输入
- * @param {object} [opts] 附加信息
- * @param {string|string[]} [opts.alias] 别名
  * @returns {boolean} true 注册成功；false 冲突（已存在同名工具）
  */
-export function registerAITool(namespace, name, definition, opts = {}) {
+export function registerAITool(namespace, name, definition) {
   if (!namespace || !name) {
     getLogger().tool.warn(`AI 工具注册失败：无效的命名空间或名称 (ns=${namespace}, name=${name})`);
     return false;
@@ -92,13 +95,11 @@ export function registerAITool(namespace, name, definition, opts = {}) {
     return false;
   }
 
-  const aliases = opts.alias ? (Array.isArray(opts.alias) ? opts.alias : [opts.alias]) : [];
   const def = {
     namespace, name,
     description: definition.description ?? '',
     inputSchema: definition.inputSchema,
     execute: definition.execute,
-    aliases: [...aliases],
   };
 
   _toolFqn.set(fqn, def);
@@ -259,11 +260,28 @@ async function callProvider(provider, userMessage) {
 // ---- 外部 API ----
 
 /**
+ * 检查调用者是否被禁止使用 AI。
+ * @param {string|string[]|null|undefined} caller 调用者标识（执行者链）
+ * @returns {boolean} true = 已被封禁
+ */
+export function isAIBanned(caller) {
+  if (caller == null) return false;
+  // 权限被明确设置为 false 视为封禁；未设置（null）默认允许
+  return checkPermission(caller, AI_BAN_PERMISSION) === false;
+}
+
+/**
  * @param {string} userMessage
  * @param {string|string[]} AIlist 允许的 AI Profile 列表，"*" 表示全部
+ * @param {string|string[]|null|undefined} [caller] 调用者标识（执行者链），用于封禁检查
  * @returns {Promise<string>} AI 回复文本
+ * @throws 调用者被封禁 / 无可用 Profile / 所有 Profile 请求失败
  */
-export async function askAI(userMessage, AIlist) {
+export async function askAI(userMessage, AIlist, caller) {
+  if (isAIBanned(caller)) {
+    throw new Error('你已被禁止使用 AI 功能');
+  }
+
   if (!Array.isArray(AIlist)) AIlist = [AIlist];
   AIlist = AIlist.map((v) => (typeof v === 'string' ? v.trim() : parseString(v, false).trim()));
 
@@ -288,4 +306,163 @@ export async function askAI(userMessage, AIlist) {
   let detail = '所有 AI Profile 请求失败: ';
   errors.forEach((v, k) => { detail += `${k}: "${String(v).replace(/\n/g, '\\n')}"; `; });
   throw new Error(detail);
+}
+
+// ---- 命令辅助 ----
+
+/**
+ * 查找工具定义。
+ * @param {string} ref 工具引用：fqn（ns:name）或 name（模糊匹配）
+ * @returns {AIToolDef|null}
+ */
+function findTool(ref) {
+  if (!ref) return null;
+  if (_toolFqn.has(ref)) return _toolFqn.get(ref);
+  return _allTools.find((t) => t.name === ref) ?? null;
+}
+
+/**
+ * 查找 AI Profile。
+ * @param {string} name Profile 名
+ * @returns {object|null}
+ */
+function findProvider(name) {
+  return getConfig(CONFIG_PATHS.secret).getList('oai').find((p) => p?.name === name) ?? null;
+}
+
+// ---- ai 命令 ----
+
+registerCommand('neonaic', 'ai', async function (sub, ...args) {
+  /** @type {import('./commandServer.js').CommandContext} */
+  const ctx = this;
+
+  switch (sub) {
+    case 'tool':
+      return aiTool(ctx, ...args);
+    case 'profile':
+      return aiProfile(ctx, ...args);
+    case 'ban':
+      return aiBan(ctx, ...args);
+    case 'pardon':
+      return aiPardon(ctx, ...args);
+    default:
+      return `用法: ${cmdAIUsage()}`;
+  }
+}, {
+  permissions: [[COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.command.ai"]],
+  description: "AI 工具与 Profile 管理",
+  usage: "ai <tool|profile|ban|pardon> ...",
+  alias: ['askai'],
+});
+
+/** ai 命令用法文本 */
+function cmdAIUsage() {
+  return "ai tool list | ai tool test <tool> <json5> | ai profile list | ai profile <enable|disable> <profile> | ai profile test <profile> <msg> | ai ban <user> | ai pardon <user>";
+}
+
+/**
+ * ai tool 子命令。
+ * @param {import('./commandServer.js').CommandContext} ctx
+ * @param {...string} args
+ */
+async function aiTool(ctx, ...args) {
+  const op = args[0];
+  switch (op) {
+    case 'list': {
+      const tools = getAITools();
+      if (!tools.length) return '暂无已注册的 AI 工具';
+      return tools.map((t) => {
+        const alias = t.aliases.length ? ` [别名: ${t.aliases.join(', ')}]` : '';
+        return `${t.namespace}:${t.name}${alias}${t.description ? ` - ${t.description}` : ''}`;
+      }).join('\n');
+    }
+    case 'test': {
+      const toolRef = args[1];
+      if (!toolRef) return '用法: ai tool test <tool> <json5>';
+      const def = findTool(toolRef);
+      if (!def) return `未找到 AI 工具: ${toolRef}`;
+      const argsJson = args.slice(2).join(' ');
+      let input;
+      try {
+        input = JSON5.parse(argsJson || '{}');
+      } catch (err) {
+        return `参数 JSON5 解析失败: ${err.message}`;
+      }
+      try {
+        const result = await def.execute(input);
+        return parseString(result);
+      } catch (err) {
+        return `工具执行失败: ${err.message}`;
+      }
+    }
+    default:
+      return '用法: ai tool list | ai tool test <tool> <json5>';
+  }
+}
+
+/**
+ * ai profile 子命令。
+ * @param {import('./commandServer.js').CommandContext} ctx
+ * @param {...string} args
+ */
+async function aiProfile(ctx, ...args) {
+  const op = args[0];
+  switch (op) {
+    case 'list': {
+      const list = getConfig(CONFIG_PATHS.secret).getList('oai');
+      if (!list.length) return '暂无 AI Profile';
+      return list.map((p) => `${p.name} (${p.model})${p.available === false ? ' [禁用]' : ''}`).join('\n');
+    }
+    case 'enable':
+    case 'disable': {
+      const profileName = args[1];
+      if (!profileName) return '用法: ai profile <enable|disable> <profile>';
+      const want = op === 'enable';
+      const cfg = getConfig(CONFIG_PATHS.secret);
+      const list = cfg.getList('oai');
+      const target = list.find((p) => p?.name === profileName);
+      if (!target) return `未找到 AI Profile: ${profileName}`;
+      if ((target.available !== false) === want) return `Profile ${profileName} 已${want ? '启用' : '禁用'}`;
+      target.available = want;
+      cfg.set('oai', list);
+      cfg.save();
+      return `已${want ? '启用' : '禁用'} Profile ${profileName}`;
+    }
+    case 'test': {
+      const profileName = args[1];
+      const msg = args.slice(2).join(' ');
+      if (!profileName || !msg) return '用法: ai profile test <profile> <msg>';
+      const target = findProvider(profileName);
+      if (!target) return `未找到 AI Profile: ${profileName}`;
+      try {
+        return await callProvider(target, msg);
+      } catch (err) {
+        return `测试失败: ${err.message}`;
+      }
+    }
+    default:
+      return '用法: ai profile list | ai profile <enable|disable> <profile> | ai profile test <profile> <msg>';
+  }
+}
+
+/**
+ * ai ban 子命令：封禁用户使用 AI。
+ * @param {import('./commandServer.js').CommandContext} ctx
+ * @param {string} user
+ */
+function aiBan(ctx, user) {
+  if (!user) return '用法: ai ban <user>';
+  setPermission(user, AI_BAN_PERMISSION, false);
+  return `已封禁 ${user} 使用 AI 功能`;
+}
+
+/**
+ * ai pardon 子命令：解封用户。
+ * @param {import('./commandServer.js').CommandContext} ctx
+ * @param {string} user
+ */
+function aiPardon(ctx, user) {
+  if (!user) return '用法: ai pardon <user>';
+  clearPermission(user, AI_BAN_PERMISSION);
+  return `已解封 ${user}`;
 }
