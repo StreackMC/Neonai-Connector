@@ -130,39 +130,44 @@ export function setConsoleHooks(before, after) {
 
 /**
  * 尝试将输入尽可能地转化为文本
- * @param {boolean} [short] 是否要截断:会只枚举前3个属性/对象；当调试模式时默认禁用，反之同理。**必须显式指定布尔值类型才可覆盖**
+ * @param {*} val 输入值
+ * @param {boolean} [short] 是否要截断：会只枚举前3个属性/对象；当调试模式时默认禁用，反之同理。
+ * @param {boolean} [processString=false] 是否要把文本规整化
  * @returns {String} 处理后的文本
  */
-export function parseString(val, short) {
-  // String 不做处理
-  if (typeof val === 'string') return val;
-  // 处理一些常见不存在值
+export function parseString(val, short = !(DEBUGING || getConfig(CONFIG_PATHS.main).getBoolean('detailedLog', false)), processString = false) {
+  // 基础类型：字符串加单引号，并转义特殊字符
+  if (typeof val === 'string') {
+    return (!processString) ? val : `'${val.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t')}'`;
+  }
+
+  // 特殊值
   if (val === null) return 'null';
   if (val === undefined) return 'undefined';
-  // Error 直接转错误消息
+
+  // 错误对象
   if (val instanceof Error) return val.message ?? String(val);
-  // 处理截断需求
-  if (typeof short !== 'boolean') short = !(DEBUGING || getConfig(CONFIG_PATHS.main).getBoolean('detailedLog', false));
-  // 数组处理
+
+  // 数组
   if (Array.isArray(val)) {
-    if (!short) return `['${val.map(parseString).join('\', \'').replace(/\n/g, '\\n')}']`;
-    const head = val.slice(0, 3).map(parseString);
-    const tail = val.length > 3 ? ` ... (+${val.length - 3})` : '';
-    return `['${head.join('\', \'').replace(/\n/g, '\\n') }'${tail}]`;
+    const items = short ? val.slice(0, 3) : val;
+    const body = items.map((v) => parseString(v, short, true)).join(', ');
+    const suffix = short && val.length > 3 ? ` ... (+${val.length - 3})` : '';
+    return `[${body}${suffix}]`;
   }
-  // 对象处理
+
+  // 对象
   if (typeof val === 'object') {
     const keys = Object.keys(val);
-    if (!short) {
-      const pairs = keys.map((k) => `${k}: '${parseString(val[k])}'`);
-      return `{${pairs.join(', ').replace(/\n/g, '\\n') }}`;
-    }
-    const head = keys.slice(0, 3);
-    const pairs = head.map((k) => `${k}: '${parseString(val[k])}'`);
-    const tail = keys.length > 3 ? ` ... (+${keys.length - 3})` : '';
-    return `{${pairs.join(', ').replace(/\n/g, '\\n') }${tail}}`;
+    const visibleKeys = short ? keys.slice(0, 3) : keys;
+    const body = visibleKeys
+      .map((k) => `${k}: ${parseString(val[k], short, true)}`)
+      .join(', ');
+    const suffix = short && keys.length > 3 ? ` ... (+${keys.length - 3})` : '';
+    return `{${body}${suffix}}`;
   }
-  // 回退
+
+  // 数字、布尔等直接转字符串
   return String(val);
 }
 
