@@ -133,7 +133,7 @@ export function setConsoleHooks(before, after) {
  * @param {*} val 输入值
  * @param {boolean} [short] 是否要截断：会只枚举前3个属性/对象；当调试模式时默认禁用，反之同理。
  * @param {boolean} [processString=false] 是否要把文本规整化
- * @returns {String} 处理后的文本
+ * @returns {String} 处理后的文本。Array→[1, 2, ...]  Map→{key=value, k=v, ...}  Set→{1, 2, ...}  Object→.toString()/{key: value, ...}
  */
 export function parseString(val, short = !(DEBUGING || getConfig(CONFIG_PATHS.main).getBoolean('detailedLog', false)), processString = false) {
   // 基础类型：字符串加单引号，并转义特殊字符
@@ -141,7 +141,7 @@ export function parseString(val, short = !(DEBUGING || getConfig(CONFIG_PATHS.ma
     return (!processString) ? val : `'${val.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t')}'`;
   }
 
-  // 特殊值
+  // 空值与布尔值
   if (val === null) return 'null';
   if (val === undefined) return 'undefined';
 
@@ -156,6 +156,31 @@ export function parseString(val, short = !(DEBUGING || getConfig(CONFIG_PATHS.ma
     return `[${body}${suffix}]`;
   }
 
+  // Map
+  if (val instanceof Map) {
+    const entries = Array.from(val.entries());
+    const visible = short ? entries.slice(0, 3) : entries;
+    const body = visible.map(([key, value]) =>
+      `${parseString(key, short, true)}=${parseString(value, short, true)}`
+    ).join(', ');
+    const suffix = short && val.size > 3 ? ` ... (+${val.size - 3})` : '';
+    return `{${body}${suffix}}`;
+  }
+
+  // Set
+  if (val instanceof Set) {
+    const items = Array.from(val);
+    const visible = short ? items.slice(0, 3) : items;
+    const body = visible.map(v => parseString(v, short, true)).join(', ');
+    const suffix = short && val.size > 3 ? ` ... (+${val.size - 3})` : '';
+    return `{${body}${suffix}}`;
+  }
+
+  // 只对非普通对象使用 toString
+  if (Object.prototype.toString.call(val) !== '[object Object]' && typeof val.toString === 'function') {
+    return val.toString();
+  }
+
   // 对象
   if (typeof val === 'object') {
     const keys = Object.keys(val);
@@ -167,7 +192,7 @@ export function parseString(val, short = !(DEBUGING || getConfig(CONFIG_PATHS.ma
     return `{${body}${suffix}}`;
   }
 
-  // 数字、布尔等直接转字符串
+  // 数字等直接转字符串
   return String(val);
 }
 
