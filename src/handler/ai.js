@@ -15,7 +15,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { generateText, streamText, tool } from 'ai';
+import { generateText, streamText, tool, stepCountIs } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import JSON5 from 'json5';
 
@@ -230,8 +230,14 @@ async function callProvider(provider, userMessage) {
   ];
 
   const endpoint = provider.responseAPI ? 'responses' : 'chat';
+  // AI 工具调用最大轮次（来自本 Profile 的 maxToolcall，默认 5）。
+  // Vercel AI SDK 默认 stopWhen = isStepCount(1)，模型首次返回 tool_call 后直接停止，
+  // 工具结果无法回读、最终文本为空；设为多步以形成「调用工具 → 取回数据 → 生成作答」闭环。
+  // 下限钳制为 1，避免配置为 0/负数导致 stepCountIs 失效。
+  const rawMax = Number(provider.maxToolcall);
+  const maxToolcall = Math.max(1, Number.isFinite(rawMax) ? rawMax : 5);
   getLogger().tool.debug(
-    `→ ${provider.name}: ${provider.address}#${provider.model} (${endpoint}${provider.stream ? ', stream' : ''}, ${toolList.length} tools)`,
+    `→ ${provider.name}: ${provider.address}#${provider.model} (${endpoint}${provider.stream ? ', stream' : ''}, ${toolList.length} tools, maxToolcall=${maxToolcall})`,
   );
 
   const common = {
@@ -239,6 +245,7 @@ async function callProvider(provider, userMessage) {
     system: systemPrompt,
     messages,
     ...(Object.keys(tools).length ? { tools } : {}),
+    stopWhen: stepCountIs(maxToolcall),
     temperature: 0.25,
     topP: 0.9,
   };
@@ -247,7 +254,22 @@ async function callProvider(provider, userMessage) {
     ? await streamText(common)
     : await generateText(common);
 
-  const reply = result.text ?? '';
+  // 工具调用可见性：明确记录 AI 是否、调用了哪些工具，便于排查「AI 到底有没有调工具」。
+  // toolCalls / toolResults 在 streamText 下为 Promise，在 generateText 下为数组，统一 await 兼容两种模式。
+  const toolCalls = await (result.toolCalls ?? []);
+  if (toolCalls.length) {
+    const summary = toolCalls
+      .map((t) => `${t.toolName}(${JSON.stringify(t.input ?? {})})`)
+      .join('; ');
+    getLogger().tool.debug(`◉ ${provider.name} 调用工具: ${summary}`);
+    const toolResults = await (result.toolResults ?? []);
+    for (const tr of toolResults) {
+      const out = typeof tr.output === 'string' ? tr.output : JSON.stringify(tr.output);
+      getLogger().tool.debug(`  ↳ ${tr.toolName} → ${out.slice(0, 200)}`);
+    }
+  }
+
+  const reply = (await result.text) ?? '';
   getLogger().tool.debug(`← ${provider.name}: ${reply.length} 字符`);
   return reply;
 }
