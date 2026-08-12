@@ -12,8 +12,10 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, 
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
+import { createRequire } from 'node:module';
 
 import { getConfig, CONFIG_PATHS } from '../conf.js';
+import { putEmit } from './log4js_inject.js';
 
 // 本模块自算项目根路径，避免与 entry.js 形成循环依赖
 // logger.js 位于 <根>/src/system/logger/，故向上 3 层为项目根
@@ -324,10 +326,25 @@ export function createLogger(options = {}) {
   });
 }
 
-import log4js from 'log4js';
-import { putEmit } from './log4js_inject.js';
-/** 注入 Log4js @param {Function} emit */
+/**
+ * 注入 Log4js：将 qq-official-bot 内部的 log4js 日志转发到本日志系统。
+ *
+ * log4js 是 qq-official-bot 的传递依赖，并非本项目的直接依赖，
+ * 因此这里惰性加载：若 log4js 不存在则优雅降级，不影响本日志系统。
+ *
+ * @param {Function} emit
+ */
 function injectLog4js(emit) {
+  let log4js;
+  try {
+    const require = createRequire(import.meta.url);
+    log4js = require('log4js');
+  } catch {
+    // log4js 缺失（例如 qq-official-bot 不再传递依赖它）→ 跳过注入
+    _orig.debug('[logger] 未找到 log4js，跳过 log4js 注入（不影响日志系统）');
+    return;
+  }
+
   putEmit(emit);
   log4js.configure({
     appenders: {
