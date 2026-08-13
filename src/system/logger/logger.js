@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { createRequire } from 'node:module';
 
-import { getConfig, CONFIG_PATHS } from '../conf.js';
+import { getConfig, CONFIG_PATHS } from '../Config.js';
 import { putEmit } from './log4js_inject.js';
 
 // 本模块自算项目根路径，避免与 entry.js 形成循环依赖

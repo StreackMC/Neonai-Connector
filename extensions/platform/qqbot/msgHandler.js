@@ -1,11 +1,11 @@
 import qqBotBackend from 'qq-official-bot';
 import he from 'he';
 import JSON5 from 'json5';
-import { getLogger, parseString } from '../../../src/system/logger/logger.js';
+import { getLogger, parseString } from '../../../src/system/logger/Logger.js';
 import { PlatformQQBot } from './index.js';
-import { resolveReply } from '../../../src/handler/msgIn.js';
-import { getBotName, getConfig } from '../../../src/system/conf.js';
-import { getPlatformManager } from '../../../src/platform/platform-manager.js';
+import { resolveReply } from '../../../src/handler/messageIn.js';
+import { getBotName, getConfig } from '../../../src/system/Config.js';
+import { getPlatformManager } from '../../../src/platform/platformManager.js';
 import { fromQQElement } from './emoji.js';
 import { COMMAND_ENUMS, registerCommand } from '../../../src/handler/commandServer.js';
 

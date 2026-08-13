@@ -8,7 +8,7 @@
 import { readdirSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getLogger } from './logger/logger.js';
+import { getLogger } from './logger/Logger.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const EXT_DIR = resolve(ROOT, 'extensions');

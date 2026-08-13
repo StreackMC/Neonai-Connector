@@ -18,8 +18,8 @@ import z from 'zod';
 import { registerAITool } from '../../../src/handler/ai.js';
 // -- import --
 import { registerCommand } from '../../../src/handler/commandServer.js';
-import { getBotName } from '../../../src/system/conf.js';
-import { getLogger } from '../../../src/system/logger/logger.js';
+import { getBotName } from '../../../src/system/Config.js';
+import { getLogger } from '../../../src/system/logger/Logger.js';
 import { fetchWithTimeout, valToString, formatDateTime, formatMcTime } from "./utils.js";
 
 // -- Tools --

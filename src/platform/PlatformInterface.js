@@ -8,7 +8,7 @@
  * 所有运行时参数通过 this.profile 获取。
  */
 
-import { getLogger } from "../system/logger/logger.js";
+import { getLogger } from "../system/logger/Logger.js";
 
 export class Platform {
   /** Platform Profile 名称 @type {String} */

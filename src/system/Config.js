@@ -14,7 +14,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import JSON5 from 'json5';
 import { COMMAND_ENUMS, registerCommand } from '../handler/commandServer.js';
-import { getLogger } from './logger/logger.js';
+import { getLogger } from './logger/Logger.js';
 
 // 本模块自算项目根路径，避免与 entry.js 形成循环依赖
 // conf.js 位于 <根>/src/system/，故向上 2 层为项目根

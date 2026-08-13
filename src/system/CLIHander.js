@@ -11,7 +11,7 @@
 
 import { createInterface } from 'node:readline';
 import { COMMAND_ENUMS, executeCommandSilent, inferNext, parseArgs } from '../handler/commandServer.js';
-import { getLogger } from './logger/logger.js';
+import { getLogger } from './logger/Logger.js';
 
 // ---- 颜色 ----
 const CYAN   = '\x1b[36m';

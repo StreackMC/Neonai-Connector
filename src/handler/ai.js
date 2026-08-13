@@ -19,8 +19,8 @@ import { generateText, streamText, tool, stepCountIs } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import JSON5 from 'json5';
 
-import { CONFIG_PATHS, getConfig } from '../system/conf.js';
-import { getLogger, parseString } from '../system/logger/logger.js';
+import { CONFIG_PATHS, getConfig } from '../system/Config.js';
+import { getLogger, parseString } from '../system/logger/Logger.js';
 import { COMMAND_ENUMS, registerCommand } from './commandServer.js';
 import { clearPermission, checkPermission, parseDuration, setPermission, setTempPermission } from './permissionServer.js';
 

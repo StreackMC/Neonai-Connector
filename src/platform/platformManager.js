@@ -11,8 +11,8 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import JSON5 from 'json5';
 
 import { COMMAND_ENUMS, registerCommand } from '../handler/commandServer.js';
-import { getDebugMode, getLogger } from '../system/logger/logger.js';
-import { Config, CONFIG_PATHS, getBotName, getConfig } from '../system/conf.js';
+import { getDebugMode, getLogger } from '../system/logger/Logger.js';
+import { Config, CONFIG_PATHS, getBotName, getConfig } from '../system/Config.js';
 
 // ---- 颜色 ----
 const CYAN   = '\x1b[36m';
@@ -39,7 +39,7 @@ export class PlatformManager {
   /**
    * @param {object} opts
    * @param {string} opts.configPath secret.json 的绝对路径
-   * @param {import('../system/logger/logger.js').Logger} opts.logger
+   * @param {import('../system/logger/Logger.js').Logger} opts.logger
    */
   constructor({ configPath, logger }) {
     if (PlatformManager._instance) {
@@ -49,11 +49,11 @@ export class PlatformManager {
     this._configPath = configPath;
     this._logger = logger;
 
-    /** profileName → Platform class @type {Map<String, typeof import('./PlatformInterface.js').Platform>} */
+    /** profileName → Platform class @type {Map<String, typeof import('./platformInterface.js').Platform>} */
     this._profileClasses = new Map();
     /** profileName → Profile 配置对象 @type {Map<String, Config>} */
     this._profiles = new Map();
-    /** profileName → Platform 实例 @type {Map<String, import('./PlatformInterface.js').Platform>} */
+    /** profileName → Platform 实例 @type {Map<String, import('./platformInterface.js').Platform>} */
     this._platforms = new Map();
     /** profileName → close 函数 @type {Map<String, Function>} */
     this._closers = new Map();
@@ -141,7 +141,7 @@ export class PlatformManager {
 
   /**
    * 注册 Platform 类，并为匹配 Profiles 创建实例。
-   * @param {{ new(profile: string): import('./PlatformInterface.js').Platform }} Cls
+   * @param {{ new(profile: string): import('./platformInterface.js').Platform }} Cls
    */
   _registerClass(Cls) {
     if (this._profileClasses.has(Cls.type)) {
@@ -298,7 +298,7 @@ export class PlatformManager {
 
 /**
  * Platform 实现模块在 import 时调用此函数注册。
- * @param {{ new(profile: string): import('./PlatformInterface.js').Platform }} Cls
+ * @param {{ new(profile: string): import('./platformInterface.js').Platform }} Cls
  */
 export function registerPlatform(Cls) {
   const pm = PlatformManager.instance;

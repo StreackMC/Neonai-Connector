@@ -16,7 +16,7 @@
  */
 
 import { checkSinglePermission } from './permissionServer.js';
-import { getLogger, parseString } from '../system/logger/logger.js';
+import { getLogger, parseString } from '../system/logger/Logger.js';
 
 // ---- 颜色 ----
 const RED   = '\x1b[31m';

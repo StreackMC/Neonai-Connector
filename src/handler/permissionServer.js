@@ -14,8 +14,8 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import JSON5 from 'json5';
-import { parseString } from '../system/logger/logger.js';
-import { getBotName } from '../system/conf.js';
+import { parseString } from '../system/logger/Logger.js';
+import { getBotName } from '../system/Config.js';
 import { COMMAND_ENUMS } from './commandServer.js';
 
 // 注：本模块不 import commandServer.js，避免循环依赖。
