@@ -111,10 +111,10 @@ registerCommand('joyous', 'mc', async function (address) {
     try {
       data = JSON.parse(text);
     } catch {
-      // 非 JSON：原样作为在线信息展示
-      return `${formatStatus({ online: false, retrieved_at: new Date().getTime(), expires_at: new Date().getTime() }, address || DEFAULT_SRVNAME)}\n以下附加信息可能会起作用：${text.trim()}`;
+      // 非 JSON：格式不对
+      return `“${getBotName()}”无法查询“${address || DEFAULT_SRVNAME}”的状态，因为返回的数据不符合“Joyous StatusAPI”的格式。`;
     }
-    return formatStatus(data);
+    return formatStatus(data, address || DEFAULT_SRVNAME);
   } catch (err) {
     // 网络错误 / 超时（AbortError）/ DNS 失败等
     getLogger().main.warn(`[mc] 查询服务器状态失败: ${err.message}`);
