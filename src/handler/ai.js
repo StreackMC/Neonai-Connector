@@ -330,12 +330,12 @@ export async function askAI(userMessage, AIlist, caller) {
 /**
  * 查找工具定义。
  * @param {string} ref 工具引用：fqn（ns:name）或 name（模糊匹配）
- * @returns {AIToolDef|null}
+ * @returns {AIToolDef[]}
  */
-function findTool(ref) {
+export function findTool(ref) {
   if (!ref) return null;
-  if (_toolFqn.has(ref)) return _toolFqn.get(ref);
-  return _allTools.find((t) => t.name === ref) ?? null;
+  const fqn = matchToolPattern(ref);
+  return fqn.map(_toolFqn.get);
 }
 
 /**
@@ -343,7 +343,7 @@ function findTool(ref) {
  * @param {string} name Profile 名
  * @returns {object|null}
  */
-function findProvider(name) {
+export function findProvider(name) {
   return getConfig(CONFIG_PATHS.secret).getList('oai').find((p) => p?.name === name) ?? null;
 }
 
@@ -396,7 +396,7 @@ async function aiTool(ctx, ...args) {
       const toolRef = args[1];
       if (!toolRef) return '用法: ai tool test <tool> <json5>';
       const def = findTool(toolRef);
-      if (!def) return `未找到 AI 工具: ${toolRef}`;
+      if (def.length <= 0) return `未找到 AI 工具: ${toolRef}`;
       const argsJson = args.slice(2).join(' ');
       let input;
       try {
@@ -405,7 +405,7 @@ async function aiTool(ctx, ...args) {
         return `参数 JSON5 解析失败: ${err.message}`;
       }
       try {
-        const result = await def.execute(input);
+        const result = await def[0].execute(input);
         return parseString(result);
       } catch (err) {
         return `工具执行失败: ${err.message}`;

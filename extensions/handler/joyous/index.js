@@ -15,7 +15,7 @@ const TIMEOUT_MS = 5000;
 const MAX_PLAYER_LISTED = 3;
 
 import z from 'zod';
-import { registerAITool } from '../../../src/handler/ai.js';
+import { findTool, registerAITool } from '../../../src/handler/ai.js';
 // -- import --
 import { registerCommand } from '../../../src/handler/commandServer.js';
 import { getBotName } from '../../../src/system/Config.js';
@@ -94,8 +94,7 @@ function formatStatus(data, name) {
 // -- API --
 
 /**
- * 查询 Streack 服务器状态（命名空间 streackserver）；
- * 查询失败（网络错误 / 超时 / 接口非 2xx / 显式离线）一律返回 "× 服务器离线"。
+ * 查询 Streack 服务器状态
  */
 registerCommand('joyous', 'mc', async function (address) {
   try {
@@ -127,6 +126,25 @@ registerCommand('joyous', 'mc', async function (address) {
   permissions: [],
 });
 
+/**
+ * 查询 Streack 服务器世界信息，命令版本
+ */
+registerCommand('joyous', 'mc', async function (address) {
+  const tools = findTool("joyous:worldMeta");
+  if (tools.length > 0 && typeof tools[0]?.execute === 'function') {
+    return tool.execute.call(this, address);
+  } else {
+    throw new Error("无法获取，接口响应不对。");
+  };
+}, {
+  description: '查询 Minecraft 服务器在线状态',
+  usage: 'mc',
+  permissions: [],
+});
+
+/**
+ * 查询 Streack 服务器世界信息，给AI用的。
+ */
 registerAITool("joyous", "worldMeta", {
   description: "查询世界天气状况与时间情况。默认从 " + DEFAULT_ADDRESS + " 处获取数据。",
   inputSchema: z.object({
