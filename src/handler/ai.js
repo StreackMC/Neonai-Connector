@@ -333,7 +333,7 @@ export async function askAI(userMessage, AIlist, caller) {
 export function findTool(ref) {
   if (!ref) return null;
   const fqn = matchToolPattern(ref);
-  return fqn.map(_toolFqn.get);
+  return fqn.map((name) => _toolFqn.get(name));
 }
 
 /**
