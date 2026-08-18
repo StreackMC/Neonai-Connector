@@ -15,12 +15,12 @@ const TIMEOUT_MS = 5000;
 const MAX_PLAYER_LISTED = 3;
 
 import z from 'zod';
-import { findTool, registerAITool } from '../../../src/handler/ai.js';
+import { registerAITool } from '../../../src/handler/ai.js';
 // -- import --
 import { registerCommand } from '../../../src/handler/commandServer.js';
 import { getBotName } from '../../../src/system/Config.js';
 import { getLogger } from '../../../src/system/logger/Logger.js';
-import { fetchWithTimeout, valToString, formatDateTime, formatMcTime } from "./utils.js";
+import { fetchWithTimeout, formatDateTime, formatMcTime } from "./utils.js";
 
 // -- Tools --
 /** TPS 数值格式化：负数（如 -1 表示无数据）显示为 N/A */
@@ -91,51 +91,61 @@ function formatStatus(data, name) {
   return lines.join('\n');
 }
 
-// -- API --
-
 /**
- * 查询 Streack 服务器状态
+ * 拉取并解析 Joyous StatusAPI 数据。
+ * @param {string} [address] 数据来源地址，缺省用 DEFAULT_ADDRESS
+ * @returns {Promise<{ ok: true, data: object } | { ok: false, reason: 'offline'|'invalid'|string }>}
  */
-registerCommand('joyous', 'mc', async function (address) {
+async function fetchStatus(address) {
+  const url = address || DEFAULT_ADDRESS;
   try {
-    const res = await fetchWithTimeout(address || DEFAULT_ADDRESS, TIMEOUT_MS);
+    const res = await fetchWithTimeout(url, TIMEOUT_MS);
     if (!res.ok) {
       getLogger().main.warn(`[mc] 状态接口返回非 2xx: ${res.status}`);
-      return formatStatus({ online: false, retrieved_at: new Date().getTime(), expires_at: new Date().getTime() }, address || DEFAULT_SRVNAME);
+      return { ok: false, reason: 'offline' };
     }
 
     const text = await res.text();
-    if (!text.trim()) return formatStatus({ online: false, retrieved_at: new Date().getTime(), expires_at: new Date().getTime() }, address || DEFAULT_SRVNAME);
+    if (!text.trim()) return { ok: false, reason: 'offline' };
 
     let data;
     try {
       data = JSON.parse(text);
     } catch {
       // 非 JSON：格式不对
-      return `“${getBotName()}”无法查询“${address || DEFAULT_SRVNAME}”的状态，因为返回的数据不符合“Joyous StatusAPI”的格式。`;
+      return { ok: false, reason: 'invalid' };
     }
-    return formatStatus(data, address || DEFAULT_SRVNAME);
+    return { ok: true, data };
   } catch (err) {
     // 网络错误 / 超时（AbortError）/ DNS 失败等
     getLogger().main.warn(`[mc] 查询服务器状态失败: ${err.message}`);
-    return `“${getBotName()}”无法查询“${address || DEFAULT_SRVNAME}”的状态，因为“${err.message}”。`;
+    return { ok: false, reason: err.message };
   }
-}, {
-  description: '查询 Minecraft 服务器在线状态',
-  usage: 'mc',
-  permissions: [],
-});
+}
 
 /**
- * 查询 Streack 服务器世界信息，命令版本
+ * 将状态查询结果渲染为面向用户/模型的文本。
+ * @param {{ ok: boolean, data?: object, reason?: string }} result
+ * @param {string} name 展示用服务器名
+ * @returns {string}
+ */
+function renderStatus(result, name) {
+  if (result.ok) return formatStatus(result.data, name);
+  if (result.reason === 'offline') return formatStatus({ online: false }, name);
+  if (result.reason === 'invalid') {
+    return `“${getBotName()}”无法查询“${name}”的状态，因为返回的数据不符合“Joyous StatusAPI”的格式。`;
+  }
+  return `“${getBotName()}”无法查询“${name}”的状态，因为“${result.reason}”。`;
+}
+
+// -- API --
+
+/**
+ * 查询 Streack 服务器状态（命令版本）
  */
 registerCommand('joyous', 'mc', async function (address) {
-  const tools = findTool("joyous:worldMeta");
-  if (tools.length > 0 && typeof tools[0]?.execute === 'function') {
-    return tool.execute.call(this, address);
-  } else {
-    throw new Error("无法获取，接口响应不对。");
-  };
+  const name = address || DEFAULT_SRVNAME;
+  return renderStatus(await fetchStatus(address), name);
 }, {
   description: '查询 Minecraft 服务器在线状态',
   usage: 'mc',
@@ -170,12 +180,28 @@ registerAITool("joyous", "worldMeta", {
           + (data?.worlds?.world?.is_thundering ? "正在打雷，" : "未在打雷，")
           + (data?.worlds?.world?.inday_time ? `现在是24小时制的${formatMcTime(data?.worlds?.world?.inday_time).join(':')}` : "时间未知。");
       } else if (data?.worlds?.overworld) {
-        return ``;
+        return (data?.worlds?.overworld?.has_storm ? "正在下雨雪，" : "未在下雨雪，")
+          + (data?.worlds?.overworld?.is_thundering ? "正在打雷，" : "未在打雷，")
+          + (data?.worlds?.overworld?.inday_time ? `现在是24小时制的${formatMcTime(data?.worlds?.overworld?.inday_time).join(':')}` : "时间未知。");
       } else return "接口没有返回该信息。";
     } catch (err) {
       // 网络错误 / 超时（AbortError）/ DNS 失败等
       getLogger().main.warn(`[mc] 查询服务器状态失败: ${err.message}`);
       return "无法获取，请求失败。";
     }
+  },
+});
+
+/**
+ * 查询 Streack 服务器状态，给 AI 用的。
+ */
+registerAITool("joyous", "serverStatus", {
+  description: "查询 Minecraft 服务器在线状态（TPS、在线玩家数、玩家列表、下次更新时间等）。默认从 " + DEFAULT_ADDRESS + " 处获取数据。",
+  inputSchema: z.object({
+    address: z.string().optional().describe("数据来源地址，需符合 Joyous StatusAPI 格式；缺省时使用默认地址。"),
+  }),
+  execute: async ({ address }) => {
+    const name = address || DEFAULT_SRVNAME;
+    return renderStatus(await fetchStatus(address), name);
   },
 });
