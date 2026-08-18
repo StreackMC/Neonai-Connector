@@ -295,9 +295,7 @@ export function isAIBanned(caller) {
  * @throws 调用者被封禁 / 无可用 Profile / 所有 Profile 请求失败
  */
 export async function askAI(userMessage, AIlist, caller) {
-  if (isAIBanned(caller)) {
-    throw new Error('你已被禁止使用 AI 功能');
-  }
+  if (isAIBanned(caller)) return "（${getBotName()}静静地看着别处，并未言语）";
 
   if (!Array.isArray(AIlist)) AIlist = [AIlist];
   AIlist = AIlist.map((v) => (typeof v === 'string' ? v.trim() : parseString(v, false).trim()));

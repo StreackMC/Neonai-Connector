@@ -1,16 +1,21 @@
 {
-  permanent: {
-    'USR#DE5D74452748FAFEF5063175198C950C': {
-      superadmin: true,
-      admin: true,
+  "permanent": {
+    "USR#DE5D74452748FAFEF5063175198C950C": {
+      "superadmin": true,
+      "admin": true,
+      "neonaic.toolcall.ai": true
     },
-    'USR#4C48AEC137FEAA4B94954DCB4EF36389': {
-      superadmin: true,
-      admin: true,
-      hzc: true,
-    },
+    "USR#4C48AEC137FEAA4B94954DCB4EF36389": {
+      "superadmin": true,
+      "admin": true,
+      "hzc": true,
+      "neonaic.toolcall.ai": true
+    }
   },
-  temp: {},
-  global: {},
-  globalTemp: {},
+  "temp": {},
+  "global": {
+    "neonaic.toolcall.ai": false
+  },
+  "globalTemp": {
+  }
 }

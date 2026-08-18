@@ -86,7 +86,18 @@ function _save() {
     global: Object.fromEntries(store.global),
     globalTemp: Object.fromEntries(store.globalTemp),
   };
-  writeFileSync(PERM_FILE, JSON5.stringify(out, null, 2), 'utf8');
+  // 用 JSON.stringify（而非 JSON5.stringify）持久化：
+  // 1. 控制字符、引号、反斜杠统一使用标准 \uXXXX 转义；
+  // 2. 关键：JSON.stringify 会把孤立代理项（U+D800–U+DFFF）转义为 \udXXX，
+  //    而 JSON5.stringify 会将其原样写出，经 writeFileSync 的 UTF-8 编码时被替换为
+  //    U+FFFD（�），造成静默数据损坏 —— JSON5 不具备 well-formed 序列化能力；
+  // 3. JSON.stringify 不转义 U+2028/U+2029（ES2019 起在 JSON 中合法），但读取端
+  //    JSON5.parse 仍会告警，故额外显式转义，确保每个字符都被正确处理。
+  // 读取端继续用 JSON5.parse（JSON 超集），兼容旧的 JSON5 格式文件。
+  const json = JSON.stringify(out, null, 2)
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+  writeFileSync(PERM_FILE, json, 'utf8');
 }
 
 // 模块加载时读取已有数据
