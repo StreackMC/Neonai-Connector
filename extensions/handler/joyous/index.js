@@ -15,7 +15,7 @@ const TIMEOUT_MS = 5000;
 const MAX_PLAYER_LISTED = 3;
 
 import z from 'zod';
-import { registerAITool } from '../../../src/handler/ai.js';
+import { registerAITool } from '../../../src/handler/AI.js';
 // -- import --
 import { registerCommand } from '../../../src/handler/commandServer.js';
 import { getBotName } from '../../../src/system/Config.js';
