@@ -23,6 +23,7 @@ import { CONFIG_PATHS, getConfig } from '../system/Config.js';
 import { getLogger, parseString } from '../system/logger/Logger.js';
 import { COMMAND_ENUMS, registerCommand } from './commandServer.js';
 import { clearPermission, checkPermission, parseDuration, setPermission, setTempPermission } from './permissionServer.js';
+import z from 'zod';
 
 // 本模块自算项目根路径，避免与 entry.js 形成循环依赖
 // ai.js 位于 <根>/src/handler/，故向上 2 层为项目根
@@ -295,7 +296,7 @@ export function isAIBanned(caller) {
  * @throws 调用者被封禁 / 无可用 Profile / 所有 Profile 请求失败
  */
 export async function askAI(userMessage, AIlist, caller) {
-  if (isAIBanned(caller)) return "（${getBotName()}静静地看着别处，并未言语）";
+  if (isAIBanned(caller)) return `（${getBotName()}静静地看着别处，并未言语）`;
 
   if (!Array.isArray(AIlist)) AIlist = [AIlist];
   AIlist = AIlist.map((v) => (typeof v === 'string' ? v.trim() : parseString(v, false).trim()));
@@ -344,6 +345,26 @@ export function findTool(ref) {
 export function findProvider(name) {
   return getConfig(CONFIG_PATHS.secret).getList('oai').find((p) => p?.name === name) ?? null;
 }
+
+// ---- ai 基础工具 ----
+
+registerAITool('neonaic', 'webfetch', {
+  description: "从指定地址获取Web内容",
+  inputSchema: z.object({
+      address: z.string().describe("目标 URI，需要完整携带协议头等内容。"),
+  }),
+  execute: async ({ address }) => {
+    try {
+      uri = new URL(address);
+
+      // 合法性校验
+      ["127.0.0.1", "localhost", ""]
+
+    } catch (error) {
+      return `未能获取目标内容：${error?.message || "未知原因"}`;
+    }
+  },
+})
 
 // ---- ai 命令 ----
 

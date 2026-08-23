@@ -8,14 +8,24 @@
     "USR#4C48AEC137FEAA4B94954DCB4EF36389": {
       "superadmin": true,
       "admin": true,
-      "hzc": true,
-      "neonaic.toolcall.ai": true
+      "hzc": true
     }
   },
-  "temp": {},
+  "temp": {
+    "USR#4C48AEC137FEAA4B94954DCB4EF36389": {
+      "neonaic.toolcall.ai": {
+        "status": false,
+        "until": 1787069848403
+      }
+    }
+  },
   "global": {
     "neonaic.toolcall.ai": false
   },
   "globalTemp": {
+    "a": {
+      "status": true,
+      "until": 1787048463936
+    }
   }
 }
