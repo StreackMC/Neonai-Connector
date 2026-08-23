@@ -7,13 +7,6 @@
  */
 
 /**
- * @typedef {Object} NeonaicUriOptions
- * @property {boolean} [resolveRealAddress=false] 如果传入域名，尝试解析IP地址（耗时操作，**将使得函数返回 Promise**）
- * @property {boolean} [lookupBindedDomain=false] 如果传入IP地址，尝试反查对应域名（耗时操作，**将使得函数返回 Promise**）
- * @since 0.1.0
- */
-
-/**
  * 判断主机地址的格式类型
  * @param {string} host 主机地址
  * @return {'ipv4'|'ipv6'|'string'} 主机地址格式
@@ -211,7 +204,7 @@ export class NeonaicUriMeta {
  * @param {NeonaicUriMeta} meta 元信息实例
  * @return {Promise<void>} 解析完成
  */
-async function resolveRealAddress(meta) {
+async function resolveRealAddressF(meta) {
   if (meta.type !== 'string') return;
   try {
     const dns = await import('node:dns');
@@ -229,7 +222,7 @@ async function resolveRealAddress(meta) {
  * @param {NeonaicUriMeta} meta 元信息实例
  * @return {Promise<void>} 反查完成
  */
-async function lookupBindedDomain(meta) {
+async function lookupBindedDomainF(meta) {
   if (meta.type === 'string') return;
   try {
     const dns = await import('node:dns');
@@ -240,6 +233,12 @@ async function lookupBindedDomain(meta) {
   }
 }
 
+/**
+ * @typedef {Object} NeonaicUriOptions
+ * @property {boolean} [resolveRealAddress=false] 如果传入域名，尝试解析IP地址（耗时操作，**将使得函数返回 Promise**）
+ * @property {boolean} [lookupBindedDomain=false] 如果传入IP地址，尝试反查对应域名（耗时操作，**将使得函数返回 Promise**）
+ * @since 0.1.0
+ */
 /**
  * 解析并返回一个 URL 的信息
  * @param {string|URL} uri 原始 URI
@@ -258,8 +257,8 @@ export function resolveUri(uri, options = {}) {
 
   // 需要 DNS 解析，返回 Promise
   return (async () => {
-    if (resolveRealAddress) await resolveRealAddress(meta);
-    if (lookupBindedDomain) await lookupBindedDomain(meta);
+    if (resolveRealAddress) await resolveRealAddressF(meta);
+    if (lookupBindedDomain) await lookupBindedDomainF(meta);
     return meta;
   })();
 }
