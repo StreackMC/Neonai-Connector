@@ -13,7 +13,8 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import JSON5 from 'json5';
-import { COMMAND_ENUMS, registerCommand } from '../handler/commandServer.js';
+import { registerCommand } from '../handler/commandServer.js';
+import { COMMAND_ENUMS } from './commandInterface.js';
 import { getLogger } from './logger/Logger.js';
 
 // 本模块自算项目根路径，避免与 entry.js 形成循环依赖
@@ -205,7 +206,7 @@ export function getConfig(path) {
 
 registerCommand('neonaic', 'reload', function () {
   _cache.clear();
-  /** @type {import('../handler/commandServer.js').CommandContext} */
+  /** @type {import('../handler/commandServer.js').NeonaicCommandContext} */
   const ctx = this;
   (ctx?.internalCall) ? getLogger().main.info(`配置文件已由控制台权限重载`) : getLogger().main.info(`配置文件已由${ctx?.executor[0]}重载`);
   return;

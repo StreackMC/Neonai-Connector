@@ -10,9 +10,10 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import JSON5 from 'json5';
 
-import { COMMAND_ENUMS, registerCommand } from '../handler/commandServer.js';
+import { registerCommand } from '../handler/commandServer.js';
 import { getDebugMode, getLogger } from '../system/logger/Logger.js';
 import { Config, CONFIG_PATHS, getBotName, getConfig } from '../system/Config.js';
+import { COMMAND_ENUMS } from '../handler/commandInterface.js';
 
 // ---- 颜色 ----
 const CYAN   = '\x1b[36m';
@@ -89,7 +90,7 @@ export class PlatformManager {
   _registerCLI() {
     const clazzThis = this;
     registerCommand('neonaic', 'platform', async function (...args) {
-      /** @type {import('../handler/commandServer.js').CommandContext} */
+      /** @type {import('../handler/commandServer.js').NeonaicCommandContext} */
       const ctx = this;
       const [sub, name] = args;
       if (!ctx.privateExecutor) return `${RED}“${getBotName()}”无法执行“platform”，因为当前上下文不是私密的。`;

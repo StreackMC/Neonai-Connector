@@ -17,7 +17,8 @@ import { platform, release, tmpdir } from 'node:os';
 import { getConfig, CONFIG_PATHS } from './Config.js';
 import { setDebugMode, setConsoleHooks, getLogger } from './logger/Logger.js';
 import { acquirePidLock, releasePidLock } from './pidManager.js';
-import { registerCommand, executeCommand, parseArgs, COMMAND_ENUMS } from '../handler/commandServer.js';
+import { registerCommand, executeCommand, parseArgs } from '../handler/commandServer.js';
+import { COMMAND_ENUMS } from './commandInterface.js';
 import { installPermissionCommands, checkPermission, checkPermissionFromContext } from '../handler/permissionServer.js';
 import { startCLI, stopCLI, erasePrompt, redrawPrompt } from './CLIHander.js';
 import { PlatformManager } from '../platform/platformManager.js';
@@ -76,7 +77,7 @@ async function shutdown(signal) {
 // ---- 系统级 CLI 命令 ----
 
 registerCommand('neonaic', 'version', function () {
-  /** @type {import('../handler/commandServer.js').CommandContext} */
+  /** @type {import('../handler/commandServer.js').NeonaicCommandContext} */
   const ctx = this;
 
   // ---- 硬编码 ----

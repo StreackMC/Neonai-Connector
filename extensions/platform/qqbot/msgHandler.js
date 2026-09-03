@@ -7,7 +7,8 @@ import { resolveReply } from '../../../src/handler/messageIn.js';
 import { getBotName, getConfig } from '../../../src/system/Config.js';
 import { getPlatformManager } from '../../../src/platform/platformManager.js';
 import { fromQQElement } from './emoji.js';
-import { COMMAND_ENUMS, registerCommand } from '../../../src/handler/commandServer.js';
+import { registerCommand } from '../../../src/handler/commandServer.js';
+import { COMMAND_ENUMS } from '../../../src/handler/commandInterface.js';
 
 /**
  * 好友列表私聊

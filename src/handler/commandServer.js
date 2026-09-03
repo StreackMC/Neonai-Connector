@@ -17,25 +17,14 @@
 
 import { checkSinglePermission } from './permissionServer.js';
 import { getLogger, parseString } from '../system/logger/Logger.js';
+import { COMMAND_ENUMS } from './commandInterface.js';
 
 // ---- 颜色 ----
-const RED   = '\x1b[31m';
-const CYAN  = '\x1b[36m';
-const DIM   = '\x1b[2m';
-const BOLD  = '\x1b[1m';
-const R     = '\x1b[0m';
-
-/**
- * 命令条目。
- * @typedef {object} CommandMeta
- * @property {string} namespace 命名空间（'' 表示全局）
- * @property {string} name 原名
- * @property {string[]} aliases 别名列表
- * @property {Function} handler
- * @property {string[]} permissions
- * @property {string} [description]
- * @property {string} [usage]
- */
+const RED = '\x1b[31m';
+const CYAN = '\x1b[36m';
+const DIM = '\x1b[2m';
+const BOLD = '\x1b[1m';
+const R = '\x1b[0m';
 
 /** 所有命令（去重，按注册顺序） */
 const allCommands = [];
@@ -82,14 +71,6 @@ export function parseArgs(input) {
 // ---- 注册 ----
 
 /**
- * @typedef {Object} CommandRegisterOptions
- * @property {string|string[]} [alias=[]] 别名设置
- * @property {(string|string[])[]|string|string[]} [permissions=[]] 需求权限：第一层数组间为 AND 关系，第二层数组间为 OR 关系；有 ! 前缀表示需要缺失该权限。
- * @property {string} [description=""] 命令描述
- * @property {string} [usage=""] 命令用法
- */
-
-/**
  * 注册命令。
  *
  * 冲突规则（先到先得 + 唯一覆盖例外）：
@@ -99,11 +80,11 @@ export function parseArgs(input) {
  *
  * @param {string} name 命令原名
  * @param {(...args) => any} handler 参数以 ...args 展开传入，this 为命令上下文
- * @param {CommandRegisterOptions} opts 命令附加信息
+ * @param {import('./commandInterface.js').CommandRegisterOptions} opts 命令附加信息
  * @returns {null|CommandMeta[]} 成功返回 null；冲突返回冲突命令列表
  * @throws 命名空间、命名或处理器无效
  */
-export function registerCommand(namespace, name, /** @this {CommandContext} */handler, opts = {}) {
+export function registerCommand(namespace, name, /** @this {NeonaicCommandContext} */handler, opts = {}) {
   if (!namespace) throw new Error("命令具有无效的命名空间：" + namespace);
   if (!name) throw new Error("命令具有无效的命名：" + name);
   if (!(typeof handler === 'function')) throw new Error("命令具有无效的处理器：" + handler);
@@ -203,42 +184,6 @@ function buildError(cmdName, reason, usage) {
 // ---- 执行 ----
 
 /**
- * @typedef {Object} CommandContext
- * @property {string[]} [executor=['$unknown']] 执行者：请不要传入'$'开头的，因为被内部使用；同时请勿完全信任本处内容。'$console'表示控制台，'$unknown'表示未知。
- * @property {boolean} [privateExecutor=false] 命令执行是否处于私密场景（如私聊），非私密场景如群聊中其他成员可见
- * @property {boolean} [internalCall=false] 命令调用是否来自内部：来自内部的命令会绕过权限检查
- * @property {Date} timestamp 命令开始执行时的时间
- * @property {Object|undefined} this 命令执行时上下文，可以透传类对象。
- */
-
-/** 命令系统的一些枚举名 */
-export const COMMAND_ENUMS = {
-  /** 控制台执行的执行者名 @apiNote 请使用 {@link CommandContext.internalCall} 确认本点，以明确语义和避免恶意攻击。 */
-  FROM_CONSOLE: '$console',
-  /** 未知执行者，这一般表示当前上下文的某一层出现了不正确指定的执行者 */
-  FROM_UNKNOW: '$unknown',
-  /** 管理员权限 */
-  PERM_ADMIN: 'admin',
-  /** 超级管理员权限 */
-  PERM_SUPERADMIN: 'superadmin',
-}
-
-/**
- * 执行命令（自动 catch，错误打印到终端）。
- * @param {string} cmdName 命令名
- * @param {CommandContext} [ctx] 上下文，无法设置 timestamp 属性
- * @param {...*} args 命令参数（调用方负责解析）
- * @returns {*|Promise<*>}
- */
-export function executeCommand(cmdName, ctx, ...args) {
-  try {
-    return executeCommandSilent(cmdName, ctx, ...args);
-  } catch (err) {
-    getLogger().cmd.error(err.message);
-  }
-}
-
-/**
  * 解析命令引用（支持别名与命名空间）。
  * @param {string} ref 命令引用，如 'name' / 'alias' / 'ns:name' / 'ns:alias'
  * @returns {CommandMeta|null}
@@ -258,9 +203,24 @@ export function resolveCommand(ref) {
 }
 
 /**
+ * 执行命令（自动 catch，错误打印到终端）。
+ * @param {string} cmdName 命令名
+ * @param {NeonaicCommandContext} [ctx] 上下文，无法设置 timestamp 属性
+ * @param {...*} args 命令参数（调用方负责解析）
+ * @returns {*|Promise<*>}
+ */
+export function executeCommand(cmdName, ctx, ...args) {
+  try {
+    return executeCommandSilent(cmdName, ctx, ...args);
+  } catch (err) {
+    getLogger().cmd.error(err.message);
+  }
+}
+
+/**
  * 执行命令（不 catch，throw 错误）。
  * @param {string} cmdName 命令名
- * @param {CommandContext} [ctx] 上下文，无法设置 timestamp 属性
+ * @param {NeonaicCommandContext} [ctx] 上下文，无法设置 timestamp 属性
  * @param {...*} args 命令参数
  * @returns {*|Promise<*>}
  * @throws {Error}
@@ -274,39 +234,63 @@ export function executeCommandSilent(cmdName, ctx = {}, ...args) {
     throw new Error(buildError(cmdName, '未知命令'));
   }
 
-  const internalCall = !!ctx.internalCall;
-  const originalThis = ctx.this;
-  const privateExecutor = !!ctx.privateExecutor;
-
-  // 处理执行者
-  let executor = ctx.executor;
-  if (Array.isArray(executor)) {
-    executor = executor.map(executorResolver);
-  } else {
-    executor = [executorResolver(executor)];
-  }
+  // 构建执行上下文
+  const context = new NeonaicCommandContext(ctx);
 
   // 权限检查：CLI / 内部调用跳过
-  if (!internalCall && executor) {
+  if (!context.internalCall && context.executor) {
     const permErr = checkCommandPerms(cmdName, meta.permissions, executor);
     if (permErr) {
       throw new Error(buildError(cmdName, permErr));
     }
   }
 
-  // 构建执行上下文
-  const context = {
-    executor: executor,
-    internalCall, privateExecutor,
-    timestamp: new Date(),
-    this: originalThis,
-  };
-
   try {
     return meta.handler.call(context, ...args);
   } catch (err) {
     throw new Error(buildError(cmdName, `执行失败: ${err.message}`));
   }
+}
+
+/** 命令上下文 */
+export class NeonaicCommandContext {
+  #privateExecutor = false; #internalCall = false; #this = undefined; #executor = []; #timestamp = new Date();
+
+  /** 命令开始执行时的时间 @type {Date} */
+  get timestamp() { return this.#timestamp; };
+  /** 命令执行是否处于私密场景（如私聊），非私密场景如群聊中其他成员可见 @type {boolean} */
+  get privateExecutor() { return this.#privateExecutor; };
+  /** 命令调用是否来自内部：来自内部的命令会绕过权限检查 @type {boolean} */
+  get internalCall() { return this.#internalCall; };
+  /** 命令执行时上下文，可以透传类对象 @type {Object|undefined} */
+  get this() { return this.#this; };
+  /** 执行者：请不要传入'$'开头的，因为被内部使用；同时请勿完全信任本处内容。'$console'表示控制台，'$unknown'表示未知。Index越小的执行者越近 @type {string[]} */
+  get executor() { return this.#executor; };
+
+  /** 追加执行者 @param {string|string[]} value 执行者列表 */
+  set executor(value) {
+    if (Array.isArray(value)) {
+      this.#executor = [...value.map(resolveExecutor), ...this.#executor];
+    } else {
+      this.#executor = [resolveExecutor(value), ...this.#executor];
+    }
+  };
+
+  /** @param {NeonaicCommandContext} options */
+  constructor(options) {
+    this.#privateExecutor = !!options.privateExecutor;
+    this.#internalCall = !!options.internalCall;
+    this.#this = options.this ?? undefined;
+    this.executor = options.executor;
+  }
+}
+
+/** 尝试解析执行者 @return {String} */
+function resolveExecutor(stringLike) {
+  /* 如果是 null/undefined 直接记作未知 */if (stringLike === undefined || stringLike === null) return COMMAND_ENUMS.FROM_UNKNOW;
+  /* 否则转为文本并删掉首尾空格 */if (typeof stringLike !== 'string') stringLike = parseString(stringLike).trim();
+  /* 空文本也视作未知 */if (stringLike.length == 0) return COMMAND_ENUMS.FROM_UNKNOW;
+  return stringLike;
 }
 
 // ---- TAB 建议 ----
@@ -334,18 +318,10 @@ export function getCommands() { return allCommands; }
 /** 获取是否存在可解析的目标命令（含别名与命名空间） */
 export function hasCommand(cmd) { return resolveCommand(cmd) != null; }
 
-/** 尝试解析执行者 */
-function executorResolver(stringLike) {
-  /* 如果是 null/undefined 直接记作未知 */if (stringLike === undefined || stringLike === null) return COMMAND_ENUMS.FROM_UNKNOW;
-  /* 否则转为文本并删掉首尾空格 */if (typeof stringLike !== 'string') stringLike = parseString(stringLike).trim();
-  /* 空文本也视作未知 */if (stringLike.length == 0) return COMMAND_ENUMS.FROM_UNKNOW;
-  return stringLike;
-}
-
 // ---- 内置命令 ----
 
 registerCommand('neonaic', 'help', function () {
-  /** @type {CommandContext} */
+  /** @type {NeonaicCommandContext} */
   const ctx = this;
   const names = allCommands.filter((meta) => {
     // 过滤掉无权限命令
@@ -360,7 +336,7 @@ registerCommand('neonaic', 'help', function () {
 }, { description: '显示可用命令列表' });
 
 function sudoOrRunuser(inherit, who, cmd, ...args) {
-  /** @type {CommandContext} */
+  /** @type {NeonaicCommandContext} */
   const ctx = this;
   const targetCmd = typeof cmd === 'string' ? cmd.trim() : '';
   if (/* 不检查who是考虑到部分情形下可能有转到匿名上下文的可能 */!targetCmd) throw new Error("参数不完整，应为 [sudo|runuser] <who> <cmd> [...args]");
@@ -370,8 +346,8 @@ function sudoOrRunuser(inherit, who, cmd, ...args) {
   // 切换到目标用户执行命令
   const currentExecutor = Array.isArray(ctx.executor) ? ctx.executor : (ctx.executor ? [ctx.executor] : []);
   const nextExecutor = inherit
-    ? [executorResolver(who), ...currentExecutor]
-    : [executorResolver(who)];
+    ? [resolveExecutor(who), ...currentExecutor]
+    : [resolveExecutor(who)];
   return executeCommandSilent(targetCmd, { ...ctx, executor: nextExecutor }, ...args);
 }
 

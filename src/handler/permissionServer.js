@@ -16,7 +16,8 @@ import { fileURLToPath } from 'node:url';
 import JSON5 from 'json5';
 import { parseString } from '../system/logger/Logger.js';
 import { getBotName } from '../system/Config.js';
-import { COMMAND_ENUMS } from './commandServer.js';
+import { NeonaicCommandContext } from './commandServer.js';
+import { COMMAND_ENUMS } from './commandInterface.js';
 
 // 注：本模块不 import commandServer.js，避免循环依赖。
 // 权限命令由组合根（entry.js）通过 installPermissionCommands(registerCommand) 安装。
@@ -181,7 +182,7 @@ export function checkPermission(user, permission) {
 /**
  * 测试命令上下文是否满足权限规则。
  * CLI/internalCall 始终返回 true。
- * @param {import('./commandServer.js').CommandContext} ctx
+ * @param {NeonaicCommandContext} ctx
  * @param {string|(string|string[])[]} permission
  * @returns {boolean}
  */
@@ -385,11 +386,11 @@ export function clearGlobalTempPermission(permission, until = -1) {
  * @param {string} permission 权限名
  * @param {string} [status] 'true' | 'false'（仅 set）
  * @param {string} [lasting] 持续时间（仅 set）
- * @this {import('./commandServer.js').CommandContext}
+ * @this {NeonaicCommandContext}
  * @returns {string} 执行结果描述
  */
 function cmd(type, user, permission, status, lasting) {
-  /** @type {import('./commandServer.js').CommandContext} */
+  /** @type {NeonaicCommandContext} */
   const ctx = this;
 
   // 不允许大庭广众下进行权限操作
@@ -486,7 +487,7 @@ export function parseDuration(input) {
 /**
  * 注册权限管理与控制命令
  * @apiNote 由组合根在 commandServer 就绪后调用，避免循环依赖
- * @param {(namespace: string, name: string, handler: Function, meta?: import('./commandServer.js').CommandRegisterOptions) => void} registerCommand 命令注册函数（commandServer.registerCommand）
+ * @param {(namespace: string, name: string, handler: Function, meta?: import('./commandInterface.js').CommandRegisterOptions) => void} registerCommand 命令注册函数（commandServer.registerCommand）
  */
 export function installPermissionCommands(registerCommand) {
   registerCommand('neonaic', 'permission', cmd, {
@@ -497,7 +498,7 @@ export function installPermissionCommands(registerCommand) {
   });
   registerCommand('neonaic', 'whoami', function () {
     const LEFT_CHAR_IF_HIDDING_RATE = .4;
-    /** @type {import('./commandServer.js').CommandContext} */
+    /** @type {NeonaicCommandContext} */
     const ctx = this;
     const singalExecutor = (ctx.executor instanceof Array) ? (ctx.executor.length > 0) ? ctx.executor[0] : undefined : ctx.executor;
     let result = '';
