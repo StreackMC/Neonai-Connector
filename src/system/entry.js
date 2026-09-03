@@ -18,7 +18,7 @@ import { getConfig, CONFIG_PATHS } from './Config.js';
 import { setDebugMode, setConsoleHooks, getLogger } from './logger/Logger.js';
 import { acquirePidLock, releasePidLock } from './pidManager.js';
 import { registerCommand, executeCommand, parseArgs } from '../handler/commandServer.js';
-import { COMMAND_ENUMS } from './commandInterface.js';
+import { COMMAND_ENUMS } from '../handler/commandInterface.js';
 import { installPermissionCommands, checkPermission, checkPermissionFromContext } from '../handler/permissionServer.js';
 import { startCLI, stopCLI, erasePrompt, redrawPrompt } from './CLIHander.js';
 import { PlatformManager } from '../platform/platformManager.js';
