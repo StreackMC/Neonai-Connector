@@ -14,7 +14,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { platform, release, tmpdir } from 'node:os';
 
-import { getConfig, CONFIG_PATHS } from './Config.js';
+import { getConfig, CONFIG_PATHS, installConfigCommands } from './Config.js';
 import { setDebugMode, setConsoleHooks, getLogger } from './logger/Logger.js';
 import { acquirePidLock, releasePidLock } from './pidManager.js';
 import { registerCommand, executeCommand, parseArgs } from '../handler/commandServer.js';
@@ -176,6 +176,7 @@ export async function bootstrap() {
 
   // 安装权限管理命令（permission/perm）：需在 commandServer 就绪后，避免循环依赖
   installPermissionCommands(registerCommand);
+  installConfigCommands(registerCommand);
 
   // 按配置启动已启用的平台
   PlatformManager.instance.loadEnabled();

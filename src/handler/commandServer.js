@@ -239,7 +239,7 @@ export function executeCommandSilent(cmdName, ctx = {}, ...args) {
 
   // 权限检查：CLI / 内部调用跳过
   if (!context.internalCall && context.executor) {
-    const permErr = checkCommandPerms(cmdName, meta.permissions, executor);
+    const permErr = checkCommandPerms(cmdName, meta.permissions, context.executor);
     if (permErr) {
       throw new Error(buildError(cmdName, permErr));
     }

@@ -13,7 +13,6 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import JSON5 from 'json5';
-import { registerCommand } from '../handler/commandServer.js';
 import { COMMAND_ENUMS } from '../handler/commandInterface.js';
 import { getLogger } from './logger/Logger.js';
 
@@ -204,16 +203,27 @@ export function getConfig(path) {
   return _cache.get(path);
 }
 
-registerCommand('neonaic', 'reload', function () {
+/** reload 命令处理器（清空配置缓存） */
+function reloadCmd() {
   _cache.clear();
   /** @type {import('../handler/commandServer.js').NeonaicCommandContext} */
   const ctx = this;
-  (ctx?.internalCall) ? getLogger().main.info(`配置文件已由控制台权限重载`) : getLogger().main.info(`配置文件已由${ctx?.executor[0]}重载`);
+  if (ctx?.internalCall) getLogger().main.info('配置文件已由控制台权限重载');
+  else getLogger().main.info(`配置文件已由${ctx?.executor?.[0] ?? '未知'}重载`);
   return;
-}, {
-  permissions: [[COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.command.reload"]],
-  description: "立即重载配置文件。对部分功能不生效，需要手动重启。",
-});
+}
+reloadCmd.meta = {
+  permissions: [[COMMAND_ENUMS.PERM_SUPERADMIN, 'neonaic.command.reload']],
+  description: '立即重载配置文件。对部分功能不生效，需要手动重启。',
+};
+
+/**
+ * 安装配置相关命令（由组合根在 commandServer 就绪后调用，避免循环依赖）。
+ * @param {(namespace: string, name: string, handler: Function, meta?: object) => void} register 命令注册函数
+ */
+export function installConfigCommands(register) {
+  register('neonaic', 'reload', reloadCmd, reloadCmd.meta);
+}
 
 /** 语法糖：获取机器人名称 */
 export function getBotName() {
