@@ -325,6 +325,118 @@ export async function askAI(userMessage, AIlist, caller) {
   throw new Error(detail);
 }
 
+/**
+ * @typedef {Object} NeonaicTextModerateResult
+ * @property {boolean} [available=true] 是否可用，如果为否大部分参数都为 null
+ * @property {number} score 恶意语言得分，取值 0~1，越高越恶意
+ * @property {String} resolver 判分模型
+ * @property {boolean} safe 是否安全
+ * @property {boolean} unsafe 是否不安全
+ * @property {boolean} refusal 是否拒绝
+ * @property {String} category 文本分类
+ */
+
+/**
+ * @param {string} inputs 待检测文本
+ * @returns {Promise<NeonaicTextModerateResult>} 恶意文本概率
+ */
+export async function isModerate(inputs) {
+  const moderator = await loadModerator();
+  if (!moderator) {
+    // 模型不可用：按 typedef 约定，available=false 且其余参数为 null
+    return { available: false, score: 0, resolver: null };
+  }
+
+  try {
+    const reply = await moderator.call(String(inputs ?? ''));
+    const score = scoreReply(reply);
+    getLogger().tool.debug(`审核(${moderator.id}): score=${score} reply=${reply.slice(0, 160)}`);
+    return { available: true, score, resolver: moderator.id };
+  } catch (err) {
+    getLogger().tool.error(`审核调用失败: ${err?.message ?? err}`);
+    return { available: false, score: 0, resolver: null };
+  }
+}
+
+// ---- 文本审核（内容安全）内部实现 ----
+
+/**
+ * 审核模型候选 id。
+ * @huggingface/transformers 需 ONNX 权重（运行时从 HF Hub 下载并缓存到本地），
+ * 故按优先级尝试 onnx-community 转换版与官方仓库。
+ * 默认模型：Qwen3Guard-Gen-8B（生成式审核模型，可直接对话式判定内容安全）。
+ */
+const MODERATE_MODEL_CANDIDATES = [
+  'onnx-community/Qwen3-Guard-Gen-8B-ONNX',
+  'Qwen/Qwen3-Guard-Gen-8B',
+];
+
+/** 审核生成的采样参数：力求确定性，短输出即可容纳 safe/unsafe 判定 */
+const MODERATE_GEN = { max_new_tokens: 96, do_sample: false };
+
+/** 审核模型加载 Promise（模块级单例，全局只加载一次） */
+let _moderatorPromise = null;
+
+/**
+ * 懒加载审核模型（text-generation pipeline）。
+ * @returns {Promise<{ id: string, call: (text: string) => Promise<string> } | null>}
+ *   返回 null 表示所有候选模型均加载失败
+ */
+function loadModerator() {
+  if (_moderatorPromise) return _moderatorPromise;
+  _moderatorPromise = (async () => {
+    const { pipeline } = await import('@huggingface/transformers');
+    let lastErr;
+    for (const modelId of MODERATE_MODEL_CANDIDATES) {
+      try {
+        // dtype 'q8'：8 位量化，Node 端体积/内存更可控
+        const gen = await pipeline('text-generation', modelId, { dtype: 'q8' });
+        getLogger().tool.info(`审核模型就绪: ${modelId}`);
+        return {
+          id: modelId,
+          async call(text) {
+            const messages = [{ role: 'user', content: text }];
+            const out = await gen(messages, MODERATE_GEN);
+            const last = out?.[0]?.generated_text;
+            // chat 输入 → generated_text 为消息数组，assistant 为末条；字符串输入则直接为文本
+            const reply = Array.isArray(last) ? (last.at(-1)?.content ?? '') : (last ?? '');
+            return String(reply).trim();
+          },
+        };
+      } catch (err) {
+        lastErr = err;
+        getLogger().tool.warn(`审核模型加载失败 ${modelId}: ${err?.message ?? err}`);
+      }
+    }
+    getLogger().tool.error(`所有审核模型均不可用: ${lastErr?.message ?? lastErr}`);
+    return null;
+  })();
+  return _moderatorPromise;
+}
+
+/**
+ * 将审核模型输出映射为恶意得分（0~1，越高越恶意）。
+ * 兼容中英文判定词，含否定短语排除（如 "not safe"）。
+ * @param {string} reply 模型生成的判定文本
+ * @returns {number}
+ */
+function scoreReply(reply) {
+  const s = String(reply ?? '').toLowerCase();
+
+  // 明确 unsafe / 否定式 not safe 等
+  if (/\bunsafe\b/.test(s)) return 1.0;
+  if (/\bnot safe\b|\bharmful\b|\bdangerous\b|\bexplicit\b|\bviolen\w*\b/.test(s)) return 0.9;
+  // 中文违规信号
+  if (/不安全|有害|危险|违规|色情|暴力|违法/.test(s)) return 0.85;
+
+  // 明确安全
+  if (/\bsafe\b|\bno (risk|problem)\b|\ballowed\b|\bpermitted\b/.test(s)) return 0.0;
+  if (/安全|正常|无风险|无违规|合规/.test(s)) return 0.0;
+
+  // 无法明确判定（模型输出与预期不符等）→ 保守给中性偏疑
+  return 0.5;
+}
+
 // ---- 命令辅助 ----
 
 /**
