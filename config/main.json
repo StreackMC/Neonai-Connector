@@ -8,5 +8,14 @@
   // 日志大小达到多少就压缩
   "maxLogFileSize": 1048576,
   // 日志是否要全量记录，为 false 时会自动压缩
-  "detailedLog": true
+  "detailedLog": true,
+  // 控制恶意文本过滤器，默认使用 Qwen3Guard-4B 模型，若需修改请修改 AI.js 的源代码。
+  "moderate": {
+    // 启用与否
+    "enabled": true,
+    // 使用何种硬件加速，高级选项
+    "accualre": "",
+    // 模型镜像站
+    "mirror": "https://hf-mirror.com/"
+  }
 }

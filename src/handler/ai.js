@@ -372,11 +372,12 @@ export async function isModerate(inputs) {
  * 审核模型候选 id。
  * @huggingface/transformers 需 ONNX 权重（运行时从 HF Hub 下载并缓存到本地），
  * 故按优先级尝试 onnx-community 转换版与官方仓库。
- * 默认模型：Qwen3Guard-Gen-4B 。
  */
 const MODERATE_MODEL_CANDIDATES = [
   'onnx-community/Qwen3-Guard-Gen-4B-ONNX',
-  'Qwen/Qwen3-Guard-Gen-4B',
+  'onnx-community/Qwen3-Guard-Gen-0.6B-ONNX',
+  'mickjeon/qwen3guard-0.6b-onnx',
+  'nxp/Qwen3Guard-Gen-0.6B-ONNX',
 ];
 
 /** 审核生成的采样参数：力求确定性，短输出即可容纳 safe/unsafe 判定 */
@@ -393,19 +394,21 @@ let _moderatorPromise = null;
 function loadModerator() {
   if (_moderatorPromise) return _moderatorPromise;
   _moderatorPromise = (async () => {
-    const { pipeline } = await import('@huggingface/transformers');
+    const { pipeline, env } = await import('@huggingface/transformers');
     const moderateCfg = getConfig(CONFIG_PATHS.main).getSection('moderate') ?? {};
     // 硬件加速（device），如 'mps'；未配置则用库默认（CPU）
-    const accualre = typeof moderateCfg.accualre === 'string' ? moderateCfg.accualre.trim() : '';
-    const loadOpts = { dtype: 'q8' };
-    if (accualre) loadOpts.device = accualre;
-
+    const accualre = (typeof moderateCfg.accualre === 'string' && moderateCfg.accualre.trim()) ? moderateCfg.accualre.trim() : 'auto';
+    // dtype 'q8'：8 位量化；device 来自配置（如 mps/cpu）
+    const loadOpts = { dtype: 'q8', device: accualre };
+    
     let lastErr;
     for (const modelId of MODERATE_MODEL_CANDIDATES) {
       try {
-        // dtype 'q8'：8 位量化；device 来自配置（如 mps/cpu）
+        getLogger().tool.info(`请求审核模型: ${modelId} (device=${accualre})`);
+        env.cacheDir = resolve(ROOT_PATH, "models");
+        if (moderateCfg?.mirror?.trim()) env.remoteHost = moderateCfg.mirror.trim();
         const gen = await pipeline('text-generation', modelId, loadOpts);
-        getLogger().tool.info(`审核模型就绪: ${modelId} (device=${accualre || '默认'})`);
+        getLogger().tool.info(`审核模型就绪: ${modelId} (device=${accualre})`);
         return {
           id: modelId,
           async call(text) {
@@ -540,19 +543,33 @@ registerCommand('neonaic', 'ai', async function (sub, ...args) {
       return aiBan(ctx, ...args);
     case 'pardon':
       return aiPardon(ctx, ...args);
+    case 'moderate':
+      return aiModerate(ctx, ...args);
     default:
       return `用法: ${cmdAIUsage()}`;
   }
 }, {
   permissions: [[COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.command.ai"]],
   description: "AI 工具与 Profile 管理",
-  usage: "ai <tool|profile|ban|pardon> ...",
+  usage: "ai <tool|profile|ban|pardon|moderate> ...",
   alias: ['askai'],
 });
 
 /** ai 命令用法文本 */
 function cmdAIUsage() {
   return "ai tool list | ai tool test <tool> <json5> | ai profile list | ai profile <enable|disable> <profile> | ai profile test <profile> <msg> | ai ban <user> [time] | ai pardon <user>";
+}
+
+/**
+ * ai moderate 子命令。
+ * @param {NeonaicCommandContext} ctx
+ * @param {string} text
+ */
+async function aiModerate(ctx, text) {
+  if (!text || typeof text !== 'string' || !text.trim()) return "请求为空";
+  const result = await isModerate(text);
+  if (!result.available) return "内容审核已禁用";
+  return `得分=${result.score}, 模型=${result.resolver}, 拒绝=${result.refusal}, 安全=${result.safe}, 不安全=${result.unsafe}, 命中规则=${result.category}`;
 }
 
 /**
