@@ -14,6 +14,7 @@ import { registerCommand } from '../handler/commandServer.js';
 import { getDebugMode, getLogger } from '../system/logger/Logger.js';
 import { Config, CONFIG_PATHS, getBotName, getConfig } from '../system/Config.js';
 import { COMMAND_ENUMS } from '../handler/commandInterface.js';
+import { NeonaicNewable } from '../system/NeonaicNewableClass.js';
 
 // ---- 颜色 ----
 const CYAN   = '\x1b[36m';
@@ -28,7 +29,7 @@ export function getPlatformManager() {
   return PlatformManager.instance;
 }
 
-export class PlatformManager {
+export class PlatformManager extends NeonaicNewable {
   /** @type {PlatformManager | null} */
   static _instance = null;
 
@@ -43,6 +44,7 @@ export class PlatformManager {
    * @param {import('../system/logger/Logger.js').Logger} opts.logger
    */
   constructor({ configPath, logger }) {
+    super();
     if (PlatformManager._instance) {
       throw new Error('PlatformManager 已是单例，不可重复创建');
     }

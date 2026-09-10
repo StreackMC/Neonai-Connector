@@ -9,8 +9,9 @@
  */
 
 import { getLogger } from "../system/logger/Logger.js";
+import { NeonaicNewable } from "../system/NeonaicNewableClass.js";
 
-export class Platform {
+export class Platform extends NeonaicNewable {
   /** Platform Profile 名称 @type {String} */
   profile;
 
@@ -18,6 +19,7 @@ export class Platform {
    * @param {string} profile Profile 名称
    */
   constructor(profile) {
+    super();
     this.profile = profile;
   }
 

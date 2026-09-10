@@ -18,6 +18,7 @@
 import { checkSinglePermission } from './permissionServer.js';
 import { getLogger, parseString } from '../system/logger/Logger.js';
 import { COMMAND_ENUMS } from './commandInterface.js';
+import { NeonaicNewable } from "../system/NeonaicNewableClass.js";
 
 // ---- 颜色 ----
 const RED = '\x1b[31m';
@@ -253,7 +254,7 @@ export function executeCommandSilent(cmdName, ctx = {}, ...args) {
 }
 
 /** 命令上下文 */
-export class NeonaicCommandContext {
+export class NeonaicCommandContext extends NeonaicNewable {
   #privateExecutor = false; #internalCall = false; #this = undefined; #executor = []; #timestamp = new Date();
 
   /** 命令开始执行时的时间 @type {Date} */
@@ -278,6 +279,7 @@ export class NeonaicCommandContext {
 
   /** @param {NeonaicCommandContext} options */
   constructor(options) {
+    super();
     this.#privateExecutor = !!options.privateExecutor;
     this.#internalCall = !!options.internalCall;
     this.#this = options.this ?? undefined;

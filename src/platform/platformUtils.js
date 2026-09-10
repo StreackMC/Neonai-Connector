@@ -6,6 +6,8 @@
  * @since 0.1.0
  */
 
+import { NeonaicNewable } from '../system/NeonaicNewableClass.js';
+
 /**
  * 判断主机地址的格式类型
  * @param {string} host 主机地址
@@ -77,7 +79,7 @@ function normalizeUrl(uri) {
  * @class NeonaicUriMeta
  * @since 0.1.0
  */
-export class NeonaicUriMeta {
+export class NeonaicUriMeta extends NeonaicNewable {
   /**
    * 该 URI 是否尝试访问内网资源，推荐开启 {@link NeonaicUriOptions.resolveRealAddress} 提高准确性
    * @type {boolean}
@@ -159,6 +161,7 @@ export class NeonaicUriMeta {
    * @apiNote 不推荐直接新建本类，请改用{@link resolveUri}获取更多功能
    */
   constructor(uri) {
+    super();
     const url = normalizeUrl(uri);
 
     this.url = url;
