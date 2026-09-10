@@ -10,8 +10,8 @@
  */
 
 import { createInterface } from 'node:readline';
-import { executeCommandSilent, inferNext, parseArgs } from '../handler/commandServer.js';
-import { COMMAND_ENUMS } from '../handler/commandInterface.js';
+import { executeCommandSilent, inferNext, parseArgs } from '../command/commandServer.js';
+import { COMMAND_ENUMS } from '../command/commandInterface.js';
 import { getLogger } from './logger/Logger.js';
 
 // ---- 颜色 ----

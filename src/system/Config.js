@@ -13,7 +13,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import JSON5 from 'json5';
-import { COMMAND_ENUMS } from '../handler/commandInterface.js';
+import { COMMAND_ENUMS } from '../command/commandInterface.js';
 import { getLogger } from './logger/Logger.js';
 import { NeonaicNewable } from './NeonaicNewableClass.js';
 
@@ -208,7 +208,7 @@ export function getConfig(path) {
 /** reload 命令处理器（清空配置缓存） */
 function reloadCmd() {
   _cache.clear();
-  /** @type {import('../handler/commandServer.js').NeonaicCommandContext} */
+  /** @type {import('../command/commandServer.js').NeonaicCommandContext} */
   const ctx = this;
   if (ctx?.internalCall) getLogger().main.info('配置文件已由控制台权限重载');
   else getLogger().main.info(`配置文件已由${ctx?.executor?.[0] ?? '未知'}重载`);

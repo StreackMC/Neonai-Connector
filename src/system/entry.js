@@ -17,12 +17,12 @@ import { platform, release, tmpdir } from 'node:os';
 import { getConfig, CONFIG_PATHS, installConfigCommands } from './Config.js';
 import { setDebugMode, setConsoleHooks, getLogger } from './logger/Logger.js';
 import { acquirePidLock, releasePidLock } from './pidManager.js';
-import { registerCommand, executeCommand, parseArgs } from '../handler/commandServer.js';
-import { COMMAND_ENUMS } from '../handler/commandInterface.js';
-import { installPermissionCommands, checkPermission, checkPermissionFromContext } from '../handler/permissionServer.js';
+import { registerCommand, executeCommand, parseArgs } from '../command/commandServer.js';
+import { COMMAND_ENUMS } from '../command/commandInterface.js';
+import { installPermissionCommands, checkPermissionFromContext } from '../command/permissionServer.js';
 import { startCLI, stopCLI, erasePrompt, redrawPrompt } from './CLIHander.js';
 import { PlatformManager } from '../platform/platformManager.js';
-import { loadExtensions } from './extensionLoader.js';
+import { loadExtensions } from '../extension/etxLoader.js';
 
 // ---- 常量 ----
 
@@ -77,7 +77,7 @@ async function shutdown(signal) {
 // ---- 系统级 CLI 命令 ----
 
 registerCommand('neonaic', 'version', function () {
-  /** @type {import('../handler/commandServer.js').NeonaicCommandContext} */
+  /** @type {import('../command/commandServer.js').NeonaicCommandContext} */
   const ctx = this;
 
   // ---- 硬编码 ----

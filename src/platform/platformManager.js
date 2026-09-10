@@ -10,10 +10,10 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import JSON5 from 'json5';
 
-import { registerCommand } from '../handler/commandServer.js';
+import { registerCommand } from '../command/commandServer.js';
 import { getDebugMode, getLogger } from '../system/logger/Logger.js';
 import { Config, CONFIG_PATHS, getBotName, getConfig } from '../system/Config.js';
-import { COMMAND_ENUMS } from '../handler/commandInterface.js';
+import { COMMAND_ENUMS } from '../command/commandInterface.js';
 import { NeonaicNewable } from '../system/NeonaicNewableClass.js';
 
 // ---- 颜色 ----
@@ -92,7 +92,7 @@ export class PlatformManager extends NeonaicNewable {
   _registerCLI() {
     const clazzThis = this;
     registerCommand('neonaic', 'platform', async function (...args) {
-      /** @type {import('../handler/commandServer.js').NeonaicCommandContext} */
+      /** @type {import('../command/commandServer.js').NeonaicCommandContext} */
       const ctx = this;
       const [sub, name] = args;
       if (!ctx.privateExecutor) return `${RED}“${getBotName()}”无法执行“platform”，因为当前上下文不是私密的。`;
