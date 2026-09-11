@@ -22,7 +22,6 @@ import { COMMAND_ENUMS } from '../command/commandInterface.js';
 import { installPermissionCommands, checkPermissionFromContext } from '../command/permissionServer.js';
 import { startCLI, stopCLI, erasePrompt, redrawPrompt } from './CLIHander.js';
 import { PlatformManager } from '../platform/platformManager.js';
-import { loadExtensions } from '../extension/etxLoader.js';
 
 // ---- 常量 ----
 
@@ -172,7 +171,7 @@ export async function bootstrap() {
   setConsoleHooks(erasePrompt, redrawPrompt);
 
   // 自动发现并加载扩展（无需硬编码路径）
-  await loadExtensions();
+  // todo: refactor
 
   // 安装权限管理命令（permission/perm）：需在 commandServer 就绪后，避免循环依赖
   installPermissionCommands(registerCommand);
