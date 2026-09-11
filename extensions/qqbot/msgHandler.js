@@ -1,14 +1,14 @@
 import qqBotBackend from 'qq-official-bot';
 import he from 'he';
 import JSON5 from 'json5';
-import { getLogger, parseString } from '../../../src/system/logger/Logger.js';
+import { getLogger, parseString } from '../../src/system/logger/Logger.js';
 import { PlatformQQBot } from './index.js';
-import { resolveReply } from '../../../src/handler/messageIn.js';
-import { getBotName, getConfig } from '../../../src/system/Config.js';
-import { getPlatformManager } from '../../../src/platform/platformManager.js';
+import { resolveReply } from '../../src/handler/messageIn.js';
+import { getBotName, getConfig } from '../../src/system/Config.js';
+import { getPlatformManager } from '../../src/platform/platformManager.js';
 import { fromQQElement } from './emoji.js';
-import { registerCommand } from '../../../src/handler/commandServer.js';
-import { COMMAND_ENUMS } from '../../../src/handler/commandInterface.js';
+import { registerCommand } from '../../src/handler/commandServer.js';
+import { COMMAND_ENUMS } from '../../src/handler/commandInterface.js';
 
 /**
  * 好友列表私聊

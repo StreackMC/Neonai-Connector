@@ -205,3 +205,11 @@ registerAITool("joyous", "serverStatus", {
     return renderStatus(await fetchStatus(address), name);
   },
 });
+
+export function onEnable() {
+  
+}
+
+export function onDisable() {
+  
+}
