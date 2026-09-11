@@ -11,7 +11,7 @@
 import { getLogger } from "../system/logger/Logger.js";
 import { NeonaicNewable } from "../system/NeonaicNewableClass.js";
 
-export class Platform extends NeonaicNewable {
+export class NeonaiPlatform extends NeonaicNewable {
   /** Platform Profile 名称 @type {String} */
   profile;
 
@@ -31,7 +31,7 @@ export class Platform extends NeonaicNewable {
    * @returns {Promise<{ close: () => void } | (() => void) | void>}
    */
   async start() {
-    if (new.target === Platform) throw new Error(`Platform "${this.type}" 未实现 start()`);
+    if (new.target === NeonaiPlatform) throw new Error(`Platform "${this.type}" 未实现 start()`);
   }
 
   /**

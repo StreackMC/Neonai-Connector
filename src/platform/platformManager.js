@@ -53,11 +53,11 @@ export class PlatformManager extends NeonaicNewable {
     this._configPath = configPath;
     this._logger = logger;
 
-    /** profileName → Platform class @type {Map<String, typeof import('./platformInterface.js').Platform>} */
+    /** profileName → Platform class @type {Map<String, typeof import('./platformInterface.js').NeonaiPlatform>} */
     this._profileClasses = new Map();
     /** profileName → Profile 配置对象 @type {Map<String, NeonaicConfig>} */
     this._profiles = new Map();
-    /** profileName → Platform 实例 @type {Map<String, import('./platformInterface.js').Platform>} */
+    /** profileName → Platform 实例 @type {Map<String, import('./platformInterface.js').NeonaiPlatform>} */
     this._platforms = new Map();
     /** profileName → close 函数 @type {Map<String, Function>} */
     this._closers = new Map();
@@ -145,7 +145,7 @@ export class PlatformManager extends NeonaicNewable {
 
   /**
    * 注册 Platform 类，并为匹配 Profiles 创建实例。
-   * @param {{ new(profile: string): import('./platformInterface.js').Platform }} Cls
+   * @param {{ new(profile: string): import('./platformInterface.js').NeonaiPlatform }} Cls
    */
   _registerClass(Cls) {
     if (this._profileClasses.has(Cls.type)) {
@@ -302,7 +302,7 @@ export class PlatformManager extends NeonaicNewable {
 
 /**
  * Platform 实现模块在 import 时调用此函数注册。
- * @param {{ new(profile: string): import('./platformInterface.js').Platform }} Cls
+ * @param {{ new(profile: string): import('./platformInterface.js').NeonaiPlatform }} Cls
  */
 export function registerPlatform(Cls) {
   const pm = PlatformManager.instance;
