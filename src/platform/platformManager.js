@@ -12,7 +12,8 @@ import JSON5 from 'json5';
 
 import { registerCommand } from '../command/commandServer.js';
 import { getDebugMode, getLogger } from '../system/logger/Logger.js';
-import { Config, CONFIG_PATHS, getBotName, getConfig } from '../system/Config.js';
+import { CONFIG_PATHS, getBotName, getConfig } from '../system/confManager.js';
+import { NeonaicConfig } from "../system/NeonaicConfig.js";
 import { COMMAND_ENUMS } from '../command/commandInterface.js';
 import { NeonaicNewable } from '../system/NeonaicNewableClass.js';
 
@@ -54,7 +55,7 @@ export class PlatformManager extends NeonaicNewable {
 
     /** profileName → Platform class @type {Map<String, typeof import('./platformInterface.js').Platform>} */
     this._profileClasses = new Map();
-    /** profileName → Profile 配置对象 @type {Map<String, Config>} */
+    /** profileName → Profile 配置对象 @type {Map<String, NeonaicConfig>} */
     this._profiles = new Map();
     /** profileName → Platform 实例 @type {Map<String, import('./platformInterface.js').Platform>} */
     this._platforms = new Map();
