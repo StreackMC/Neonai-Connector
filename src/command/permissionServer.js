@@ -15,7 +15,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import JSON5 from 'json5';
 import { parseString } from '../system/logger/Logger.js';
-import { getBotName } from '../system/Config.js';
+import { getBotName } from '../system/confManager.js';
 import { NeonaicCommandContext } from './commandServer.js';
 import { COMMAND_ENUMS } from './commandInterface.js';
 
@@ -23,7 +23,7 @@ import { COMMAND_ENUMS } from './commandInterface.js';
 // 权限命令由组合根（entry.js）通过 installPermissionCommands(registerCommand) 安装。
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-const PERM_FILE = resolve(ROOT, 'config/permissions.json');
+const PERM_FILE = resolve(ROOT, 'config/saves/permissions.json');
 
 // ---- 4 层存储 ----
 const store = {

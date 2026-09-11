@@ -1,32 +1,7 @@
-/**
- * conf.js — 配置模块（SConfig API 风格）
- *
- * 按路径创建 Config 实例：`new Config(path)` 读取单个配置文件，
- * 或 `getConfig(path)` 获取（按路径缓存的）单例。
- * 支持点号嵌套路径（如 "qqbot.appid"），每个 getter 均有默认值回退。
- * 通过 set(key, value) + save() 支持写回文件。
- *
- * 仅支持 JSON5 格式（覆盖 JSON / JSONC）。
- */
-
 import { readFileSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import JSON5 from 'json5';
-import { COMMAND_ENUMS } from '../command/commandInterface.js';
-import { getLogger } from './logger/Logger.js';
 import { NeonaicNewable } from './NeonaicNewableClass.js';
-
-// 本模块自算项目根路径，避免与 entry.js 形成循环依赖
-// conf.js 位于 <根>/src/system/，故向上 2 层为项目根
-const ROOT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-
-/** 内部名 → 配置文件相对路径 */
-export const CONFIG_PATHS = Object.freeze({
-  app:    './package.json',
-  main:   './config/main.json',
-  secret: './secret.json',
-});
 
 // ---- 嵌套路径工具 ----
 
@@ -45,7 +20,7 @@ function getNested(map, key) {
   const idx = dotIndex(key);
   if (idx === -1) return map[key];
   const first = key.slice(0, idx);
-  const rest  = key.slice(idx + 1);
+  const rest = key.slice(idx + 1);
   const child = map[first];
   if (!child || typeof child !== 'object' || Array.isArray(child)) return undefined;
   return getNested(child, rest);
@@ -56,7 +31,7 @@ function setNested(map, key, value) {
   const idx = dotIndex(key);
   if (idx === -1) { map[key] = value; return; }
   const first = key.slice(0, idx);
-  const rest  = key.slice(idx + 1);
+  const rest = key.slice(idx + 1);
   if (!map[first] || typeof map[first] !== 'object' || Array.isArray(map[first])) {
     map[first] = {};
   }
@@ -65,7 +40,7 @@ function setNested(map, key, value) {
 
 // ---- Config 类 ----
 
-export class Config extends NeonaicNewable {
+export class NeonaicConfig extends NeonaicNewable {
   /**
    * 按路径读取单个配置文件。
    * @param {string} path 配置文件路径（相对项目根或绝对路径）
@@ -190,48 +165,4 @@ export class Config extends NeonaicNewable {
     const v = this.get(key);
     return Array.isArray(v) ? v : [v];
   }
-}
-
-/** @type {Map<string, Config>} */
-const _cache = new Map();
-
-/**
- * 按路径获取配置单例（首次调用时创建并缓存）。
- * @param {string} path 配置文件路径（相对项目根或绝对路径）
- * @returns {Config} 该路径对应的共享配置实例
- */
-export function getConfig(path) {
-  if (!_cache.has(path)) _cache.set(path, new Config(path));
-  return _cache.get(path);
-}
-
-/** reload 命令处理器（清空配置缓存） */
-function reloadCmd() {
-  _cache.clear();
-  /** @type {import('../command/commandServer.js').NeonaicCommandContext} */
-  const ctx = this;
-  if (ctx?.internalCall) getLogger().main.info('配置文件已由控制台权限重载');
-  else getLogger().main.info(`配置文件已由${ctx?.executor?.[0] ?? '未知'}重载`);
-  return;
-}
-reloadCmd.meta = {
-  permissions: [[COMMAND_ENUMS.PERM_SUPERADMIN, 'neonaic.command.reload']],
-  description: '立即重载配置文件。对部分功能不生效，需要手动重启。',
-};
-
-/**
- * 安装配置相关命令（由组合根在 commandServer 就绪后调用，避免循环依赖）。
- * @param {(namespace: string, name: string, handler: Function, meta?: object) => void} register 命令注册函数
- */
-export function installConfigCommands(register) {
-  register('neonaic', 'reload', reloadCmd, reloadCmd.meta);
-}
-
-/** 语法糖：获取机器人名称 */
-export function getBotName() {
-  return getConfig(CONFIG_PATHS.main).getString('name');
-}
-/** 语法糖：获取机器人次要名称 */
-export function getBotSubName() {
-  return getConfig(CONFIG_PATHS.main).getString('subname');
 }
