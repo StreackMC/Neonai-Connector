@@ -1,14 +1,16 @@
 import qqBotBackend from 'qq-official-bot';
 import he from 'he';
 import JSON5 from 'json5';
-import { getLogger, parseString } from '../../../src/system/logger/Logger.js';
+import { getLogger } from '../../src/logger/Logger.js';
+import { parseString } from '../../src/utils/text.js';
 import { PlatformQQBot } from './index.js';
-import { resolveReply } from '../../../src/handler/messageIn.js';
-import { getBotName, getConfig } from '../../../src/system/Config.js';
-import { getPlatformManager } from '../../../src/platform/platformManager.js';
+import { neonaicMessageIn } from '../../src/message/messageIn.js';
+import { neonaicConfManager } from '../../src/system/confManager.js';
+import { neonaicPlatformManager } from '../../src/platform/platformManager.js';
 import { fromQQElement } from './emoji.js';
-import { registerCommand } from '../../../src/handler/commandServer.js';
-import { COMMAND_ENUMS } from '../../../src/handler/commandInterface.js';
+import { neonaicCommandServer } from '../../src/command/commandServer.js';
+import { neonaicCommandInterface } from '../../src/command/commandInterface.js';
+import { NeonaicIllegalArgumentError } from '../../src/utils/NeonaicNewableError.js';
 
 /**
  * 好友列表私聊
@@ -18,10 +20,10 @@ import { COMMAND_ENUMS } from '../../../src/handler/commandInterface.js';
  */
 async function onPrivateMessageIn(event, pp) {
   /** 实例的 Profile 配置 */
-  const profile_config = getPlatformManager().getProfile(pp.profile);
+  const profile_config = neonaicPlatformManager.getPlatformManager().getProfile(pp.profile);
   
   pp.logMsgIn('Private:', `from=USR#${event.user_id} | msg=` + parseString(event.message, false).replace(/\n/g, "\\n"));
-  const reply = await resolveReply(toMarkdown(event.message, pp), {
+  const reply = await neonaicMessageIn.resolveReply(toMarkdown(event.message, pp), {
     AI: profile_config.useAI, AIlist: profile_config.allowedAI,
     resolveCommandWith: {
       executor: `USR#${event.user_id}`,
@@ -43,10 +45,10 @@ async function onPrivateMessageIn(event, pp) {
  */
 async function onGroupMessageIn(event, pp) {
   /** 实例的 Profile 配置 */
-  const profile_config = getPlatformManager().getProfile(pp.profile);
+  const profile_config = neonaicPlatformManager.getPlatformManager().getProfile(pp.profile);
 
   pp.logMsgIn('Group:', `where=GRP#${event.group_id} | from=USR#${event.user_id} | msg=` + parseString(event.message, false).replace(/\n/g, "\\n"));
-  const reply = await resolveReply(toMarkdown(event.message, pp), {
+  const reply = await neonaicMessageIn.resolveReply(toMarkdown(event.message, pp), {
     AI: profile_config.useAI, AIlist: profile_config.allowedAI,
     resolveCommandWith: {
       executor: [`USR#${event.user_id}`, `GRP#${event.group_id}`],
@@ -69,8 +71,8 @@ async function onGroupMessageIn(event, pp) {
  * @throws 无法识别参数 / 发送失败
  */
 export async function sendMsg(instance, who, msg) {
-  if (!(instance instanceof PlatformQQBot)) throw new Error("指定的 Platform 无效");
-  if (!instance.bot) throw new Error("QQBot 实例尚未启动");
+  if (!(instance instanceof PlatformQQBot)) throw new NeonaicIllegalArgumentError("指定的 Platform 无效");
+  if (!instance.bot) throw new NeonaicIllegalArgumentError("QQBot 实例尚未启动");
   who = parseString(who).trim();
   if (who.startsWith('USR#')) {
     // 私聊
@@ -80,13 +82,13 @@ export async function sendMsg(instance, who, msg) {
     return await instance.bot.sendGroupMessage(who.slice(4), msg);
   }
   // 无效用户
-  throw new Error("无法识别的用户：" + parseString(who));
+  throw new NeonaicIllegalArgumentError("无法识别的用户：" + parseString(who));
 }
 
-registerCommand('qqbot', 'qbsend', async function (profile, who, ...msg) {
+neonaicCommandServer.registerCommand('qqbot', 'qbsend', async function (profile, who, ...msg) {
   // 获取实例
-  const instance = getPlatformManager().getPlatform(parseString(profile));
-  if (!(instance instanceof PlatformQQBot)) throw new Error("指定的 Platform Profile 无效");
+  const instance = neonaicPlatformManager.getPlatformManager().getPlatform(parseString(profile));
+  if (!(instance instanceof PlatformQQBot)) throw new NeonaicIllegalArgumentError("指定的 Platform Profile 无效");
   // 发送消息
   const messageContent = msg.map(v => parseString(v, false)).join('');
   try {
@@ -95,15 +97,15 @@ registerCommand('qqbot', 'qbsend', async function (profile, who, ...msg) {
     instance.logMsgOut('Command:', `to=${who} | msg=`, messageContent.replace(/\n/g, "\\n"));
     // SendResult 可能为「消息审核中」状态
     if (result?.audit_status === 'pending') {
-      return `“${getBotName()}”已向[${who}]发送消息，但消息正在审核中。`;
+      return `“${neonaicConfManager.getBotName()}”已向[${who}]发送消息，但消息正在审核中。`;
     }
-    return `“${getBotName()}”成功向[${who}]发送指定消息。`;
+    return `“${neonaicConfManager.getBotName()}”成功向[${who}]发送指定消息。`;
   } catch (err) {
     getLogger().platP.debug(`[qqbot] 向`, who, `@`, profile, `发送消息失败：`, err.message);
-    return `“${getBotName()}”无法向[${who}]发送指定消息，因为“${err.message}”。`;
+    return `“${neonaicConfManager.getBotName()}”无法向[${who}]发送指定消息，因为“${err.message}”。`;
   }
 }, {
-  permissions: [[COMMAND_ENUMS.PERM_SUPERADMIN, "qqbot.command.qbsend"]],
+  permissions: [[neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "qqbot.command.qbsend"]],
   description: "使用官方QQBOT向指定渠道发送消息，需要对应渠道允许接收机器人消息：群聊需要群主开启推送权限；私聊需要加为好友并开启推送权限。",
   usage: "qbsend <profile> <who> <...msg>",
 })

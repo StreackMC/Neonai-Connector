@@ -1,5 +1,5 @@
 /**
- * platform-manager.js — 平台 Profile 生命周期管理器
+ * platformManager.js — 平台 Profile 生命周期管理器
  *
  * 维护三个映射：
  *   _profileClasses  profileName → Platform class
@@ -10,10 +10,12 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import JSON5 from 'json5';
 
-import { registerCommand } from '../handler/commandServer.js';
-import { getDebugMode, getLogger } from '../system/logger/Logger.js';
-import { Config, CONFIG_PATHS, getBotName, getConfig } from '../system/Config.js';
-import { COMMAND_ENUMS } from '../handler/commandInterface.js';
+import { neonaicCommandServer } from '../command/commandServer.js';
+import { neonaicLogger, getLogger } from '../logger/Logger.js';
+import { neonaicConfManager } from '../system/confManager.js';
+import { neonaicCommandInterface } from '../command/commandInterface.js';
+import { NeonaicNewable } from '../utils/NeonaicNewableClass.js';
+import { NeonaicIllegalStateError } from '../utils/NeonaicNewableError.js';
 
 // ---- 颜色 ----
 const CYAN   = '\x1b[36m';
@@ -23,12 +25,7 @@ const RED    = '\x1b[31m';
 const DIM    = '\x1b[2m';
 const R      = '\x1b[0m';
 
-/** 语法糖，获取PM */
-export function getPlatformManager() {
-  return PlatformManager.instance;
-}
-
-export class PlatformManager {
+export class PlatformManager extends NeonaicNewable {
   /** @type {PlatformManager | null} */
   static _instance = null;
 
@@ -40,28 +37,29 @@ export class PlatformManager {
   /**
    * @param {object} opts
    * @param {string} opts.configPath secret.json 的绝对路径
-   * @param {import('../system/logger/Logger.js').Logger} opts.logger
+   * @param {import('../logger/Logger.js').neonaicLogger} opts.logger
    */
   constructor({ configPath, logger }) {
+    super();
     if (PlatformManager._instance) {
-      throw new Error('PlatformManager 已是单例，不可重复创建');
+      throw new NeonaicIllegalStateError('PlatformManager 已是单例，不可重复创建');
     }
 
     this._configPath = configPath;
     this._logger = logger;
 
-    /** profileName → Platform class @type {Map<String, typeof import('./platformInterface.js').Platform>} */
+    /** profileName → Platform class @type {Map<String, typeof import('./platformInterface.js').NeonaiPlatform>} */
     this._profileClasses = new Map();
-    /** profileName → Profile 配置对象 @type {Map<String, Config>} */
+    /** profileName → Profile 配置对象 @type {Map<String, object>} */
     this._profiles = new Map();
-    /** profileName → Platform 实例 @type {Map<String, import('./platformInterface.js').Platform>} */
+    /** profileName → Platform 实例 @type {Map<String, import('./platformInterface.js').NeonaiPlatform>} */
     this._platforms = new Map();
     /** profileName → close 函数 @type {Map<String, Function>} */
     this._closers = new Map();
 
     // 加载所有 Profiles 配置
     for (const raw of this._getRawProfiles()) {
-      const profile = { ...raw, _debug: getDebugMode() };
+      const profile = { ...raw, _debug: neonaicLogger.getDebugMode() };
       this._profiles.set(raw.name, profile);
     }
 
@@ -72,7 +70,7 @@ export class PlatformManager {
   // ---- 内部辅助 ----
 
   _getRawProfiles() {
-    return getConfig(CONFIG_PATHS.secret).getList('platforms');
+    return neonaicConfManager.getConfig(neonaicConfManager.CONFIG_PATHS.secret).getList('platforms');
   }
 
   _readConfig() {
@@ -89,11 +87,11 @@ export class PlatformManager {
 
   _registerCLI() {
     const clazzThis = this;
-    registerCommand('neonaic', 'platform', async function (...args) {
-      /** @type {import('../handler/commandServer.js').NeonaicCommandContext} */
+    neonaicCommandServer.registerCommand('neonaic', 'platform', async function (...args) {
+      /** @type {import('../command/commandServer.js').NeonaicCommandContext} */
       const ctx = this;
       const [sub, name] = args;
-      if (!ctx.privateExecutor) return `${RED}“${getBotName()}”无法执行“platform”，因为当前上下文不是私密的。`;
+      if (!ctx.privateExecutor) return `${RED}“${neonaicConfManager.getBotName()}”无法执行“platform”，因为当前上下文不是私密的。`;
       if (!sub) return `${RED}用法: platform ${CYAN}start|stop|enable|disable${R} ${DIM}<name>${R}  或  platform ${CYAN}list${R}`;
 
       switch (sub) {
@@ -124,7 +122,7 @@ export class PlatformManager {
     }, {
       description: '平台 Profile 生命周期管理',
       usage: 'platform start|stop|enable|disable|list [name]',
-      permissions: [[COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.commmand.platform"]],
+      permissions: [[neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.commmand.platform"]],
       alias: ["pm"]
     });
   }
@@ -142,11 +140,11 @@ export class PlatformManager {
 
   /**
    * 注册 Platform 类，并为匹配 Profiles 创建实例。
-   * @param {{ new(profile: string): import('./platformInterface.js').Platform }} Cls
+   * @param {{ new(profile: string): import('./platformInterface.js').NeonaiPlatform }} Cls
    */
   _registerClass(Cls) {
     if (this._profileClasses.has(Cls.type)) {
-      throw new Error(`Platform 类 "${Cls.type}" 已被注册`);
+      throw new NeonaicIllegalStateError(`Platform 类 "${Cls.type}" 已被注册`);
     }
 
     for (const [name, profile] of this._profiles) {
@@ -297,14 +295,24 @@ export class PlatformManager {
   }
 }
 
+/** 语法糖，获取PM */
+export function getPlatformManager() {
+  return PlatformManager.instance;
+}
+
 /**
  * Platform 实现模块在 import 时调用此函数注册。
- * @param {{ new(profile: string): import('./platformInterface.js').Platform }} Cls
+ * @param {{ new(profile: string): import('./platformInterface.js').NeonaiPlatform }} Cls
  */
-export function registerPlatform(Cls) {
+function registerPlatform(Cls) {
   const pm = PlatformManager.instance;
   if (!pm) {
-    throw new Error('PlatformManager 尚未初始化，请确保在 system/entry.js 中先 new PlatformManager');
+    throw new NeonaicIllegalStateError('PlatformManager 尚未初始化，请确保在 system/entry.js 中先 new PlatformManager');
   }
   pm._registerClass(Cls);
 }
+
+export const neonaicPlatformManager = {
+  getPlatformManager,
+  registerPlatform,
+};

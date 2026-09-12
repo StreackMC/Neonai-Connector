@@ -1,10 +1,4 @@
-/**
- * 为 Profile 组件提供预定义的 API 能力
- * 
- * @module PlatformUtils
- * @author kdxiaoyi
- * @since 0.1.0
- */
+import { NeonaicNewable } from './NeonaicNewableClass.js';
 
 /**
  * 判断主机地址的格式类型
@@ -68,16 +62,47 @@ function normalizeUrl(uri) {
 }
 
 /**
+* @typedef {Object} NeonaicUriOptions
+* @property {boolean} [resolveRealAddress=false] 如果传入域名，尝试解析IP地址（耗时操作，**将使得函数返回 Promise**）
+* @property {boolean} [lookupBindedDomain=false] 如果传入IP地址，尝试反查对应域名（耗时操作，**将使得函数返回 Promise**）
+* @since 0.1.0
+*/
+
+/**
  * NeonaiConnector URI 标准传递协议
  *
  * 解析并标准化一个 URI，统一提供协议头、主机、端口、路径、查询、锚点等信息的访问方式。
  * 该类仅负责同步解析，DNS 相关的异步能力（{@link NeonaicUriOptions.resolveRealAddress}、
- * {@link NeonaicUriOptions.lookupBindedDomain}）由 {@link resolveUri} 负责。
+ * {@link NeonaicUriOptions.lookupBindedDomain}）由 {@link NeonaicUriMeta.resolve} 负责。
  *
  * @class NeonaicUriMeta
  * @since 0.1.0
  */
-export class NeonaicUriMeta {
+export class NeonaicUriMeta extends NeonaicNewable {
+  /**
+   * 解析并返回一个 URL 的信息
+   * @param {string|URL} uri 原始 URI
+   * @param {NeonaicUriOptions} options 参数
+   * @return {NeonaicUriMeta|Promise<NeonaicUriMeta>} 返回是否为 Promise 取决于参数
+   * @since 0.1.0
+   */
+  static resolve(uri, options = {}) {
+    const { resolveRealAddress = false, lookupBindedDomain = false } = options;
+    const meta = new NeonaicUriMeta(uri, options);
+
+    // 未开启异步解析能力时直接同步返回
+    if (!resolveRealAddress && !lookupBindedDomain) {
+      return meta;
+    }
+
+    // 需要 DNS 解析，返回 Promise
+    return (async () => {
+      if (resolveRealAddress) await resolveRealAddressF(meta);
+      if (lookupBindedDomain) await lookupBindedDomainF(meta);
+      return meta;
+    })();
+  }
+
   /**
    * 该 URI 是否尝试访问内网资源，推荐开启 {@link NeonaicUriOptions.resolveRealAddress} 提高准确性
    * @type {boolean}
@@ -159,6 +184,7 @@ export class NeonaicUriMeta {
    * @apiNote 不推荐直接新建本类，请改用{@link resolveUri}获取更多功能
    */
   constructor(uri) {
+    super();
     const url = normalizeUrl(uri);
 
     this.url = url;
@@ -231,34 +257,4 @@ async function lookupBindedDomainF(meta) {
   } catch (err) {
     meta.host2 = '';
   }
-}
-
-/**
- * @typedef {Object} NeonaicUriOptions
- * @property {boolean} [resolveRealAddress=false] 如果传入域名，尝试解析IP地址（耗时操作，**将使得函数返回 Promise**）
- * @property {boolean} [lookupBindedDomain=false] 如果传入IP地址，尝试反查对应域名（耗时操作，**将使得函数返回 Promise**）
- * @since 0.1.0
- */
-/**
- * 解析并返回一个 URL 的信息
- * @param {string|URL} uri 原始 URI
- * @param {NeonaicUriOptions} options 参数
- * @return {NeonaicUriMeta|Promise<NeonaicUriMeta>} 返回是否为 Promise 取决于参数
- * @since 0.1.0
- */
-export function resolveUri(uri, options = {}) {
-  const { resolveRealAddress = false, lookupBindedDomain = false } = options;
-  const meta = new NeonaicUriMeta(uri, options);
-
-  // 未开启异步解析能力时直接同步返回
-  if (!resolveRealAddress && !lookupBindedDomain) {
-    return meta;
-  }
-
-  // 需要 DNS 解析，返回 Promise
-  return (async () => {
-    if (resolveRealAddress) await resolveRealAddressF(meta);
-    if (lookupBindedDomain) await lookupBindedDomainF(meta);
-    return meta;
-  })();
 }

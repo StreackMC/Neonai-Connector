@@ -1,5 +1,5 @@
 /**
- * platform/PlatformInterface.js — Platform 基类
+ * platformInterface.js — Platform 基类
  *
  * 所有 Platform 实现须继承此类，构造函数接收 Profile 配置（由 PM 注入），
  * 实现 start() / stop() 生命周期方法。
@@ -8,9 +8,11 @@
  * 所有运行时参数通过 this.profile 获取。
  */
 
-import { getLogger } from "../system/logger/Logger.js";
+import { getLogger } from "../logger/Logger.js";
+import { NeonaicNewable } from "../utils/NeonaicNewableClass.js";
+import { NeonaicUnsupportedOperationError } from "../utils/NeonaicNewableError.js";
 
-export class Platform {
+export class NeonaiPlatform extends NeonaicNewable {
   /** Platform Profile 名称 @type {String} */
   profile;
 
@@ -18,6 +20,7 @@ export class Platform {
    * @param {string} profile Profile 名称
    */
   constructor(profile) {
+    super();
     this.profile = profile;
   }
 
@@ -29,7 +32,7 @@ export class Platform {
    * @returns {Promise<{ close: () => void } | (() => void) | void>}
    */
   async start() {
-    if (new.target === Platform) throw new Error(`Platform "${this.type}" 未实现 start()`);
+    if (new.target === NeonaiPlatform) throw new NeonaicUnsupportedOperationError(`Platform "${this.type}" 未实现 start()`);
   }
 
   /**
@@ -66,3 +69,4 @@ export class Platform {
     getLogger().chatOut.info(`<${type_}/${this.profile}>`, ...msg);
   }
 }
+

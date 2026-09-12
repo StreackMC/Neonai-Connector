@@ -1,0 +1,15 @@
+{
+  // 本项目是 Node ESM（package.json type: module），相对导入必须带 .js 后缀。
+  // 默认值 "auto" 在语言服务按 Classic 解析时会写出无后缀的导入，
+  // 那在 Node 下会直接抛 ERR_MODULE_NOT_FOUND。
+  "javascript.preferences.importModuleSpecifierEnding": "js",
+  "typescript.preferences.importModuleSpecifierEnding": "js",
+
+  // 单文件内 Tab 补全与跨文件自动 import 补全，保持开启
+  "javascript.suggest.autoImports": true,
+  "typescript.suggest.autoImports": true,
+
+  // 文件移动/重命名时自动改写 import 路径
+  "javascript.updateImportsOnFileMove.enabled": "always",
+  "typescript.updateImportsOnFileMove.enabled": "always"
+}

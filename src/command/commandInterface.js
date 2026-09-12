@@ -19,7 +19,7 @@
  */
 
 /** 命令系统的一些枚举名 */
-export const COMMAND_ENUMS = {
+const COMMAND_ENUMS = {
   /** 控制台执行的执行者名 @apiNote 请使用 {@link CommandContext.internalCall} 确认本点，以明确语义和避免恶意攻击。 */
   FROM_CONSOLE: '$console',
   /** 未知执行者，这一般表示当前上下文的某一层出现了不正确指定的执行者 */
@@ -28,4 +28,8 @@ export const COMMAND_ENUMS = {
   PERM_ADMIN: 'admin',
   /** 超级管理员权限 */
   PERM_SUPERADMIN: 'superadmin',
+};
+
+export const neonaicCommandInterface = {
+  COMMAND_ENUMS,
 };

@@ -1,16 +1,17 @@
 /**
- * pid.js — PID 进程锁
+ * pidManager.js — PID 进程锁
  *
  * 防止多实例重复启动。旧锁对应的进程已不在运行时自动清理。
  *
  * 用法：
- *   import { acquirePidLock, releasePidLock } from './pid.js';
+ *   import { NeonaicPidManager } from './pidManager.js';
  *
- *   acquirePidLock(pidFilePath, logger);
- *   process.on('exit', () => releasePidLock(pidFilePath));
+ *   NeonaicPidManager.acquirePidLock(pidFilePath, logger);
+ *   process.on('exit', () => NeonaicPidManager.releasePidLock(pidFilePath));
  */
 
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { NeonaicIllegalStateError } from '../utils/NeonaicNewableError.js';
 
 /**
  * 判断某 PID 是否仍在运行。
@@ -33,14 +34,14 @@ function pidAlive(pid) {
  * 获取 PID 进程锁。若锁文件存在且对应 PID 已不在运行则自动清理。
  *
  * @param {string} pidFile PID 锁文件路径
- * @param {import('./logger/Logger.js').Logger} logger 日志器实例
+ * @param {import('../logger/Logger.js').neonaicLogger} logger 日志器实例
  * @throws {Error} 已有实例运行时拒绝启动
  */
-export function acquirePidLock(pidFile, logger) {
+function acquirePidLock(pidFile, logger) {
   if (existsSync(pidFile)) {
     const oldPid = Number.parseInt(readFileSync(pidFile, 'utf8'), 10);
     if (pidAlive(oldPid)) {
-      throw new Error(`检测到已有实例正在运行（PID ${oldPid}），拒绝重复启动`);
+      throw new NeonaicIllegalStateError(`检测到已有实例正在运行（PID ${oldPid}），拒绝重复启动`);
     }
     logger.main.warn(`自动清理失效 PID 锁（PID ${oldPid} 已不在运行）`);
     unlinkSync(pidFile);
@@ -53,7 +54,7 @@ export function acquirePidLock(pidFile, logger) {
  *
  * @param {string} pidFile PID 锁文件路径
  */
-export function releasePidLock(pidFile) {
+function releasePidLock(pidFile) {
   try {
     if (!existsSync(pidFile)) return;
     const locked = Number.parseInt(readFileSync(pidFile, 'utf8'), 10);
@@ -62,3 +63,8 @@ export function releasePidLock(pidFile) {
     // 忽略释放时的竞态错误
   }
 }
+
+export const neonaicPidManager = {
+  acquirePidLock,
+  releasePidLock,
+};

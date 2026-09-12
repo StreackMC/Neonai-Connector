@@ -1,5 +1,5 @@
 /**
- * logger.js — 分模块日志系统
+ * Logger.js — 分模块日志系统
  *
  * 模块加载时立即劫持 console.* 为蹦床，后续由 redirectConsole 控制目标。
  * 所有日志接口接受无限参数。调试模式（_isDebug）强制输出到原生 console，
@@ -14,12 +14,13 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { createRequire } from 'node:module';
 
-import { getConfig, CONFIG_PATHS } from '../Config.js';
-import { putEmit } from './log4js_inject.js';
+import { neonaicConfManager } from '../system/confManager.js';
+import { neonaicLog4jsInject } from './log4js_inject.js';
+import { parseString } from '../utils/text.js';
 
 // 本模块自算项目根路径，避免与 entry.js 形成循环依赖
-// logger.js 位于 <根>/src/system/logger/，故向上 3 层为项目根
-const ROOT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+// Logger.js 位于 <根>/src/logger/，故向上 2 层为项目根
+const ROOT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const DEBUGING = process.argv.some((a) => a === '--debug=true' || a === '--debug');
 
 // ---- 常量与工具函数 ----
@@ -41,6 +42,7 @@ const LOG_TYPES = {
   "Platform:Manager": { console: true, file: true, call: 'platM' },
   "Platform:Profile": { console: true, file: true, call: 'platP' },
   "Command": { console: true, file: true, call: 'cmd' },
+  "ExtensionHost": { console: true, file: true, call: 'ext' },
 };
 
 /**
@@ -54,6 +56,7 @@ const LOG_TYPES = {
  * @property {LoggerInstance} platP
  * @property {LoggerInstance} tool
  * @property {LoggerInstance} cmd
+ * @property {LoggerInstance} ext
  * @property {(...args: any[]) => void} log         无类型默认日志（走 Other）
  * @property {(err?: Error) => void} writeCrashReport
  * @property {(enable?: boolean, |debugMode?: boolean) => void} redirectConsole
@@ -111,8 +114,8 @@ console.error = (...a) => _target.error.apply(console, a);
 
 // ---- 全局调试标志（由 entry.js 通过 setDebugMode 控制）----
 let _isDebug = false;
-export function setDebugMode(on) { _isDebug = !!on; }
-export function getDebugMode(on) { return !!_isDebug; }
+function setDebugMode(on) { _isDebug = !!on; }
+function getDebugMode(on) { return !!_isDebug; }
 
 // ---- 控制台输出钩子（与 REPL 协作：输出前清 prompt，输出后重绘）----
 let _beforeWrite = null;
@@ -123,77 +126,9 @@ let _afterWrite = null;
  * @param {() => void} [before] 输出到控制台前调用（清掉当前 prompt）
  * @param {() => void} [after] 输出到控制台后调用（重绘 prompt）
  */
-export function setConsoleHooks(before, after) {
+function setConsoleHooks(before, after) {
   _beforeWrite = before ?? null;
   _afterWrite = after ?? null;
-}
-
-/**
- * 尝试将输入尽可能地转化为文本
- * @param {*} val 输入值
- * @param {boolean} [short] 是否要截断：会只枚举前3个属性/对象；当调试模式时默认禁用，反之同理。**需要严格为真以防传入参数语义不明**
- * @param {boolean} [processString=false] 是否要把文本规整化。**需要严格为真以防传入参数语义不明**
- * @returns {String} 处理后的文本。Array→[1, 2, ...]  Map→{key=value, k=v, ...}  Set→{1, 2, ...}  Object→.toString()/{key: value, ...}
- */
-export function parseString(val, short = !(DEBUGING || getConfig(CONFIG_PATHS.main).getBoolean('detailedLog', false)), processString = false) {
-  // 基础类型：字符串加单引号，并转义特殊字符
-  if (typeof val === 'string') {
-    return (processString === true) ? `'${val.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t')}'` : val;
-  }
-
-  // 空值与布尔值
-  if (val === null) return 'null';
-  if (val === undefined) return 'undefined';
-
-  // 错误对象
-  if (val instanceof Error) return val.message ?? String(val);
-
-  // 数组
-  if (Array.isArray(val)) {
-    const items = short === true ? val.slice(0, 3) : val;
-    const body = items.map((v) => parseString(v, short, true)).join(', ');
-    const suffix = short === true && val.length > 3 ? ` ... (+${val.length - 3})` : '';
-    return `[${body}${suffix}]`;
-  }
-
-  // Map
-  if (val instanceof Map) {
-    const entries = Array.from(val.entries());
-    const visible = short === true ? entries.slice(0, 3) : entries;
-    const body = visible.map(([key, value]) =>
-      `${parseString(key, short, true)}=${parseString(value, short, true)}`
-    ).join(', ');
-    const suffix = short === true && val.size > 3 ? ` ... (+${val.size - 3})` : '';
-    return `{${body}${suffix}}`;
-  }
-
-  // Set
-  if (val instanceof Set) {
-    const items = Array.from(val);
-    const visible = short === true ? items.slice(0, 3) : items;
-    const body = visible.map(v => parseString(v, short, true)).join(', ');
-    const suffix = short === true && val.size > 3 ? ` ... (+${val.size - 3})` : '';
-    return `{${body}${suffix}}`;
-  }
-
-  // 只对非普通对象使用 toString
-  if (Object.prototype.toString.call(val) !== '[object Object]' && typeof val.toString === 'function') {
-    return val.toString();
-  }
-
-  // 对象
-  if (typeof val === 'object') {
-    const keys = Object.keys(val);
-    const visibleKeys = short === true ? keys.slice(0, 3) : keys;
-    const body = visibleKeys
-      .map((k) => `${k}: ${parseString(val[k], short, true)}`)
-      .join(', ');
-    const suffix = short === true && keys.length > 3 ? ` ... (+${keys.length - 3})` : '';
-    return `{${body}${suffix}}`;
-  }
-
-  // 数字等直接转字符串
-  return String(val);
 }
 
 function toText(args) { return args.map(parseString).join(' '); }
@@ -205,7 +140,7 @@ function toText(args) { return args.map(parseString).join(' '); }
  * @param {number} [options.maxFileSize]
  * @returns {Logger}
  */
-export function createLogger(options = {}) {
+function createLogger(options = {}) {
   const logDir      = options.logDir ?? './logs';
   const maxFileSize = options.maxFileSize ?? DEFAULT_MAX_FILE_SIZE;
   const levelColors = { ...LEVEL_COLORS, ...(options.levelColors ?? {}) };
@@ -375,12 +310,12 @@ function injectLog4js(emit) {
     return;
   }
 
-  putEmit(emit);
+  neonaicLog4jsInject.putEmit(emit);
   log4js.configure({
     appenders: {
       // 使用自定义 appender
       cliForward: {
-        type: join(ROOT_PATH, 'src', 'system', 'logger', 'log4js_inject.js')
+        type: join(ROOT_PATH, 'src', 'logger', 'log4js_inject.js')
       }
     },
     categories: {
@@ -393,10 +328,19 @@ function injectLog4js(emit) {
  * 获取日志器（首次调用时创建）。
  *
  * @returns {Logger} 共享日志器实例
+ * @apiNote 全项目调用最频繁的日志入口；为书写简洁保持顶层具名导出，不收纳进 NeonaicLogger 对象。
  */
 export function getLogger() {
   if (!_logger) {
-    _logger = createLogger({ logDir: './logs', maxFileSize: getConfig(CONFIG_PATHS.main).getInt('maxLogFileSize', 1048576) });
+    _logger = createLogger({ logDir: './logs', maxFileSize: neonaicConfManager.getConfig(neonaicConfManager.CONFIG_PATHS.main).getInt('maxLogFileSize', 1048576) });
   }
   return _logger;
 }
+
+export const neonaicLogger = {
+  setDebugMode,
+  getDebugMode,
+  setConsoleHooks,
+  createLogger,
+  getLogger,
+};

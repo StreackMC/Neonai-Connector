@@ -7,22 +7,23 @@
  *   3. 启动 CLI 命令系统（含保活）
  *   4. 注册信号处理并优雅关闭
  *
- * 配置 / 日志 / 平台管理器单例分别由 conf.js / logger.js / platform-manager.js 提供。
+ * 配置 / 日志 / 平台管理器单例分别由 confManager.js / Logger.js / platformManager.js 提供。
  */
 
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { platform, release, tmpdir } from 'node:os';
 
-import { getConfig, CONFIG_PATHS, installConfigCommands } from './Config.js';
-import { setDebugMode, setConsoleHooks, getLogger } from './logger/Logger.js';
-import { acquirePidLock, releasePidLock } from './pidManager.js';
-import { registerCommand, executeCommand, parseArgs } from '../handler/commandServer.js';
-import { COMMAND_ENUMS } from '../handler/commandInterface.js';
-import { installPermissionCommands, checkPermission, checkPermissionFromContext } from '../handler/permissionServer.js';
-import { startCLI, stopCLI, erasePrompt, redrawPrompt } from './CLIHander.js';
+import { neonaicConfManager } from './confManager.js';
+import { neonaicLogger, getLogger } from '../logger/Logger.js';
+import { neonaicPidManager } from './pidManager.js';
+import { neonaicCommandServer } from '../command/commandServer.js';
+import { neonaicCommandInterface } from '../command/commandInterface.js';
+import { neonaicPermissionServer } from '../command/permissionServer.js';
+import { neonaicCliProcessor } from './cliProcessor.js';
 import { PlatformManager } from '../platform/platformManager.js';
-import { loadExtensions } from './extensionLoader.js';
+import { neonaicExtensionManager } from '../extension/extManager.js';
+import { neonaicMessageIn } from '../message/messageIn.js';
 
 // ---- 常量 ----
 
@@ -32,17 +33,15 @@ const R = '\x1b[0m';
 const T = 'Neo';
 
 /** 当前是否在调试 */
-export const DEBUGING = process.argv.some((a) => a === '--debug=true' || a === '--debug');
+const DEBUGING = process.argv.some((a) => a === '--debug=true' || a === '--debug');
 /** 项目根路径 */
-export const ROOT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const ROOT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 /** 项目名称 */
-export const APP_NAME = getConfig(CONFIG_PATHS.app).getString('name', 'neonai-connector');
+const APP_NAME = neonaicConfManager.getConfig(neonaicConfManager.CONFIG_PATHS.app).getString('name', 'neonai-connector');
 /** 项目版本 */
-export const APP_VERSION = getConfig(CONFIG_PATHS.app).getString('version', '0.0.0');
+const APP_VERSION = neonaicConfManager.getConfig(neonaicConfManager.CONFIG_PATHS.app).getString('version', '0.0.0');
 /** PID 锁文件路径 */
-export const PID_FILE_PATH = resolve(ROOT_PATH, '.neonai.pid');
-/** 全局唯一ID */
-export const UniqueID = function uid() { if (typeof uid._ !== 'number') uid._ = 0; uid._ += 1; return uid._; };
+const PID_FILE_PATH = resolve(ROOT_PATH, '.neonai.pid');
 
 // ---- 安全关闭 ----
 
@@ -54,7 +53,7 @@ async function shutdown(signal) {
   shuttingDown = true;
 
   // 先关闭 CLI，避免后续日志叠加在 readline prompt 上
-  stopCLI();
+  neonaicCliProcessor.stopCLI();
 
   getLogger().main.warn(`收到 ${signal}，正在关闭…`);
 
@@ -76,8 +75,8 @@ async function shutdown(signal) {
 
 // ---- 系统级 CLI 命令 ----
 
-registerCommand('neonaic', 'version', function () {
-  /** @type {import('../handler/commandServer.js').NeonaicCommandContext} */
+neonaicCommandServer.registerCommand('neonaic', 'version', function () {
+  /** @type {import('../command/commandServer.js').NeonaicCommandContext} */
   const ctx = this;
 
   // ---- 硬编码 ----
@@ -110,7 +109,7 @@ registerCommand('neonaic', 'version', function () {
   const D = '\x1b[2m';
   const R = '\x1b[0m';
 
-  const mayShowSys = checkPermissionFromContext(this);
+  const mayShowSys = neonaicPermissionServer.checkPermissionFromContext(this);
   const sysLine = mayShowSys ? (
     `${B}Node.js${R}   ${nodeVer}\n` +
     `${B}OS${R}        ${osVer}\n` +
@@ -131,34 +130,38 @@ registerCommand('neonaic', 'version', function () {
   );
 }, { description: '显示版本与版权信息' });
 
-registerCommand('neonaic', 'stop', () => {
+neonaicCommandServer.registerCommand('neonaic', 'stop', () => {
   shutdown('COMMAND');
-}, { description: '安全关闭服务', permissions: [[COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.commmand.stop"]] });
+}, { description: '安全关闭服务', permissions: [[neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.commmand.stop"]] });
 
 // ---- 启动 ----
 
 /** 启动流程 */
-export async function bootstrap() {
+async function bootstrap() {
+  const when_started = new Date();
+
   // PID锁
-  acquirePidLock(PID_FILE_PATH, getLogger());
-  getLogger().main.info(`${APP_NAME} 服务启动`);
+  neonaicPidManager.acquirePidLock(PID_FILE_PATH, getLogger());
+  getLogger().main.info(`正在启动 ${APP_NAME} v${APP_VERSION}`);
 
   // 调试模式分支
   if (DEBUGING) {
     // 调试模式：console 走原生输出，设置全局标志位，启用 $()
-    setDebugMode(true);
+    neonaicLogger.setDebugMode(true);
     globalThis.$ = (input) => {
-      const args = parseArgs(String(input));
+      const args = neonaicCommandServer.parseArgs(String(input));
       const [cmdName, cmdArgs] = args;
-      return executeCommand(cmdName, { internalCall: true, privateExecutor: true }, ...cmdArgs);
+      const result = neonaicCommandServer.executeCommand(cmdName, { internalCall: true, privateExecutor: true }, ...cmdArgs);
+      return result;
     };
-    getLogger().main.info('调试模式已启用，$(cmd) 可用');
+    getLogger().main.info('调试模式已启用，$(cmd) 可用。也可使用 await $(cmd) 解决 Promise 问题。');
   } else {
     // 正常模式：劫持 console 到日志系统
     globalThis.$ = null;
     getLogger().redirectConsole(true);
   }
 
+  getLogger().main.debug(`初始化平台管理器`);
   // 初始化平台管理器（单例）
   new PlatformManager({
     configPath: resolve(ROOT_PATH, 'secret.json'),
@@ -166,25 +169,36 @@ export async function bootstrap() {
   });
 
   // 立即启动 CLI，让提示符尽快出现（平台加载不阻塞交互）
-  startCLI();
+  getLogger().main.debug(`初始化 CLI 交互`);
+  neonaicCliProcessor.startCLI();
 
   // 日志输出与 REPL 提示符协作：每次输出先清掉旧提示符，输出后重绘新提示符
-  setConsoleHooks(erasePrompt, redrawPrompt);
+  neonaicLogger.setConsoleHooks(neonaicCliProcessor.erasePrompt, neonaicCliProcessor.redrawPrompt);
 
-  // 自动发现并加载扩展（无需硬编码路径）
-  await loadExtensions();
+  // 自动发现并加载扩展
+  getLogger().main.info(`正在加载可用拓展`);
+  const extResult = await neonaicExtensionManager.loadAll([...(await neonaicExtensionManager.scan()).keys()]);
+  getLogger().ext.info(`启动了${extResult.succeed.length}个拓展，另有${extResult.disabled.length}个拓展已被禁用。`);
+  // 逐个列出加载失败的拓展，否则失败会静默埋在 debug 级 dump 里
+  extResult.failed.forEach((item) => {
+    getLogger().ext.error(`拓展“${item.id}”加载失败：${item.error?.message ?? '未知原因'}`);
+  });
+  getLogger().ext.debug(extResult);
 
   // 安装权限管理命令（permission/perm）：需在 commandServer 就绪后，避免循环依赖
-  installPermissionCommands(registerCommand);
-  installConfigCommands(registerCommand);
+  getLogger().main.debug(`初始化惰性管理命令`);
+  neonaicPermissionServer.installPermissionCommands(neonaicCommandServer.registerCommand);
+  neonaicConfManager.installConfigCommands(neonaicCommandServer.registerCommand);
 
   // 按配置启动已启用的平台
+  getLogger().main.info(`正在加载 Platform Profile`);
   PlatformManager.instance.loadEnabled();
 
   // 监听 SIGNAL 等
+  getLogger().main.debug(`初始化 SIGNAL 监听`);
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
-  process.on('exit', () => releasePidLock(PID_FILE_PATH));
+  process.on('exit', () => neonaicPidManager.releasePidLock(PID_FILE_PATH));
 
   // 顶层未捕获异常：写崩溃报告后走安全关闭流程
   process.on('uncaughtException', (err) => {
@@ -198,4 +212,15 @@ export async function bootstrap() {
     getLogger().writeCrashReport(err);
     // shutdown('unhandledRejection');
   });
+
+  getLogger().main.info(`已启动“${neonaicConfManager.getBotName()}”，耗时 ${new Date() - when_started}ms。`);
 }
+
+export const neonaicEntry = {
+  DEBUGING,
+  ROOT_PATH,
+  APP_NAME,
+  APP_VERSION,
+  PID_FILE_PATH,
+  bootstrap,
+};

@@ -1,18 +1,3 @@
-/**
- * 带超时的 fetch，避免服务器无响应时长时间挂起。
- * @param {string} url
- * @param {number} timeout
- * @returns {Promise<Response>}
- */
-export async function fetchWithTimeout(url, timeout) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
-  try {
-    return await fetch(url, { signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 /**
  * 将任意值转为可读字符串：
