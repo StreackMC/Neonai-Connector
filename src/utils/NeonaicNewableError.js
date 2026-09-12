@@ -10,7 +10,18 @@ export class NeonaicError extends Error {
   get TIMESTAMP() { return this.#TIMESTAMP; };
 
   constructor(reason = "", cause = null) {
-    super(parseString(reason), { cause });
+    if (reason instanceof Error) {
+      // reason 是 Error ，开始语法糖
+      if (cause === undefined || cause === null) {
+        super(reason.message, { cause });
+      } else {
+        // 自动封装
+        super(reason.message, { cause: reason });
+      }
+    } else {
+      // reason 不是 Error，直接封装
+      super(parseString(reason), { cause });
+    }
     this.name = 'NeonaicError';
   }
 }
@@ -22,6 +33,16 @@ export class NeonaicCommandError extends NeonaicError {
   constructor(reason = "", cause = null) {
     super(reason, cause);
     this.name = 'NeonaicCommandError';
+  }
+}
+
+/**
+ * 拓展相关错误
+ */
+export class NeonaicExtensionError extends NeonaicError {
+  constructor(reason = "", cause = null) {
+    super(reason, cause);
+    this.name = 'NeonaicExtensionError';
   }
 }
 
