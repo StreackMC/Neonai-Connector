@@ -30,6 +30,6 @@ const COMMAND_ENUMS = {
   PERM_SUPERADMIN: 'superadmin',
 };
 
-export const NeonaicCommandInterface = {
+export const neonaicCommandInterface = {
   COMMAND_ENUMS,
 };

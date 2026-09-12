@@ -14,14 +14,14 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { platform, release, tmpdir } from 'node:os';
 
-import { NeonaicConfManager } from './confManager.js';
-import { NeonaicLogger, getLogger } from '../logger/Logger.js';
-import { NeonaicPidManager } from './pidManager.js';
-import { NeonaicCommandServer } from '../command/commandServer.js';
-import { NeonaicCommandInterface } from '../command/commandInterface.js';
-import { NeonaicPermissionServer } from '../command/permissionServer.js';
-import { NeonaicCliProcessor } from './cliProcessor.js';
-import { NeonaicPlatformManager, PlatformManager } from '../platform/platformManager.js';
+import { neonaicConfManager } from './confManager.js';
+import { neonaicLogger, getLogger } from '../logger/Logger.js';
+import { neonaicPidManager } from './pidManager.js';
+import { neonaicCommandServer } from '../command/commandServer.js';
+import { neonaicCommandInterface } from '../command/commandInterface.js';
+import { neonaicPermissionServer } from '../command/permissionServer.js';
+import { neonaicCliProcessor } from './cliProcessor.js';
+import { PlatformManager } from '../platform/platformManager.js';
 
 // ---- 常量 ----
 
@@ -35,13 +35,11 @@ const DEBUGING = process.argv.some((a) => a === '--debug=true' || a === '--debug
 /** 项目根路径 */
 const ROOT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 /** 项目名称 */
-const APP_NAME = NeonaicConfManager.getConfig(NeonaicConfManager.CONFIG_PATHS.app).getString('name', 'neonai-connector');
+const APP_NAME = neonaicConfManager.getConfig(neonaicConfManager.CONFIG_PATHS.app).getString('name', 'neonai-connector');
 /** 项目版本 */
-const APP_VERSION = NeonaicConfManager.getConfig(NeonaicConfManager.CONFIG_PATHS.app).getString('version', '0.0.0');
+const APP_VERSION = neonaicConfManager.getConfig(neonaicConfManager.CONFIG_PATHS.app).getString('version', '0.0.0');
 /** PID 锁文件路径 */
 const PID_FILE_PATH = resolve(ROOT_PATH, '.neonai.pid');
-/** 全局唯一ID */
-const UniqueID = function uid() { if (typeof uid._ !== 'number') uid._ = 0; uid._ += 1; return uid._; };
 
 // ---- 安全关闭 ----
 
@@ -53,7 +51,7 @@ async function shutdown(signal) {
   shuttingDown = true;
 
   // 先关闭 CLI，避免后续日志叠加在 readline prompt 上
-  NeonaicCliProcessor.stopCLI();
+  neonaicCliProcessor.stopCLI();
 
   getLogger().main.warn(`收到 ${signal}，正在关闭…`);
 
@@ -75,7 +73,7 @@ async function shutdown(signal) {
 
 // ---- 系统级 CLI 命令 ----
 
-NeonaicCommandServer.registerCommand('neonaic', 'version', function () {
+neonaicCommandServer.registerCommand('neonaic', 'version', function () {
   /** @type {import('../command/commandServer.js').NeonaicCommandContext} */
   const ctx = this;
 
@@ -109,7 +107,7 @@ NeonaicCommandServer.registerCommand('neonaic', 'version', function () {
   const D = '\x1b[2m';
   const R = '\x1b[0m';
 
-  const mayShowSys = NeonaicPermissionServer.checkPermissionFromContext(this);
+  const mayShowSys = neonaicPermissionServer.checkPermissionFromContext(this);
   const sysLine = mayShowSys ? (
     `${B}Node.js${R}   ${nodeVer}\n` +
     `${B}OS${R}        ${osVer}\n` +
@@ -130,26 +128,26 @@ NeonaicCommandServer.registerCommand('neonaic', 'version', function () {
   );
 }, { description: '显示版本与版权信息' });
 
-NeonaicCommandServer.registerCommand('neonaic', 'stop', () => {
+neonaicCommandServer.registerCommand('neonaic', 'stop', () => {
   shutdown('COMMAND');
-}, { description: '安全关闭服务', permissions: [[NeonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.commmand.stop"]] });
+}, { description: '安全关闭服务', permissions: [[neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.commmand.stop"]] });
 
 // ---- 启动 ----
 
 /** 启动流程 */
 async function bootstrap() {
   // PID锁
-  NeonaicPidManager.acquirePidLock(PID_FILE_PATH, getLogger());
+  neonaicPidManager.acquirePidLock(PID_FILE_PATH, getLogger());
   getLogger().main.info(`${APP_NAME} 服务启动`);
 
   // 调试模式分支
   if (DEBUGING) {
     // 调试模式：console 走原生输出，设置全局标志位，启用 $()
-    NeonaicLogger.setDebugMode(true);
+    neonaicLogger.setDebugMode(true);
     globalThis.$ = (input) => {
-      const args = NeonaicCommandServer.parseArgs(String(input));
+      const args = neonaicCommandServer.parseArgs(String(input));
       const [cmdName, cmdArgs] = args;
-      return NeonaicCommandServer.executeCommand(cmdName, { internalCall: true, privateExecutor: true }, ...cmdArgs);
+      return neonaicCommandServer.executeCommand(cmdName, { internalCall: true, privateExecutor: true }, ...cmdArgs);
     };
     getLogger().main.info('调试模式已启用，$(cmd) 可用');
   } else {
@@ -165,17 +163,17 @@ async function bootstrap() {
   });
 
   // 立即启动 CLI，让提示符尽快出现（平台加载不阻塞交互）
-  NeonaicCliProcessor.startCLI();
+  neonaicCliProcessor.startCLI();
 
   // 日志输出与 REPL 提示符协作：每次输出先清掉旧提示符，输出后重绘新提示符
-  NeonaicLogger.setConsoleHooks(NeonaicCliProcessor.erasePrompt, NeonaicCliProcessor.redrawPrompt);
+  neonaicLogger.setConsoleHooks(neonaicCliProcessor.erasePrompt, neonaicCliProcessor.redrawPrompt);
 
   // 自动发现并加载扩展（无需硬编码路径）
   // todo: refactor
 
   // 安装权限管理命令（permission/perm）：需在 commandServer 就绪后，避免循环依赖
-  NeonaicPermissionServer.installPermissionCommands(NeonaicCommandServer.registerCommand);
-  NeonaicConfManager.installConfigCommands(NeonaicCommandServer.registerCommand);
+  neonaicPermissionServer.installPermissionCommands(neonaicCommandServer.registerCommand);
+  neonaicConfManager.installConfigCommands(neonaicCommandServer.registerCommand);
 
   // 按配置启动已启用的平台
   PlatformManager.instance.loadEnabled();
@@ -183,7 +181,7 @@ async function bootstrap() {
   // 监听 SIGNAL 等
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
-  process.on('exit', () => NeonaicPidManager.releasePidLock(PID_FILE_PATH));
+  process.on('exit', () => neonaicPidManager.releasePidLock(PID_FILE_PATH));
 
   // 顶层未捕获异常：写崩溃报告后走安全关闭流程
   process.on('uncaughtException', (err) => {
@@ -199,12 +197,11 @@ async function bootstrap() {
   });
 }
 
-export const NeonaicEntry = {
+export const neonaicEntry = {
   DEBUGING,
   ROOT_PATH,
   APP_NAME,
   APP_VERSION,
   PID_FILE_PATH,
-  UniqueID,
   bootstrap,
 };

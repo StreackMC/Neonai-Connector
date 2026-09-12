@@ -14,8 +14,8 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { createRequire } from 'node:module';
 
-import { NeonaicConfManager } from '../system/confManager.js';
-import { NeonaicLog4jsInject } from './log4js_inject.js';
+import { neonaicConfManager } from '../system/confManager.js';
+import { neonaicLog4jsInject } from './log4js_inject.js';
 
 // 本模块自算项目根路径，避免与 entry.js 形成循环依赖
 // Logger.js 位于 <根>/src/logger/，故向上 2 层为项目根
@@ -137,7 +137,7 @@ function setConsoleHooks(before, after) {
  * @apiNote 本函数为全项目通用文本化工具，被大量模块直接引用；为避免调用点过度冗长，
  *          它保持顶层具名导出，不收纳进 NeonaicLogger 对象。
  */
-export function parseString(val, short = !(DEBUGING || NeonaicConfManager.getConfig(NeonaicConfManager.CONFIG_PATHS.main).getBoolean('detailedLog', false)), processString = false) {
+export function parseString(val, short = !(DEBUGING || neonaicConfManager.getConfig(neonaicConfManager.CONFIG_PATHS.main).getBoolean('detailedLog', false)), processString = false) {
   // 基础类型：字符串加单引号，并转义特殊字符
   if (typeof val === 'string') {
     return (processString === true) ? `'${val.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t')}'` : val;
@@ -377,7 +377,7 @@ function injectLog4js(emit) {
     return;
   }
 
-  NeonaicLog4jsInject.putEmit(emit);
+  neonaicLog4jsInject.putEmit(emit);
   log4js.configure({
     appenders: {
       // 使用自定义 appender
@@ -400,14 +400,15 @@ function injectLog4js(emit) {
  */
 export function getLogger() {
   if (!_logger) {
-    _logger = createLogger({ logDir: './logs', maxFileSize: NeonaicConfManager.getConfig(NeonaicConfManager.CONFIG_PATHS.main).getInt('maxLogFileSize', 1048576) });
+    _logger = createLogger({ logDir: './logs', maxFileSize: neonaicConfManager.getConfig(neonaicConfManager.CONFIG_PATHS.main).getInt('maxLogFileSize', 1048576) });
   }
   return _logger;
 }
 
-export const NeonaicLogger = {
+export const neonaicLogger = {
   setDebugMode,
   getDebugMode,
   setConsoleHooks,
   createLogger,
+  getLogger,
 };

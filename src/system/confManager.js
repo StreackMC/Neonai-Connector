@@ -9,7 +9,7 @@
  * 仅支持 JSON5 格式（覆盖 JSON / JSONC）。
  */
 
-import { NeonaicCommandInterface } from '../command/commandInterface.js';
+import { neonaicCommandInterface } from '../command/commandInterface.js';
 import { getLogger } from '../logger/Logger.js';
 import { NeonaicConfig } from './NeonaicConfig.js';
 
@@ -43,7 +43,7 @@ function reloadCmd() {
   return;
 }
 reloadCmd.meta = {
-  permissions: [[NeonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, 'neonaic.command.reload']],
+  permissions: [[neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, 'neonaic.command.reload']],
   description: '立即重载配置文件。对部分功能不生效，需要手动重启。',
 };
 
@@ -64,7 +64,7 @@ function getBotSubName() {
   return getConfig(CONFIG_PATHS.main).getString('subname');
 }
 
-export const NeonaicConfManager = {
+export const neonaicConfManager = {
   CONFIG_PATHS,
   getConfig,
   installConfigCommands,

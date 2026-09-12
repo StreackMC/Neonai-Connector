@@ -5,10 +5,10 @@
  * 2. 无匹配 → AI 回复
  */
 
-import { NeonaicCommandServer } from '../command/commandServer.js';
-import { NeonaicAI } from './ai.js';
+import { neonaicCommandServer } from '../command/commandServer.js';
+import { neonaicAI } from './AI.js';
 import { getLogger } from '../logger/Logger.js';
-import { NeonaicConfManager } from '../system/confManager.js';
+import { neonaicConfManager } from '../system/confManager.js';
 import stripAnsi from 'strip-ansi';
 
 /**
@@ -37,7 +37,7 @@ async function resolveReply(msg, options) {
 
   // ---- 命令匹配 ----
   if (config.resolveCommand && trimmed) {
-    const prefixes = NeonaicConfManager.getConfig(NeonaicConfManager.CONFIG_PATHS.main).getList('prefix');
+    const prefixes = neonaicConfManager.getConfig(neonaicConfManager.CONFIG_PATHS.main).getList('prefix');
     for (const prefix of prefixes) {
       if (typeof prefix !== 'string' || !prefix) continue;
       if (!trimmed.startsWith(prefix)) continue;
@@ -45,33 +45,33 @@ async function resolveReply(msg, options) {
       /** 无前缀的命令文本 */
       const cmdStr = trimmed.slice(prefix.length)./* 防止 "/ cmd" 这样的输入 */trimStart();
       /** 解析完成的参数列表 */
-      const args = NeonaicCommandServer.parseArgs(cmdStr);
-      if (/* 没有解析到命令 */!args[0]) return `“${NeonaicConfManager.getBotName()}”无法执行“${trimmed}”，因为“${NeonaicConfManager.getBotName()}”无法理解这个命令。`;
+      const args = neonaicCommandServer.parseArgs(cmdStr);
+      if (/* 没有解析到命令 */!args[0]) return `“${neonaicConfManager.getBotName()}”无法执行“${trimmed}”，因为“${neonaicConfManager.getBotName()}”无法理解这个命令。`;
 
       const [cmdName, cmdArgs] = args;
-      if (/* 命令不存在 */!NeonaicCommandServer.hasCommand(cmdName)) return `“${NeonaicConfManager.getBotName()}”无法执行“${cmdName}”，因为“${NeonaicConfManager.getBotName()}”无法理解这个命令。`;
+      if (/* 命令不存在 */!neonaicCommandServer.hasCommand(cmdName)) return `“${neonaicConfManager.getBotName()}”无法执行“${cmdName}”，因为“${neonaicConfManager.getBotName()}”无法理解这个命令。`;
 
       const ctx = config.resolveCommandWith || {};
       try {
-        const result = await NeonaicCommandServer.executeCommandSilent(cmdName, ctx, ...cmdArgs);
-        return result != null ? stripAnsi(String(result)).trim() : `“${NeonaicConfManager.getBotName()}”成功执行了“${cmdName}”。`;
+        const result = await neonaicCommandServer.executeCommandSilent(cmdName, ctx, ...cmdArgs);
+        return result != null ? stripAnsi(String(result)).trim() : `“${neonaicConfManager.getBotName()}”成功执行了“${cmdName}”。`;
       } catch (err) {
         getLogger().cmd.warn(`[msgIn] 无法以“`, ctx,`”执行命令“${cmdName}”: ${err.message}`);
-        return stripAnsi(`“${NeonaicConfManager.getBotName()}”无法执行“${cmdName}”，因为“${stripAnsi(err.message)}”。`);
+        return stripAnsi(`“${neonaicConfManager.getBotName()}”无法执行“${cmdName}”，因为“${stripAnsi(err.message)}”。`);
       }
     }
   }
 
   // ---- AI 兜底 ----
-  if (!config.AI) return `（${NeonaicConfManager.getBotName()}可能在看着你，但并未言语）`;
+  if (!config.AI) return `（${neonaicConfManager.getBotName()}可能在看着你，但并未言语）`;
   try {
-    return stripAnsi(await NeonaicAI.askAI(msg, config.AIlist, config.resolveCommandWith?.executor)).trim();
+    return stripAnsi(await neonaicAI.askAI(msg, config.AIlist, config.resolveCommandWith?.executor)).trim();
   } catch (err) {
     getLogger().tool.error(`[msgIn] AI 回复失败: ${err.message}`);
-    return `（${NeonaicConfManager.getBotName()}静静地看着你，并未言语）`;
+    return `（${neonaicConfManager.getBotName()}静静地看着你，并未言语）`;
   }
 }
 
-export const NeonaicMessageIn = {
+export const neonaicMessageIn = {
   resolveReply,
 };

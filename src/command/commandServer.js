@@ -15,9 +15,9 @@
  *   { executor, internalCall, timestamp, this: originalThis }
  */
 
-import { NeonaicPermissionServer } from './permissionServer.js';
+import { neonaicPermissionServer } from './permissionServer.js';
 import { getLogger, parseString } from '../logger/Logger.js';
-import { NeonaicCommandInterface } from './commandInterface.js';
+import { neonaicCommandInterface } from './commandInterface.js';
 import { NeonaicNewable } from "../system/NeonaicNewableClass.js";
 
 // ---- 颜色 ----
@@ -160,12 +160,12 @@ function checkCommandPerms(cmdName, requiredPerms, executor) {
       // OR 组：至少满足一项
       let anyPass = false;
       for (const perm of item) {
-        if (NeonaicPermissionServer.checkSinglePermission(executor, perm)) { anyPass = true; break; }
+        if (neonaicPermissionServer.checkSinglePermission(executor, perm)) { anyPass = true; break; }
       }
       if (!anyPass) return `缺少权限: 须满足 [${item.join(', ')}] 其中之一`;
     } else {
       // AND 项：必须满足
-      if (!NeonaicPermissionServer.checkSinglePermission(executor, item)) {
+      if (!neonaicPermissionServer.checkSinglePermission(executor, item)) {
         const label = item.startsWith('!') ? `${item}（须缺失）` : item;
         return `缺少权限: ${label}`;
       }
@@ -289,9 +289,9 @@ export class NeonaicCommandContext extends NeonaicNewable {
 
 /** 尝试解析执行者 @return {String} */
 function resolveExecutor(stringLike) {
-  /* 如果是 null/undefined 直接记作未知 */if (stringLike === undefined || stringLike === null) return NeonaicCommandInterface.COMMAND_ENUMS.FROM_UNKNOW;
+  /* 如果是 null/undefined 直接记作未知 */if (stringLike === undefined || stringLike === null) return neonaicCommandInterface.COMMAND_ENUMS.FROM_UNKNOW;
   /* 否则转为文本并删掉首尾空格 */if (typeof stringLike !== 'string') stringLike = parseString(stringLike).trim();
-  /* 空文本也视作未知 */if (stringLike.length == 0) return NeonaicCommandInterface.COMMAND_ENUMS.FROM_UNKNOW;
+  /* 空文本也视作未知 */if (stringLike.length == 0) return neonaicCommandInterface.COMMAND_ENUMS.FROM_UNKNOW;
   return stringLike;
 }
 
@@ -358,7 +358,7 @@ registerCommand('neonaic', 'sudo', function (who, cmd, ...args) {
 }, {
   description: '以某个身份执行命令，会继承当前上下文。',
   usage: "sudo <who> <cmd> [args]",
-  permissions: [[NeonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.command.sudo"]],
+  permissions: [[neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.command.sudo"]],
 });
 
 registerCommand('neonaic', 'runuser', function (who, cmd, ...args) {
@@ -366,10 +366,10 @@ registerCommand('neonaic', 'runuser', function (who, cmd, ...args) {
 }, {
   description: '切换到某个身份并执行命令，会重置上下文。',
   usage: "runuser <who> <cmd> [args]",
-  permissions: [[NeonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.command.sudo"]],
+  permissions: [[neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.command.sudo"]],
 });
 
-export const NeonaicCommandServer = {
+export const neonaicCommandServer = {
   parseArgs,
   registerCommand,
   checkCommandPerms,

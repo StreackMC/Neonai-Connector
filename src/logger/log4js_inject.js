@@ -44,6 +44,6 @@ export const configure = (config, layouts, findAppender, levels) => /* return */
   }
 });
 
-export const NeonaicLog4jsInject = {
+export const neonaicLog4jsInject = {
   putEmit,
 };

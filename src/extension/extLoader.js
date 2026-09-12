@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { parseString } from '../logger/Logger.js';
-import { NeonaicConfManager } from "../system/confManager.js";
+import { neonaicConfManager } from "../system/confManager.js";
 import { NeonaicConfig } from "../system/NeonaicConfig.js";
 import { NeonaicNewable } from "../system/NeonaicNewableClass.js";
 
@@ -48,7 +48,7 @@ export class NeonaicExtItem extends NeonaicNewable {
     const entry_file_rel = relative(path, entry_file);
     if (entry_file_rel.startsWith('..') || isAbsolute(entry_file_rel)) {
       // 阻止路径穿越
-      throw new Error(`拓展“${parseString(this.fullname)}”的加载会产生意外访问，因此“${NeonaicConfManager.getBotName()}”拒绝加载。`);
+      throw new Error(`拓展“${parseString(this.fullname)}”的加载会产生意外访问，因此“${neonaicConfManager.getBotName()}”拒绝加载。`);
     }
     if (!existsSync(entry_file)) {
       // 文件不存在
@@ -85,7 +85,7 @@ export class NeonaicExtItem extends NeonaicNewable {
     if (!this.#instance) {
       this.#instance = await import(this.#entry);
     };
-    if (typeof this.#instance.onEnable !== 'function' || typeof this.#instance.onDisable !== 'function') throw new Error(`拓展“${this.fullname}”没有提供有效的入口函数，因此“${NeonaicConfManager.getBotName()}”无法加载。`);
+    if (typeof this.#instance.onEnable !== 'function' || typeof this.#instance.onDisable !== 'function') throw new Error(`拓展“${this.fullname}”没有提供有效的入口函数，因此“${neonaicConfManager.getBotName()}”无法加载。`);
     await this.#instance.onEnable.apply(this, args);
   }
   /** 禁用拓展 @apiNote 警惕内存泄露 */

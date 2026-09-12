@@ -15,8 +15,8 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import JSON5 from 'json5';
 import { parseString } from '../logger/Logger.js';
-import { NeonaicConfManager } from '../system/confManager.js';
-import { NeonaicCommandInterface } from './commandInterface.js';
+import { neonaicConfManager } from '../system/confManager.js';
+import { neonaicCommandInterface } from './commandInterface.js';
 
 // 注：本模块不 import commandServer.js 的运行期能力，避免循环依赖。
 // 权限命令由组合根（entry.js）通过 installPermissionCommands(registerCommand) 安装。
@@ -393,7 +393,7 @@ function cmd(type, user, permission, status, lasting) {
   const ctx = this;
 
   // 不允许大庭广众下进行权限操作
-  if (!ctx.privateExecutor) return `“${NeonaicConfManager.getBotName()}”未能完成操作，因为当前上下文不是私密的。`;
+  if (!ctx.privateExecutor) return `“${neonaicConfManager.getBotName()}”未能完成操作，因为当前上下文不是私密的。`;
 
   if (!type || (type !== 'set' && type !== 'unset')) {
     return `用法: ${cmd.meta.usage}`;
@@ -490,7 +490,7 @@ function parseDuration(input) {
  */
 function installPermissionCommands(registerCommand) {
   registerCommand('neonaic', 'permission', cmd, {
-    permissions: [[NeonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.command.permission"]],
+    permissions: [[neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.command.permission"]],
     description: cmd.meta.description,
     usage: cmd.meta.usage,
     alias: ["perm"]
@@ -511,13 +511,13 @@ function installPermissionCommands(registerCommand) {
       result += `当前上下文不是私密的，已自动抹去一些隐私信息。\n`;
     }
 
-    result += (checkPermission(singalExecutor, NeonaicCommandInterface.COMMAND_ENUMS.PERM_ADMIN)) ? "✓ 你的身份是管理员\n" : "× 你的身份不是管理员\n";
-    result += (checkPermission(singalExecutor, NeonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN)) ? "✓ 你的身份是超级管理员\n" : "× 你的身份不是超级管理员\n";
+    result += (checkPermission(singalExecutor, neonaicCommandInterface.COMMAND_ENUMS.PERM_ADMIN)) ? "✓ 你的身份是管理员\n" : "× 你的身份不是管理员\n";
+    result += (checkPermission(singalExecutor, neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN)) ? "✓ 你的身份是超级管理员\n" : "× 你的身份不是超级管理员\n";
     if (ctx.internalCall) {
       result += "✓ 你的上下文可以无视大部分权限检查";
     } else {
-      result += (checkPermissionFromContext(ctx, NeonaicCommandInterface.COMMAND_ENUMS.PERM_ADMIN)) ? "✓ 你的上下文是管理员\n" : "× 你的上下文不是管理员\n";
-      result += (checkPermissionFromContext(ctx, NeonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN)) ? "✓ 你的上下文是超级管理员\n" : "× 你的上下文不是超级管理员\n";
+      result += (checkPermissionFromContext(ctx, neonaicCommandInterface.COMMAND_ENUMS.PERM_ADMIN)) ? "✓ 你的上下文是管理员\n" : "× 你的上下文不是管理员\n";
+      result += (checkPermissionFromContext(ctx, neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN)) ? "✓ 你的上下文是超级管理员\n" : "× 你的上下文不是超级管理员\n";
     }
     return result;
   }, {
@@ -541,7 +541,7 @@ function blurText(origin = "", keptStart = 1, keptEnd = 1, castRate = 0.6) {
   return start + '*'.repeat(Math./* 理论上这里不会小于1，但是防御一下使意图明确 */max(Math.ceil(middle.length * castRate), 1)) + end;
 }
 
-export const NeonaicPermissionServer = {
+export const neonaicPermissionServer = {
   checkSinglePermission,
   checkPermission,
   checkPermissionFromContext,

@@ -10,8 +10,8 @@
  */
 
 import { createInterface } from 'node:readline';
-import { NeonaicCommandServer } from '../command/commandServer.js';
-import { NeonaicCommandInterface } from '../command/commandInterface.js';
+import { neonaicCommandServer } from '../command/commandServer.js';
+import { neonaicCommandInterface } from '../command/commandInterface.js';
 import { getLogger } from '../logger/Logger.js';
 
 // ---- 颜色 ----
@@ -38,7 +38,7 @@ function startCLI() {
     prompt: `${CYAN}>${R} `,
     history: [],
     completer: (line) => {
-      const { hits, prefix } = NeonaicCommandServer.inferNext(line);
+      const { hits, prefix } = neonaicCommandServer.inferNext(line);
       if (hits.length === 1) return [hits, prefix];
       if (hits.length > 1) {
         // 多候选项：延迟写入一行后重新 prompt，用户继续输入时自然消失
@@ -59,12 +59,12 @@ function startCLI() {
   _rl.on('line', async (line) => {
     const trimmed = line.trim();
     if (trimmed) {
-      const args = NeonaicCommandServer.parseArgs(trimmed);
+      const args = neonaicCommandServer.parseArgs(trimmed);
       const [cmdName, cmdArgs] = args;
       try {
-        const result = await NeonaicCommandServer.executeCommandSilent(cmdName, {
+        const result = await neonaicCommandServer.executeCommandSilent(cmdName, {
           internalCall: true, privateExecutor: true,
-          executor: NeonaicCommandInterface.COMMAND_ENUMS.FROM_CONSOLE
+          executor: neonaicCommandInterface.COMMAND_ENUMS.FROM_CONSOLE
         }, ...cmdArgs);
         if (result) getLogger().main.info(`${result}`);
       } catch (err) {
@@ -104,7 +104,7 @@ function redrawPrompt() {
   if (_rl) _rl.prompt();
 }
 
-export const NeonaicCliProcessor = {
+export const neonaicCliProcessor = {
   startCLI,
   stopCLI,
   refreshCLI,

@@ -266,6 +266,6 @@ function resolveUri(uri, options = {}) {
   })();
 }
 
-export const NeonaicPlatformUtils = {
+export const neonaicPlatformUtils = {
   resolveUri,
 };
