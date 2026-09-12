@@ -4,10 +4,21 @@
     "lib": [
       "ES2023"
     ],
+    // 项目是 Node ESM（package.json 的 type: module，且 import 一律带 .js 后缀），
+    // 必须用 NodeNext 才能让语言服务正确解析 node: 内置模块与三方包的 exports 映射。
+    // 不设此项时 TS 会按 target 推断出 module=ES2015，进而推断 moduleResolution=Classic，
+    // 那套算法读不懂 package.json 的 exports/types，自动 import 会大面积失灵。
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "allowJs": true,
+    "checkJs": false,
+    "maxNodeModuleJsDepth": 0
   },
   "include": [
     "main.js",
-    "src/**.js"
+    "debug.cjs",
+    "src/**/*.js",
+    "extensions/**/*.js"
   ],
   "exclude": [
     "node_modules",

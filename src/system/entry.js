@@ -138,9 +138,11 @@ neonaicCommandServer.registerCommand('neonaic', 'stop', () => {
 
 /** 启动流程 */
 async function bootstrap() {
+  const when_started = new Date();
+
   // PID锁
   neonaicPidManager.acquirePidLock(PID_FILE_PATH, getLogger());
-  getLogger().main.info(`${APP_NAME} 服务启动`);
+  getLogger().main.info(`正在启动 ${APP_NAME} v${APP_VERSION}`);
 
   // 调试模式分支
   if (DEBUGING) {
@@ -152,13 +154,14 @@ async function bootstrap() {
       const result = neonaicCommandServer.executeCommand(cmdName, { internalCall: true, privateExecutor: true }, ...cmdArgs);
       return result;
     };
-    getLogger().main.info('调试模式已启用，$(cmd) 可用');
+    getLogger().main.info('调试模式已启用，$(cmd) 可用。也可使用 await $(cmd) 解决 Promise 问题。');
   } else {
     // 正常模式：劫持 console 到日志系统
     globalThis.$ = null;
     getLogger().redirectConsole(true);
   }
 
+  getLogger().main.debug(`初始化平台管理器`);
   // 初始化平台管理器（单例）
   new PlatformManager({
     configPath: resolve(ROOT_PATH, 'secret.json'),
@@ -166,23 +169,33 @@ async function bootstrap() {
   });
 
   // 立即启动 CLI，让提示符尽快出现（平台加载不阻塞交互）
+  getLogger().main.debug(`初始化 CLI 交互`);
   neonaicCliProcessor.startCLI();
 
   // 日志输出与 REPL 提示符协作：每次输出先清掉旧提示符，输出后重绘新提示符
   neonaicLogger.setConsoleHooks(neonaicCliProcessor.erasePrompt, neonaicCliProcessor.redrawPrompt);
 
   // 自动发现并加载扩展
-  await neonaicExtensionManager.scan();
-  await neonaicExtensionManager.loadAll();
+  getLogger().main.info(`正在加载可用拓展`);
+  const extResult = await neonaicExtensionManager.loadAll([...(await neonaicExtensionManager.scan()).keys()]);
+  getLogger().ext.info(`启动了${extResult.succeed.length}个拓展，另有${extResult.disabled.length}个拓展已被禁用。`);
+  // 逐个列出加载失败的拓展，否则失败会静默埋在 debug 级 dump 里
+  extResult.failed.forEach((item) => {
+    getLogger().ext.error(`拓展“${item.id}”加载失败：${item.error?.message ?? '未知原因'}`);
+  });
+  getLogger().ext.debug(extResult);
 
   // 安装权限管理命令（permission/perm）：需在 commandServer 就绪后，避免循环依赖
+  getLogger().main.debug(`初始化惰性管理命令`);
   neonaicPermissionServer.installPermissionCommands(neonaicCommandServer.registerCommand);
   neonaicConfManager.installConfigCommands(neonaicCommandServer.registerCommand);
 
   // 按配置启动已启用的平台
+  getLogger().main.info(`正在加载 Platform Profile`);
   PlatformManager.instance.loadEnabled();
 
   // 监听 SIGNAL 等
+  getLogger().main.debug(`初始化 SIGNAL 监听`);
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('exit', () => neonaicPidManager.releasePidLock(PID_FILE_PATH));
@@ -199,6 +212,8 @@ async function bootstrap() {
     getLogger().writeCrashReport(err);
     // shutdown('unhandledRejection');
   });
+
+  getLogger().main.info(`已启动“${neonaicConfManager.getBotName()}”，耗时 ${new Date() - when_started}ms。`);
 }
 
 export const neonaicEntry = {

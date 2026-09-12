@@ -6,7 +6,7 @@
  */
 
 import { neonaicCommandServer } from '../command/commandServer.js';
-import { neonaicAI } from './AI.js';
+import { neonaicAI } from './ai.js';
 import { getLogger } from '../logger/Logger.js';
 import { neonaicConfManager } from '../system/confManager.js';
 import stripAnsi from 'strip-ansi';
@@ -17,7 +17,7 @@ import stripAnsi from 'strip-ansi';
  * @param {boolean} [options.AI=true]
  * @param {string[]|string} [options.AIlist="*"]
  * @param {boolean} [options.resolveCommand=true] 是否要执行命令
- * @param {import('./commandServer.js').NeonaicCommandContext} options.resolveCommandWith 执行时命令上下文
+ * @param {import('../command/commandServer.js').NeonaicCommandContext} options.resolveCommandWith 执行时命令上下文
  * @returns {Promise<string>}
  */
 async function resolveReply(msg, options) {
@@ -26,7 +26,7 @@ async function resolveReply(msg, options) {
     AI: true,
     AIlist: '*',
     resolveCommand: true,
-    /** @type { import('./commandServer.js').NeonaicCommandContext } */
+    /** @type { import('../command/commandServer.js').NeonaicCommandContext } */
     resolveCommandWith: {
       executor: [this],
       this: this,
