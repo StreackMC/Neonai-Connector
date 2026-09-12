@@ -20,7 +20,8 @@ import { NeonaicAI } from '../../src/message/ai.js';
 import { NeonaicCommandServer } from '../../src/command/commandServer.js';
 import { NeonaicConfManager } from '../../src/system/confManager.js';
 import { getLogger } from '../../src/logger/Logger.js';
-import { fetchWithTimeout, formatDateTime, formatMcTime } from "./utils.js";
+import { formatDateTime, formatMcTime } from "./utils.js";
+import { neonaicNetwork } from '../../src/utils/network.js';
 
 // -- Tools --
 /** TPS 数值格式化：负数（如 -1 表示无数据）显示为 N/A */
@@ -99,7 +100,7 @@ function formatStatus(data, name) {
 async function fetchStatus(address) {
   const url = address || DEFAULT_ADDRESS;
   try {
-    const res = await fetchWithTimeout(url, TIMEOUT_MS);
+    const res = await neonaicNetwork.fetch(url, TIMEOUT_MS);
     if (!res.ok) {
       getLogger().main.warn(`[mc] 状态接口返回非 2xx: ${res.status}`);
       return { ok: false, reason: 'offline' };
@@ -162,7 +163,7 @@ NeonaicAI.registerAITool("joyous", "worldMeta", {
   }),
   execute: async ({ address }) => {
     try {
-      const res = await fetchWithTimeout(address || DEFAULT_ADDRESS, TIMEOUT_MS);
+      const res = await neonaicNetwork.fetch(address || DEFAULT_ADDRESS, TIMEOUT_MS);
       if (!res.ok) {
         getLogger().main.warn(`[mc] 状态接口返回非 2xx: ${res.status}`);
         return "无法获取，接口响应不对。";
