@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { generateText, streamText, tool, stepCountIs } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import JSON5 from 'json5';
+import z from 'zod';
 
 import { neonaicConfManager } from '../system/confManager.js';
 import { getLogger } from '../logger/Logger.js';
@@ -25,7 +26,6 @@ import { parseString } from '../utils/text.js';
 import { neonaicCommandServer } from '../command/commandServer.js';
 import { neonaicCommandInterface } from '../command/commandInterface.js';
 import { neonaicPermissionServer } from '../command/permissionServer.js';
-import z from 'zod';
 import { NeonaicIllegalArgumentError, NeonaicIllegalStateError, NeonaicNetworkError } from '../utils/NeonaicNewableError.js';
 import { neonaicFileSystem } from '../utils/io.js';
 
@@ -324,167 +324,6 @@ async function askAI(userMessage, AIlist, caller) {
   let detail = '所有 AI Profile 请求失败: ';
   errors.forEach((v, k) => { detail += `${k}: "${String(v).replace(/\n/g, '\\n')}"; `; });
   throw new NeonaicNetworkError(detail);
-}
-
-/**
- * @typedef {Object} NeonaicTextModerateResult
- * @property {boolean} [available=true] 是否可用，如果为否大部分参数都为 null
- * @property {number} score 恶意语言得分，取值 0~1，越高越恶意
- * @property {String} resolver 判分模型
- * @property {boolean} safe 是否安全
- * @property {boolean} unsafe 是否不安全
- * @property {boolean} refusal 是否拒绝
- * @property {String} category 文本分类
- */
-
-/**
- * @param {string} inputs 待检测文本
- * @returns {Promise<NeonaicTextModerateResult>} 恶意文本概率
- */
-export async function isModerate(inputs) {
-  // 读取 moderate 配置（config/main.json）：enabled 决定是否启用，accualre 为硬件加速
-  const moderateCfg = getConfig(CONFIG_PATHS.main).getSection('moderate') ?? {};
-
-  // 审核未启用：不拦截（available=false 表示过滤器未在运行，按安全放行处理）
-  if (moderateCfg.enabled === false) {
-    return { available: false, score: 0, resolver: null, safe: true, unsafe: false, refusal: false, category: null };
-  }
-
-  const moderator = await loadModerator();
-  if (!moderator) {
-    // 模型不可用：按 typedef 约定，available=false 且其余参数为 null
-    return { available: false, score: 0, resolver: null, safe: null, unsafe: null, refusal: null, category: null };
-  }
-
-  try {
-    const reply = await moderator.call(String(inputs ?? ''));
-    const r = classifyReply(reply);
-    getLogger().tool.debug(`审核(${moderator.id}): ${JSON.stringify(r)} reply=${reply.slice(0, 160)}`);
-    return { available: true, resolver: moderator.id, ...r };
-  } catch (err) {
-    getLogger().tool.error(`审核调用失败: ${err?.message ?? err}`);
-    return { available: false, score: 0, resolver: null, safe: null, unsafe: null, refusal: null, category: null };
-  }
-}
-
-// ---- 文本审核（内容安全）内部实现 ----
-
-/**
- * 审核模型候选 id。
- * @huggingface/transformers 需 ONNX 权重（运行时从 HF Hub 下载并缓存到本地），
- * 故按优先级尝试 onnx-community 转换版与官方仓库。
- */
-const MODERATE_MODEL_CANDIDATES = [
-  'onnx-community/Qwen3-Guard-Gen-4B-ONNX',
-  'onnx-community/Qwen3-Guard-Gen-0.6B-ONNX',
-  'mickjeon/qwen3guard-0.6b-onnx',
-  'nxp/Qwen3Guard-Gen-0.6B-ONNX',
-];
-
-/** 审核生成的采样参数：力求确定性，短输出即可容纳 safe/unsafe 判定 */
-const MODERATE_GEN = { max_new_tokens: 96, do_sample: false };
-
-/** 审核模型加载 Promise（模块级单例，全局只加载一次） */
-let _moderatorPromise = null;
-
-/**
- * 懒加载审核模型（text-generation pipeline）。
- * @returns {Promise<{ id: string, call: (text: string) => Promise<string> } | null>}
- *   返回 null 表示所有候选模型均加载失败
- */
-function loadModerator() {
-  if (_moderatorPromise) return _moderatorPromise;
-  _moderatorPromise = (async () => {
-    const { pipeline, env } = await import('@huggingface/transformers');
-    const moderateCfg = getConfig(CONFIG_PATHS.main).getSection('moderate') ?? {};
-    // 硬件加速（device），如 'mps'；未配置则用库默认（CPU）
-    const accualre = (typeof moderateCfg.accualre === 'string' && moderateCfg.accualre.trim()) ? moderateCfg.accualre.trim() : 'auto';
-    // dtype 'q8'：8 位量化；device 来自配置（如 mps/cpu）
-    const loadOpts = { dtype: 'q8', device: accualre };
-    
-    let lastErr;
-    for (const modelId of MODERATE_MODEL_CANDIDATES) {
-      try {
-        getLogger().tool.info(`请求审核模型: ${modelId} (device=${accualre})`);
-        env.cacheDir = resolve(ROOT_PATH, "models");
-        if (moderateCfg?.mirror?.trim()) env.remoteHost = moderateCfg.mirror.trim();
-        const gen = await pipeline('text-generation', modelId, loadOpts);
-        getLogger().tool.info(`审核模型就绪: ${modelId} (device=${accualre})`);
-        return {
-          id: modelId,
-          async call(text) {
-            const messages = [{ role: 'user', content: text }];
-            const out = await gen(messages, MODERATE_GEN);
-            const last = out?.[0]?.generated_text;
-            // chat 输入 → generated_text 为消息数组，assistant 为末条；字符串输入则直接为文本
-            const reply = Array.isArray(last) ? (last.at(-1)?.content ?? '') : (last ?? '');
-            return String(reply).trim();
-          },
-        };
-      } catch (err) {
-        lastErr = err;
-        getLogger().tool.warn(`审核模型加载失败 ${modelId}: ${err?.message ?? err}`);
-      }
-    }
-    getLogger().tool.error(`所有审核模型均不可用: ${lastErr?.message ?? lastErr}`);
-    return null;
-  })();
-  return _moderatorPromise;
-}
-
-/**
- * 将审核模型输出解析为结构化结果。
- * 兼容中英文判定词，含否定短语排除（如 "not safe"）。
- * @param {string} reply 模型生成的判定文本
- * @returns {{ score: number, safe: boolean, unsafe: boolean, refusal: boolean, category: string|null }}
- */
-function classifyReply(reply) {
-  const s = String(reply ?? '').toLowerCase();
-
-  // 违规类别（顺序即命中优先级）
-  const CATEGORY_PATTERNS = [
-    ['sexual', /sex(?:ual|y)?|色情|露骨|淫|成人内容/],
-    ['violence', /violen\w*|暴力|血腥|残忍/],
-    ['hate', /\bhate\b|仇恨|歧视/],
-    ['harassment', /harass\w*|骚扰|霸凌/],
-    ['self-harm', /self[ -]harm|自残|自杀/],
-    ['explicit', /explicit|露骨/],
-    ['dangerous-illegal', /dangerous|illegal|犯罪|违法|毒品|武器|危险/],
-  ];
-
-  // 不安全信号（含否定式 not safe）
-  const unsafeHit =
-    /\bunsafe\b/.test(s) ||
-    /not safe/.test(s) ||
-    /\bharmful\b|\bdangerous\b|\bexplicit\b/.test(s) ||
-    /不安全|有害|危险|违规|违法|色情|暴力|歧视|仇恨|自残/.test(s);
-
-  // 安全信号（仅在无 unsafe 信号时判定为安全）
-  const safeHit =
-    !unsafeHit &&
-    (/\bsafe\b/.test(s) || /\bno (risk|problem)\b/.test(s) ||
-     /\ballowed\b|\bpermitted\b/.test(s) || /安全|正常|无风险|无违规|合规/.test(s));
-
-  // 提取类别
-  let category = null;
-  for (const [name, re] of CATEGORY_PATTERNS) {
-    if (re.test(s)) { category = name; break; }
-  }
-
-  // 得分
-  const unsafe = !!unsafeHit;
-  let score;
-  if (unsafe) score = category ? 0.9 : 1.0;
-  else if (safeHit) score = 0;
-  else score = 0.5; // 无法明确判定 → 中性偏疑
-
-  return {
-    score,
-    safe: !!safeHit,
-    unsafe,
-    refusal: unsafe, // 内容不安全 → 建议拒绝
-    category,
-  };
 }
 
 // ---- 命令辅助 ----
