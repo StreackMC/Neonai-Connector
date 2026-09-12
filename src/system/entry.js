@@ -22,6 +22,7 @@ import { neonaicCommandInterface } from '../command/commandInterface.js';
 import { neonaicPermissionServer } from '../command/permissionServer.js';
 import { neonaicCliProcessor } from './cliProcessor.js';
 import { PlatformManager } from '../platform/platformManager.js';
+import { neonaicExtensionManager } from '../extension/extManager.js';
 import { neonaicMessageIn } from '../message/messageIn.js';
 
 // ---- 常量 ----
@@ -170,8 +171,9 @@ async function bootstrap() {
   // 日志输出与 REPL 提示符协作：每次输出先清掉旧提示符，输出后重绘新提示符
   neonaicLogger.setConsoleHooks(neonaicCliProcessor.erasePrompt, neonaicCliProcessor.redrawPrompt);
 
-  // 自动发现并加载扩展（无需硬编码路径）
-  // todo: refactor
+  // 自动发现并加载扩展
+  await neonaicExtensionManager.scan();
+  await neonaicExtensionManager.loadAll();
 
   // 安装权限管理命令（permission/perm）：需在 commandServer 就绪后，避免循环依赖
   neonaicPermissionServer.installPermissionCommands(neonaicCommandServer.registerCommand);

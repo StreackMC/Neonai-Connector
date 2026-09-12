@@ -511,7 +511,7 @@ export const neonaicExtensionManager = {
 
   scan: readAllExt,
   list: listExt,
-  find: findExt,
+  get: findExt,
 
   /** 运行期：加载 / 卸载 */
   load: loadExt,
