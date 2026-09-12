@@ -12,7 +12,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { dirname, parse, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { generateText, streamText, tool, stepCountIs } from 'ai';
@@ -28,10 +28,6 @@ import { neonaicPermissionServer } from '../command/permissionServer.js';
 import z from 'zod';
 import { NeonaicIllegalArgumentError, NeonaicIllegalStateError, NeonaicNetworkError } from '../utils/NeonaicNewableError.js';
 import { neonaicFileSystem } from '../utils/io.js';
-
-// 本模块自算项目根路径，避免与 entry.js 形成循环依赖
-// ai.js 位于 <根>/src/message/，故向上 2 层为项目根
-const ROOT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
 /** 封禁用户使用 AI 的权限名 */
 const AI_BAN_PERMISSION = 'neonaic.toolcall.ai';
@@ -319,8 +315,9 @@ async function askAI(userMessage, AIlist, caller) {
     try {
       return await callProvider(provider, userMessage);
     } catch (err) {
-      getLogger().tool.debug(`× ${provider.name}: ${err.message}`);
-      errors.set(provider.name, err.message);
+      const msg = err?.message || (err?.statusCode ?? parseString(err));
+      getLogger().tool.debug(`× ${provider.name}: ${msg}`);
+      errors.set(provider.name, msg);
     }
   }
 
@@ -477,7 +474,7 @@ async function aiProfile(ctx, ...args) {
       try {
         return await callProvider(target, msg);
       } catch (err) {
-        return `测试失败: ${err.message}`;
+        return `测试失败: ${err?.message || (err?.statusCode ?? parseString(err))}`;
       }
     }
     default:
