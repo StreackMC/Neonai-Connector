@@ -78,6 +78,7 @@ opts 包含：`alias`（别名）、`permissions`（第一层 AND、第二层 OR
 
 - 加载器：`src/extension/extLoader.js`（`NeonaicExtItem` / `neonaicExtensionLoader`）+ 管理器 `src/extension/extManager.js`（`neonaicExtensionManager`）。**当前尚未接入 `entry.js`**（组合根里留了 `// todo: refactor`）。
 - 管理器 API：`scan(root)` / `list()` / `find(id)` / `load` / `unload` / `loadAll` / `unloadAll` / `enable` / `disable` / `enableAll` / `disableAll`；命令 `neonaic:extension`（别名 ext / plugin / extensions / plugins），子命令 `list`(默认) / `scan [dir]` / `info <ext>` / `load|enable` / `unload|disable`。
+- **返回结构以文件里的 `@typedef` 为准**（用户写的，改实现前先读它）：`NeonaicExtOperateStatusPayload` = `{ operation, status, error, id }`，`operation` ∈ `load|unload|enabled|disabled`（enable/disable 的 operation 用**过去分词**），`status` ∈ `notfound|successfully|failed|disabled`（`disabled` 只在 `operation='load'` 时出现）；`NeonaicExtOperateStatus` = `{ operation, succeed, notfound, disabled, failed }`，**没有 `affected`**。运行状态不进 payload，需要时查 `list()`。
 - **两套语义正交**：`load`/`unload` 只管运行期（`unload` 标了 `@deprecated`，有内存泄漏风险）；`enable`/`disable` 只管 `config/saves/ext.json` 里的开关，**默认不改运行状态**（故 `disable` 后仍在运行是预期行为，结果里 `running` 会如实反馈）。
 - 布局：`extensions/<name>/index.js` + 同目录 `manifest.json`。
 - `manifest.json` 结构：`meta.version`（如 `[1, "0.1.0"]`）、`meta.id`（须匹配 `^[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*$`）、`particulars.{name,author,description,url,license}`、`entry`（如 `./index.js`）、`depends` / `softdepends`。

@@ -13,6 +13,12 @@
  *   `enable()` 会检查该开关，因此 `disable` 之后的拓展无法 `load`。
  *   需要「停掉且以后不再自动加载」时，两步一起做即可（`extension disable x && extension unload x`）。
  *
+ * 返回值形状由 {@link NeonaicExtOperateStatusPayload} / {@link NeonaicExtOperateStatus} 定义：
+ *   - operation：`load` / `unload` / `enabled` / `disabled`
+ *   - status：`successfully` / `notfound` / `failed` / `disabled`（`disabled` 只在 operation=load 时出现）
+ *   - 批量结果按 succeed / notfound / disabled / failed 四类分桶
+ *   运行状态（是否已加载）**不在**返回结构里，需要时用 {@link listExt} 查询。
+ *
  * @since 0.1.0
  */
 
@@ -44,6 +50,23 @@ const EXT_SAVE = new NeonaicConfig('./config/saves/ext.json');
 /** 已识别拓展：id → NeonaicExtItem @type {Map<String, NeonaicExtItem>} */
 const EXT_MAP = new Map();
 
+/**
+ * @typedef {Object} NeonaicExtOperateStatusPayload 单个拓展加载与卸载状态
+ * @property {'load'|'unload'|'enabled'|'disabled'} operation 操作类型
+ * @property {'notfound'|'successfully'|'failed'|'disabled'} status 状态，其中"disabled"只能在{@link NeonaicExtOperateStatusPayload.operation}="load"时出现
+ * @property {NeonaicExtensionError|null} error 错误信息（若有）
+ * @property {String} id 拓展标识符
+ */
+
+/**
+ * @typedef {Object} NeonaicExtOperateStatus 批量加载与卸载拓展状态
+ * @property {'load'|'unload'|'enabled'|'disabled'} operation 操作类型
+ * @property {NeonaicExtOperateStatusPayload[]} succeed 加载与卸载成功的拓展
+ * @property {NeonaicExtOperateStatusPayload[]} notfound 未找到的拓展
+ * @property {NeonaicExtOperateStatusPayload[]} disabled 找到但被禁用的拓展
+ * @property {NeonaicExtOperateStatusPayload[]} failed 加载与卸载失败的拓展
+ */
+
 // ---- 内部工具 ----
 
 /** 取机器人的名字，用于组装面向用户的文案 */
@@ -72,23 +95,15 @@ const toExtensionError = (error) =>
   error instanceof NeonaicExtensionError ? error : new NeonaicExtensionError(parseString(error), error);
 
 /**
- * 组装单个操作结果。
- * @param {'load'|'unload'|'enable'|'disable'} operation
- * @param {'notfound'|'successfully'|'failed'} status
- * @param {String} id
- * @param {NeonaicExtensionError|null} [error=null]
- * @param {NeonaicExtItem|null} [ext=null] 识别到的拓展；未识别时传 null
+ * 组装单个操作结果，字段严格按 {@link NeonaicExtOperateStatusPayload}。
+ * @param {'load'|'unload'|'enabled'|'disabled'} operation 操作类型
+ * @param {'notfound'|'successfully'|'failed'|'disabled'} status 状态
+ * @param {String} id 拓展标识符
+ * @param {NeonaicExtensionError|null} [error=null] 错误信息（若有）
  * @returns {NeonaicExtOperateStatusPayload}
  */
-function resultOf(operation, status, id, error = null, ext = null) {
-  return {
-    operation,
-    status,
-    id,
-    error,
-    running: ext === null ? false : isRunning(ext),
-    enabled: ext === null ? null : ext.enabled,
-  };
+function resultOf(operation, status, id, error = null) {
+  return { operation, status, error, id };
 }
 
 // ---- 扫描与识别 ----
@@ -181,6 +196,9 @@ function listExt() {
 
 /**
  * 加载（运行）一个拓展。
+ *
+ * @apiNote 目标拓展被禁用时不会抛错，而是返回 `status: 'disabled'`
+ *          （见 {@link NeonaicExtOperateStatusPayload} 对 status 的说明）。
  * @param {String} id 拓展标识符
  * @returns {Promise<NeonaicExtOperateStatusPayload>}
  */
@@ -188,11 +206,12 @@ async function loadExt(id) {
   const key = normalizeId(id);
   if (key === null || !EXT_MAP.has(key)) return resultOf('load', 'notfound', key ?? parseString(id));
   const ext = EXT_MAP.get(key);
+  if (!ext.enabled) return resultOf('load', 'disabled', ext.id);
   try {
     await ext.enable();
-    return resultOf('load', 'successfully', ext.id, null, ext);
+    return resultOf('load', 'successfully', ext.id);
   } catch (error) {
-    return resultOf('load', 'failed', ext.id, toExtensionError(error), ext);
+    return resultOf('load', 'failed', ext.id, toExtensionError(error));
   }
 }
 
@@ -208,9 +227,9 @@ async function unloadExt(id) {
   const ext = EXT_MAP.get(key);
   try {
     await ext.disable();
-    return resultOf('unload', 'successfully', ext.id, null, ext);
+    return resultOf('unload', 'successfully', ext.id);
   } catch (error) {
-    return resultOf('unload', 'failed', ext.id, toExtensionError(error), ext);
+    return resultOf('unload', 'failed', ext.id, toExtensionError(error));
   }
 }
 
@@ -229,19 +248,19 @@ async function unloadExt(id) {
  */
 async function enableExt(id, options = {}) {
   const key = normalizeId(id);
-  if (key === null || !EXT_MAP.has(key)) return resultOf('enable', 'notfound', key ?? parseString(id));
+  if (key === null || !EXT_MAP.has(key)) return resultOf('enabled', 'notfound', key ?? parseString(id));
   const ext = EXT_MAP.get(key);
   try {
     ext.enabled = true;
     if (options.load === true) {
       const loaded = await loadExt(ext.id);
       if (loaded.status !== 'successfully') {
-        return { ...loaded, operation: 'enable' };
+        return { ...loaded, operation: 'enabled' };
       }
     }
-    return resultOf('enable', 'successfully', ext.id, null, ext);
+    return resultOf('enabled', 'successfully', ext.id);
   } catch (error) {
-    return resultOf('enable', 'failed', ext.id, toExtensionError(error), ext);
+    return resultOf('enabled', 'failed', ext.id, toExtensionError(error));
   }
 }
 
@@ -249,8 +268,9 @@ async function enableExt(id, options = {}) {
  * 禁用一个拓展：把持久化开关置假（立即写回 config/saves/ext.json）。
  *
  * @apiNote 默认**不会**卸载正在运行的拓展（unload 已被标注内存泄漏风险，不应作为默认行为），
- *          结果里的 `running` 会如实反馈是否仍在运行；需要一并停掉就传 `{ unload: true }`，
- *          或再调一次 {@link unloadExt}。禁用后该拓展无法再被 {@link loadExt} 加载。
+ *          禁用只改配置开关，运行状态请用 {@link listExt} 或 {@link isRunning} 另行查询；
+ *          需要一并停掉就传 `{ unload: true }`，或再调一次 {@link unloadExt}。
+ *          禁用后该拓展无法再被 {@link loadExt} 加载（会返回 `status: 'disabled'`）。
  * @param {String} id 拓展标识符
  * @param {Object} [options]
  * @param {boolean} [options.unload=false] 是否顺带卸载正在运行的拓展
@@ -258,19 +278,19 @@ async function enableExt(id, options = {}) {
  */
 async function disableExt(id, options = {}) {
   const key = normalizeId(id);
-  if (key === null || !EXT_MAP.has(key)) return resultOf('disable', 'notfound', key ?? parseString(id));
+  if (key === null || !EXT_MAP.has(key)) return resultOf('disabled', 'notfound', key ?? parseString(id));
   const ext = EXT_MAP.get(key);
   try {
     if (options.unload === true && isRunning(ext)) {
       const unloaded = await unloadExt(ext.id);
       if (unloaded.status !== 'successfully') {
-        return { ...unloaded, operation: 'disable' };
+        return { ...unloaded, operation: 'disabled' };
       }
     }
     ext.enabled = false;
-    return resultOf('disable', 'successfully', ext.id, null, ext);
+    return resultOf('disabled', 'successfully', ext.id);
   } catch (error) {
-    return resultOf('disable', 'failed', ext.id, toExtensionError(error), ext);
+    return resultOf('disabled', 'failed', ext.id, toExtensionError(error));
   }
 }
 
@@ -279,7 +299,7 @@ async function disableExt(id, options = {}) {
 /**
  * 对一批拓展依次执行同一操作。
  * @param {String[]} list 拓展标识符列表
- * @param {'load'|'unload'|'enable'|'disable'} operation
+ * @param {'load'|'unload'|'enabled'|'disabled'} operation 操作类型
  * @param {(id: String) => Promise<NeonaicExtOperateStatusPayload>} single 单项操作
  * @returns {Promise<NeonaicExtOperateStatus>}
  * @throws {NeonaicIllegalArgumentError} list 不是数组
@@ -288,21 +308,16 @@ async function operateListed(list, operation, single) {
   if (!Array.isArray(list)) {
     throw new NeonaicIllegalArgumentError(`批量${operation}的拓展列表应该是一个数组：${parseString(list)}`);
   }
-  const [succeed, notfound, failed] = [[], [], []];
+  const [succeed, notfound, disabled, failed] = [[], [], [], []];
   // 串行执行：同一时刻只操作一个拓展，避免并发写同一个配置文件
   for (const raw of list) {
     const result = await single(raw);
     if (result.status === 'failed') failed.push(result);
     else if (result.status === 'notfound') notfound.push(result);
+    else if (result.status === 'disabled') disabled.push(result);
     else succeed.push(result);
   }
-  return {
-    operation,
-    succeed,
-    failed,
-    notfound,
-    affected: list.length - notfound.length,
-  };
+  return { operation, succeed, notfound, disabled, failed };
 }
 
 /**
@@ -331,7 +346,7 @@ async function unloadListedExt(list = allIds()) {
  * @returns {Promise<NeonaicExtOperateStatus>}
  */
 async function enableListedExt(list = allIds(), options = {}) {
-  return operateListed(list, 'enable', (id) => enableExt(id, options));
+  return operateListed(list, 'enabled', (id) => enableExt(id, options));
 }
 
 /**
@@ -341,7 +356,7 @@ async function enableListedExt(list = allIds(), options = {}) {
  * @returns {Promise<NeonaicExtOperateStatus>}
  */
 async function disableListedExt(list = allIds(), options = {}) {
-  return operateListed(list, 'disable', (id) => disableExt(id, options));
+  return operateListed(list, 'disabled', (id) => disableExt(id, options));
 }
 
 // ---- 文案渲染 ----
@@ -352,26 +367,33 @@ async function disableListedExt(list = allIds(), options = {}) {
  * @returns {String}
  */
 function renderStatus(status) {
-  const verb = { load: '加载', unload: '卸载', enable: '启用', disable: '禁用' }[status.operation] ?? status.operation;
-  const lines = [`${DIM}${verb}完成：成功 ${status.succeed.length} 个，失败 ${status.failed.length} 个，未识别 ${status.notfound.length} 个（共尝试 ${status.affected} 个）${R}`];
+  const verb = { load: '加载', unload: '卸载', enabled: '启用', disabled: '禁用' }[status.operation] ?? status.operation;
+  const lines = [`${DIM}${verb}完成：成功 ${status.succeed.length} 个，失败 ${status.failed.length} 个，未识别 ${status.notfound.length} 个，被禁用 ${status.disabled.length} 个${R}`];
 
   for (const item of status.succeed) {
-    const running = item.running ? `${GREEN}运行中${R}` : `${DIM}未运行${R}`;
-    const enabled = item.enabled === false ? `${YELLOW}已禁用${R}` : `${DIM}已启用${R}`;
+    // 运行状态不属于 payload，按 id 回查（见 NeonaicExtOperateStatusPayload 的字段约定）
+    const ext = EXT_MAP.get(item.id);
+    const running = ext && isRunning(ext) ? `${GREEN}运行中${R}` : `${DIM}未运行${R}`;
+    const enabled = ext && ext.enabled ? `${DIM}已启用${R}` : `${YELLOW}已禁用${R}`;
     lines.push(`  ${GREEN}✓${R} ${CYAN}${item.id}${R}  ${running} / ${enabled}`);
   }
   for (const item of status.notfound) {
     lines.push(`  ${YELLOW}?${R} ${item.id} ${DIM}未识别的拓展${R}`);
+  }
+  for (const item of status.disabled) {
+    lines.push(`  ${YELLOW}⊘${R} ${CYAN}${item.id}${R} ${DIM}已被禁用，需先 ${CYAN}extension enable ${item.id}${R}`);
   }
   for (const item of status.failed) {
     lines.push(`  ${RED}✗${R} ${CYAN}${item.id}${R} ${RED}${item.error?.message ?? '未知原因'}${R}`);
   }
 
   // 禁用后仍在运行的情况需要明确提示，否则用户会以为已经停掉了
-  if (status.operation === 'disable') {
-    const stillRunning = status.succeed.filter((i) => i.running);
+  if (status.operation === 'disabled') {
+    const stillRunning = status.succeed
+      .map((item) => item.id)
+      .filter((id) => { const ext = EXT_MAP.get(id); return ext ? isRunning(ext) : false; });
     if (stillRunning.length) {
-      lines.push(`${YELLOW}提示：${stillRunning.map((i) => i.id).join('、')} 仍在运行中，如需立即停止请执行 ${CYAN}extension unload ${stillRunning.map((i) => i.id).join(' ')}${R}`);
+      lines.push(`${YELLOW}提示：${stillRunning.join('、')} 仍在运行中，禁用只改配置开关；如需立即停止请执行 ${CYAN}extension unload ${stillRunning.join(' ')}${R}`);
     }
   }
   return lines.join('\n');
