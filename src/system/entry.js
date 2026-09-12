@@ -148,7 +148,8 @@ async function bootstrap() {
     globalThis.$ = (input) => {
       const args = neonaicCommandServer.parseArgs(String(input));
       const [cmdName, cmdArgs] = args;
-      return neonaicCommandServer.executeCommand(cmdName, { internalCall: true, privateExecutor: true }, ...cmdArgs);
+      const result = neonaicCommandServer.executeCommand(cmdName, { internalCall: true, privateExecutor: true }, ...cmdArgs);
+      return result;
     };
     getLogger().main.info('调试模式已启用，$(cmd) 可用');
   } else {
