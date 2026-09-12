@@ -14,12 +14,12 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import JSON5 from 'json5';
-import { parseString } from '../system/logger/Logger.js';
-import { getBotName } from '../system/confManager.js';
-import { NeonaicCommandContext } from './commandServer.js';
-import { COMMAND_ENUMS } from './commandInterface.js';
+import { parseString } from '../logger/Logger.js';
+import { NeonaicConfManager } from '../system/confManager.js';
+import { NeonaicCommandServer } from './commandServer.js';
+import { NeonaicCommandInterface } from './commandInterface.js';
 
-// 注：本模块不 import commandServer.js，避免循环依赖。
+// 注：本模块不 import commandServer.js 的运行期能力，避免循环依赖。
 // 权限命令由组合根（entry.js）通过 installPermissionCommands(registerCommand) 安装。
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -141,7 +141,7 @@ function _test(user, permission) {
  * 供 commandServer 等复用，统一否定语义。
  * @returns {boolean} true = 通过
  */
-export function checkSinglePermission(user, permission) {
+function checkSinglePermission(user, permission) {
   const isNegate = permission.startsWith('!');
   const name = isNegate ? permission.slice(1) : permission;
   if (!name || name === '*') return false;
@@ -158,7 +158,7 @@ export function checkSinglePermission(user, permission) {
  * @returns {boolean|null}
  *   true/false: 明确结果 | null: 所有层级均未设置（仅单条查询时）
  */
-export function checkPermission(user, permission) {
+function checkPermission(user, permission) {
   if (!permission || permission === '*') return false;
 
   // AND/OR 嵌套语法
@@ -182,11 +182,11 @@ export function checkPermission(user, permission) {
 /**
  * 测试命令上下文是否满足权限规则。
  * CLI/internalCall 始终返回 true。
- * @param {NeonaicCommandContext} ctx
+ * @param { import('./commandServer.js').NeonaicCommandServer.NeonaicCommandContext } ctx
  * @param {string|(string|string[])[]} permission
  * @returns {boolean}
  */
-export function checkPermissionFromContext(ctx, permission) {
+function checkPermissionFromContext(ctx, permission) {
   if (ctx?.internalCall) return true;
   const result = checkPermission(ctx?.executor, permission);
   return result === true;
@@ -237,7 +237,7 @@ function _checkSingle(user, permission) {
  * @param {boolean} [status=true]
  * @returns {'invalid_user'|'successfully'}
  */
-export function setPermission(user, permission, status = true) {
+function setPermission(user, permission, status = true) {
   if (!user || !permission) return 'invalid_user';
   const map = ensure('permanent', user);
   map[permission] = !!status;
@@ -253,7 +253,7 @@ export function setPermission(user, permission, status = true) {
  * @param {number|Date} [until] 过期时间（时间戳 ms 或 Date）
  * @returns {'invalid_user'|'successfully'}
  */
-export function setTempPermission(user, permission, status = true, until) {
+function setTempPermission(user, permission, status = true, until) {
   if (!user || !permission) return 'invalid_user';
   const map = ensure('temp', user);
   const ts = until instanceof Date ? until.getTime() : (typeof until === 'number' ? until : 0);
@@ -268,7 +268,7 @@ export function setTempPermission(user, permission, status = true, until) {
  * @param {boolean} [status=true]
  * @returns {'invalid_perm'|'successfully'}
  */
-export function setGlobalPermission(permission, status = true) {
+function setGlobalPermission(permission, status = true) {
   if (!permission) return 'invalid_perm';
   store.global.set(permission, !!status);
   _save();
@@ -282,7 +282,7 @@ export function setGlobalPermission(permission, status = true) {
  * @param {number|Date} [until]
  * @returns {'invalid_perm'|'successfully'}
  */
-export function setGlobalTempPermission(permission, status = true, until) {
+function setGlobalTempPermission(permission, status = true, until) {
   if (!permission) return 'invaild_perm';
   const ts = until instanceof Date ? until.getTime() : (typeof until === 'number' ? until : 0);
   store.globalTemp.set(permission, { status: !!status, until: ts || 0 });
@@ -298,7 +298,7 @@ export function setGlobalTempPermission(permission, status = true, until) {
  * @param {string} permission 权限名；"*" 清除该用户全部永久权限
  * @returns {'invalid_user'|'successfully'}
  */
-export function clearPermission(user, permission) {
+function clearPermission(user, permission) {
   if (!user) return 'invalid_user';
   const key = userKey(user);
   let changed = false;
@@ -320,7 +320,7 @@ export function clearPermission(user, permission) {
  * @param {number} [until=-1] 若权限的语义过期时间晚于该时间戳则不删除
  * @returns {'invalid_user'|'successfully'}
  */
-export function clearTempPermission(user, permission, until = -1) {
+function clearTempPermission(user, permission, until = -1) {
   if (!user) return 'invalid_user';
   const key = userKey(user);
   let changed = false;
@@ -343,7 +343,7 @@ export function clearTempPermission(user, permission, until = -1) {
  * @param {string} permission 权限名；"*" 清空全部全局永久权限
  * @returns {'successfully'}
  */
-export function clearGlobalPermission(permission) {
+function clearGlobalPermission(permission) {
   if (permission === '*') { store.global.clear(); _save(); return 'successfully'; }
   store.global.delete(permission);
   _save();
@@ -356,7 +356,7 @@ export function clearGlobalPermission(permission) {
  * @param {number} [until=-1] 若权限的语义过期时间晚于该时间戳则不删除
  * @returns {'successfully'}
  */
-export function clearGlobalTempPermission(permission, until = -1) {
+function clearGlobalTempPermission(permission, until = -1) {
   if (permission === '*') { store.globalTemp.clear(); _save(); return 'successfully'; }
   if (until !== -1) {
     const v = store.globalTemp.get(permission);
@@ -386,15 +386,15 @@ export function clearGlobalTempPermission(permission, until = -1) {
  * @param {string} permission 权限名
  * @param {string} [status] 'true' | 'false'（仅 set）
  * @param {string} [lasting] 持续时间（仅 set）
- * @this {NeonaicCommandContext}
+ * @this { import('./commandServer.js').NeonaicCommandServer.NeonaicCommandContext }
  * @returns {string} 执行结果描述
  */
 function cmd(type, user, permission, status, lasting) {
-  /** @type {NeonaicCommandContext} */
+  /** @type { import('./commandServer.js').NeonaicCommandServer.NeonaicCommandContext } */
   const ctx = this;
 
   // 不允许大庭广众下进行权限操作
-  if (!ctx.privateExecutor) return `“${getBotName()}”未能完成操作，因为当前上下文不是私密的。`;
+  if (!ctx.privateExecutor) return `“${NeonaicConfManager.getBotName()}”未能完成操作，因为当前上下文不是私密的。`;
 
   if (!type || (type !== 'set' && type !== 'unset')) {
     return `用法: ${cmd.meta.usage}`;
@@ -457,7 +457,7 @@ cmd.meta = {
  * @param {string} input 持续时间，如 '1y'、'2h30m'、'1y2M3d4h5m6s'
  * @returns {number|null} 对应的毫秒数；无法解析返回 null
  */
-export function parseDuration(input) {
+function parseDuration(input) {
   if (!input) return null;
   const s = String(input).trim();
   if (!s) return null;
@@ -489,16 +489,16 @@ export function parseDuration(input) {
  * @apiNote 由组合根在 commandServer 就绪后调用，避免循环依赖
  * @param {(namespace: string, name: string, handler: Function, meta?: import('./commandInterface.js').CommandRegisterOptions) => void} registerCommand 命令注册函数（commandServer.registerCommand）
  */
-export function installPermissionCommands(registerCommand) {
+function installPermissionCommands(registerCommand) {
   registerCommand('neonaic', 'permission', cmd, {
-    permissions: [[COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.command.permission"]],
+    permissions: [[NeonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.command.permission"]],
     description: cmd.meta.description,
     usage: cmd.meta.usage,
     alias: ["perm"]
   });
   registerCommand('neonaic', 'whoami', function () {
     const LEFT_CHAR_IF_HIDDING_RATE = .4;
-    /** @type {NeonaicCommandContext} */
+    /** @type { import('./commandServer.js').NeonaicCommandServer.NeonaicCommandContext } */
     const ctx = this;
     const singalExecutor = (ctx.executor instanceof Array) ? (ctx.executor.length > 0) ? ctx.executor[0] : undefined : ctx.executor;
     let result = '';
@@ -512,13 +512,13 @@ export function installPermissionCommands(registerCommand) {
       result += `当前上下文不是私密的，已自动抹去一些隐私信息。\n`;
     }
 
-    result += (checkPermission(singalExecutor, COMMAND_ENUMS.PERM_ADMIN)) ? "✓ 你的身份是管理员\n" : "× 你的身份不是管理员\n";
-    result += (checkPermission(singalExecutor, COMMAND_ENUMS.PERM_SUPERADMIN)) ? "✓ 你的身份是超级管理员\n" : "× 你的身份不是超级管理员\n";
+    result += (checkPermission(singalExecutor, NeonaicCommandInterface.COMMAND_ENUMS.PERM_ADMIN)) ? "✓ 你的身份是管理员\n" : "× 你的身份不是管理员\n";
+    result += (checkPermission(singalExecutor, NeonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN)) ? "✓ 你的身份是超级管理员\n" : "× 你的身份不是超级管理员\n";
     if (ctx.internalCall) {
       result += "✓ 你的上下文可以无视大部分权限检查";
     } else {
-      result += (checkPermissionFromContext(ctx, COMMAND_ENUMS.PERM_ADMIN)) ? "✓ 你的上下文是管理员\n" : "× 你的上下文不是管理员\n";
-      result += (checkPermissionFromContext(ctx, COMMAND_ENUMS.PERM_SUPERADMIN)) ? "✓ 你的上下文是超级管理员\n" : "× 你的上下文不是超级管理员\n";
+      result += (checkPermissionFromContext(ctx, NeonaicCommandInterface.COMMAND_ENUMS.PERM_ADMIN)) ? "✓ 你的上下文是管理员\n" : "× 你的上下文不是管理员\n";
+      result += (checkPermissionFromContext(ctx, NeonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN)) ? "✓ 你的上下文是超级管理员\n" : "× 你的上下文不是超级管理员\n";
     }
     return result;
   }, {
@@ -541,3 +541,19 @@ function blurText(origin = "", keptStart = 1, keptEnd = 1, castRate = 0.6) {
   const [start, end, middle] = [origin.slice(0, keptStart), origin.slice(-keptEnd), origin.slice(keptStart, -keptEnd)];
   return start + '*'.repeat(Math./* 理论上这里不会小于1，但是防御一下使意图明确 */max(Math.ceil(middle.length * castRate), 1)) + end;
 }
+
+export const NeonaicPermissionServer = {
+  checkSinglePermission,
+  checkPermission,
+  checkPermissionFromContext,
+  setPermission,
+  setTempPermission,
+  setGlobalPermission,
+  setGlobalTempPermission,
+  clearPermission,
+  clearTempPermission,
+  clearGlobalPermission,
+  clearGlobalTempPermission,
+  parseDuration,
+  installPermissionCommands,
+};

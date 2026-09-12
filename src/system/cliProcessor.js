@@ -1,5 +1,5 @@
 /**
- * cli.js — CLI 交互层（终端 UI）
+ * cliProcessor.js — CLI 交互层（终端 UI）
  *
  * 依赖 commandServer.js（纯逻辑），负责：
  *   - ">" 提示符显示
@@ -10,9 +10,9 @@
  */
 
 import { createInterface } from 'node:readline';
-import { executeCommandSilent, inferNext, parseArgs } from '../command/commandServer.js';
-import { COMMAND_ENUMS } from '../command/commandInterface.js';
-import { getLogger } from './logger/Logger.js';
+import { NeonaicCommandServer } from '../command/commandServer.js';
+import { NeonaicCommandInterface } from '../command/commandInterface.js';
+import { NeonaicLogger } from '../logger/Logger.js';
 
 // ---- 颜色 ----
 const CYAN   = '\x1b[36m';
@@ -26,7 +26,7 @@ let keepAliveTimer = null;
 /**
  * 启动 REPL。
  */
-export function startCLI() {
+function startCLI() {
   clearInterval(keepAliveTimer);
   keepAliveTimer = setInterval(() => {}, 86400000);
 
@@ -38,7 +38,7 @@ export function startCLI() {
     prompt: `${CYAN}>${R} `,
     history: [],
     completer: (line) => {
-      const { hits, prefix } = inferNext(line);
+      const { hits, prefix } = NeonaicCommandServer.inferNext(line);
       if (hits.length === 1) return [hits, prefix];
       if (hits.length > 1) {
         // 多候选项：延迟写入一行后重新 prompt，用户继续输入时自然消失
@@ -59,16 +59,16 @@ export function startCLI() {
   _rl.on('line', async (line) => {
     const trimmed = line.trim();
     if (trimmed) {
-      const args = parseArgs(trimmed);
+      const args = NeonaicCommandServer.parseArgs(trimmed);
       const [cmdName, cmdArgs] = args;
       try {
-        const result = await executeCommandSilent(cmdName, {
+        const result = await NeonaicCommandServer.executeCommandSilent(cmdName, {
           internalCall: true, privateExecutor: true,
-          executor: COMMAND_ENUMS.FROM_CONSOLE
+          executor: NeonaicCommandInterface.COMMAND_ENUMS.FROM_CONSOLE
         }, ...cmdArgs);
-        if (result) getLogger().main.info(`${result}`);
+        if (result) NeonaicLogger.getLogger().main.info(`${result}`);
       } catch (err) {
-        getLogger().main.error(err.message);
+        NeonaicLogger.getLogger().main.error(err.message);
       }
     }
     if (_rl) _rl.prompt();
@@ -78,21 +78,21 @@ export function startCLI() {
 }
 
 /** 停止 CLI */
-export function stopCLI() {
+function stopCLI() {
   clearInterval(keepAliveTimer);
   keepAliveTimer = null;
   if (_rl) { _rl.close(); _rl = null; }
 }
 
 /** 刷新 prompt（供外部异步场景调用） */
-export function refreshCLI() {
+function refreshCLI() {
   if (_rl) _rl.prompt(true);
 }
 
 /**
  * 清掉当前行的 REPL 提示符（日志输出前调用；REPL 未运行或 stdout 非 TTY 时为空操作）。
  */
-export function erasePrompt() {
+function erasePrompt() {
   if (_rl && process.stdout.isTTY) process.stdout.write('\r\x1b[2K');
 }
 
@@ -100,6 +100,14 @@ export function erasePrompt() {
  * 重新显示 REPL 提示符（日志输出后调用；REPL 未运行时为空操作）。
  * _rl.prompt() 基于内部缓冲重绘 prompt 与用户当前输入，正在输入的内容不会丢失。
  */
-export function redrawPrompt() {
+function redrawPrompt() {
   if (_rl) _rl.prompt();
 }
+
+export const NeonaicCliProcessor = {
+  startCLI,
+  stopCLI,
+  refreshCLI,
+  erasePrompt,
+  redrawPrompt,
+};

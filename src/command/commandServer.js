@@ -15,10 +15,10 @@
  *   { executor, internalCall, timestamp, this: originalThis }
  */
 
-import { checkSinglePermission } from './permissionServer.js';
-import { getLogger, parseString } from '../system/logger/Logger.js';
-import { COMMAND_ENUMS } from './commandInterface.js';
-import { NeonaicNewable } from "../system/NeonaicNewableClass.js";
+import { NeonaicPermissionServer } from './permissionServer.js';
+import { NeonaicLogger, parseString } from '../logger/Logger.js';
+import { NeonaicCommandInterface } from './commandInterface.js';
+import { NeonaicNewableModule } from "../system/NeonaicNewableClass.js";
 
 // ---- 颜色 ----
 const RED = '\x1b[31m';
@@ -39,7 +39,7 @@ const fqns = new Map();
 // ---- 参数解析 ----
 
 /** 按 POSIX 标准解析参数 @returns {[string, string[]]} 首个参数为命令名，第二个为参数列表 */
-export function parseArgs(input) {
+function parseArgs(input) {
   const args = [];
   let current = '', inSingle = false, inDouble = false, escape = false;
 
@@ -85,7 +85,7 @@ export function parseArgs(input) {
  * @returns {null|CommandMeta[]} 成功返回 null；冲突返回冲突命令列表
  * @throws 命名空间、命名或处理器无效
  */
-export function registerCommand(namespace, name, /** @this {NeonaicCommandContext} */handler, opts = {}) {
+function registerCommand(namespace, name, /** @this {NeonaicCommandContext} */handler, opts = {}) {
   if (!namespace) throw new Error("命令具有无效的命名空间：" + namespace);
   if (!name) throw new Error("命令具有无效的命名：" + name);
   if (!(typeof handler === 'function')) throw new Error("命令具有无效的处理器：" + handler);
@@ -152,7 +152,7 @@ export function registerCommand(namespace, name, /** @this {NeonaicCommandContex
  * @param {string|string[]|undefined} executor
  * @returns {string|null} 校验失败原因，成功返回 null
  */
-export function checkCommandPerms(cmdName, requiredPerms, executor) {
+function checkCommandPerms(cmdName, requiredPerms, executor) {
   if (!requiredPerms.length) return null;
 
   for (const item of requiredPerms) {
@@ -160,12 +160,12 @@ export function checkCommandPerms(cmdName, requiredPerms, executor) {
       // OR 组：至少满足一项
       let anyPass = false;
       for (const perm of item) {
-        if (checkSinglePermission(executor, perm)) { anyPass = true; break; }
+        if (NeonaicPermissionServer.checkSinglePermission(executor, perm)) { anyPass = true; break; }
       }
       if (!anyPass) return `缺少权限: 须满足 [${item.join(', ')}] 其中之一`;
     } else {
       // AND 项：必须满足
-      if (!checkSinglePermission(executor, item)) {
+      if (!NeonaicPermissionServer.checkSinglePermission(executor, item)) {
         const label = item.startsWith('!') ? `${item}（须缺失）` : item;
         return `缺少权限: ${label}`;
       }
@@ -189,7 +189,7 @@ function buildError(cmdName, reason, usage) {
  * @param {string} ref 命令引用，如 'name' / 'alias' / 'ns:name' / 'ns:alias'
  * @returns {CommandMeta|null}
  */
-export function resolveCommand(ref) {
+function resolveCommand(ref) {
   if (typeof ref !== 'string' || !ref) return null;
   const idx = ref.indexOf(':');
   if (idx === -1) {
@@ -210,11 +210,11 @@ export function resolveCommand(ref) {
  * @param {...*} args 命令参数（调用方负责解析）
  * @returns {*|Promise<*>}
  */
-export function executeCommand(cmdName, ctx, ...args) {
+function executeCommand(cmdName, ctx, ...args) {
   try {
     return executeCommandSilent(cmdName, ctx, ...args);
   } catch (err) {
-    getLogger().cmd.error(err.message);
+    NeonaicLogger.getLogger().cmd.error(err.message);
   }
 }
 
@@ -226,7 +226,7 @@ export function executeCommand(cmdName, ctx, ...args) {
  * @returns {*|Promise<*>}
  * @throws {Error}
  */
-export function executeCommandSilent(cmdName, ctx = {}, ...args) {
+function executeCommandSilent(cmdName, ctx = {}, ...args) {
   if (typeof cmdName !== 'string' || !cmdName) return;
 
   const meta = resolveCommand(cmdName);
@@ -254,7 +254,7 @@ export function executeCommandSilent(cmdName, ctx = {}, ...args) {
 }
 
 /** 命令上下文 */
-export class NeonaicCommandContext extends NeonaicNewable {
+class NeonaicCommandContext extends NeonaicNewableModule.NeonaicNewable {
   #privateExecutor = false; #internalCall = false; #this = undefined; #executor = []; #timestamp = new Date();
 
   /** 命令开始执行时的时间 @type {Date} */
@@ -289,9 +289,9 @@ export class NeonaicCommandContext extends NeonaicNewable {
 
 /** 尝试解析执行者 @return {String} */
 function resolveExecutor(stringLike) {
-  /* 如果是 null/undefined 直接记作未知 */if (stringLike === undefined || stringLike === null) return COMMAND_ENUMS.FROM_UNKNOW;
+  /* 如果是 null/undefined 直接记作未知 */if (stringLike === undefined || stringLike === null) return NeonaicCommandInterface.COMMAND_ENUMS.FROM_UNKNOW;
   /* 否则转为文本并删掉首尾空格 */if (typeof stringLike !== 'string') stringLike = parseString(stringLike).trim();
-  /* 空文本也视作未知 */if (stringLike.length == 0) return COMMAND_ENUMS.FROM_UNKNOW;
+  /* 空文本也视作未知 */if (stringLike.length == 0) return NeonaicCommandInterface.COMMAND_ENUMS.FROM_UNKNOW;
   return stringLike;
 }
 
@@ -305,7 +305,7 @@ function allNames() {
   return names;
 }
 
-export function inferNext(input) {
+function inferNext(input) {
   const trimmed = input.trimStart();
   if (!trimmed || trimmed.includes(' ')) return { hits: [], prefix: trimmed };
   const hits = [...allNames()].filter(n => n.startsWith(trimmed));
@@ -315,10 +315,10 @@ export function inferNext(input) {
 // ---- 工具 ----
 
 /** 获取所有已注册命令（按注册顺序） */
-export function getCommands() { return allCommands; }
+function getCommands() { return allCommands; }
 
 /** 获取是否存在可解析的目标命令（含别名与命名空间） */
-export function hasCommand(cmd) { return resolveCommand(cmd) != null; }
+function hasCommand(cmd) { return resolveCommand(cmd) != null; }
 
 // ---- 内置命令 ----
 
@@ -358,7 +358,7 @@ registerCommand('neonaic', 'sudo', function (who, cmd, ...args) {
 }, {
   description: '以某个身份执行命令，会继承当前上下文。',
   usage: "sudo <who> <cmd> [args]",
-  permissions: [[COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.command.sudo"]],
+  permissions: [[NeonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.command.sudo"]],
 });
 
 registerCommand('neonaic', 'runuser', function (who, cmd, ...args) {
@@ -366,5 +366,18 @@ registerCommand('neonaic', 'runuser', function (who, cmd, ...args) {
 }, {
   description: '切换到某个身份并执行命令，会重置上下文。',
   usage: "runuser <who> <cmd> [args]",
-  permissions: [[COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.command.sudo"]],
+  permissions: [[NeonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.command.sudo"]],
 });
+
+export const NeonaicCommandServer = {
+  parseArgs,
+  registerCommand,
+  checkCommandPerms,
+  resolveCommand,
+  executeCommand,
+  executeCommandSilent,
+  NeonaicCommandContext,
+  inferNext,
+  getCommands,
+  hasCommand,
+};

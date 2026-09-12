@@ -1,5 +1,5 @@
 /**
- * platform/PlatformInterface.js — Platform 基类
+ * platformInterface.js — Platform 基类
  *
  * 所有 Platform 实现须继承此类，构造函数接收 Profile 配置（由 PM 注入），
  * 实现 start() / stop() 生命周期方法。
@@ -8,10 +8,10 @@
  * 所有运行时参数通过 this.profile 获取。
  */
 
-import { getLogger } from "../system/logger/Logger.js";
-import { NeonaicNewable } from "../system/NeonaicNewableClass.js";
+import { NeonaicLogger } from "../logger/Logger.js";
+import { NeonaicNewableModule } from "../system/NeonaicNewableClass.js";
 
-export class NeonaiPlatform extends NeonaicNewable {
+class NeonaiPlatform extends NeonaicNewableModule.NeonaicNewable {
   /** Platform Profile 名称 @type {String} */
   profile;
 
@@ -46,7 +46,7 @@ export class NeonaiPlatform extends NeonaicNewable {
    */
   logMsgIn(...msg) {
     const type_ = (this.constructor.type) ? this.constructor.type : '<UNKNOWN>';
-    getLogger().chatIn.info(`<${type_}/${this.profile}>`, ...msg);
+    NeonaicLogger.getLogger().chatIn.info(`<${type_}/${this.profile}>`, ...msg);
   }
 
   /**
@@ -56,7 +56,7 @@ export class NeonaiPlatform extends NeonaicNewable {
    */
   log(type, ...msg) {
     const type_ = (this.constructor.type) ? this.constructor.type : '<UNKNOWN>';
-    getLogger().platP[type](`<${type_}/${this.profile}>`, ...msg);
+    NeonaicLogger.getLogger().platP[type](`<${type_}/${this.profile}>`, ...msg);
   }
 
   /**
@@ -65,6 +65,10 @@ export class NeonaiPlatform extends NeonaicNewable {
    */
   logMsgOut(...msg) {
     const type_ = (this.constructor.type) ? this.constructor.type : '<UNKNOWN>';
-    getLogger().chatOut.info(`<${type_}/${this.profile}>`, ...msg);
+    NeonaicLogger.getLogger().chatOut.info(`<${type_}/${this.profile}>`, ...msg);
   }
 }
+
+export const NeonaicPlatformInterface = {
+  NeonaiPlatform,
+};

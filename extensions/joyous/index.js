@@ -1,5 +1,5 @@
 /**
- * extensions/handler/joyous — Streack Joyous For Neonaic
+ * extensions/joyous — Streack Joyous For Neonaic
  * 
  * Joyous插件与Neonaic衔接模块
  */
@@ -15,11 +15,11 @@ const TIMEOUT_MS = 5000;
 const MAX_PLAYER_LISTED = 3;
 
 import z from 'zod';
-import { registerAITool } from '../../../src/handler/AI.js';
+import { NeonaicAI } from '../../src/message/ai.js';
 // -- import --
-import { registerCommand } from '../../../src/handler/commandServer.js';
-import { getBotName } from '../../../src/system/Config.js';
-import { getLogger } from '../../../src/system/logger/Logger.js';
+import { NeonaicCommandServer } from '../../src/command/commandServer.js';
+import { NeonaicConfManager } from '../../src/system/confManager.js';
+import { NeonaicLogger } from '../../src/logger/Logger.js';
 import { fetchWithTimeout, formatDateTime, formatMcTime } from "./utils.js";
 
 // -- Tools --
@@ -101,7 +101,7 @@ async function fetchStatus(address) {
   try {
     const res = await fetchWithTimeout(url, TIMEOUT_MS);
     if (!res.ok) {
-      getLogger().main.warn(`[mc] 状态接口返回非 2xx: ${res.status}`);
+      NeonaicLogger.getLogger().main.warn(`[mc] 状态接口返回非 2xx: ${res.status}`);
       return { ok: false, reason: 'offline' };
     }
 
@@ -118,7 +118,7 @@ async function fetchStatus(address) {
     return { ok: true, data };
   } catch (err) {
     // 网络错误 / 超时（AbortError）/ DNS 失败等
-    getLogger().main.warn(`[mc] 查询服务器状态失败: ${err.message}`);
+    NeonaicLogger.getLogger().main.warn(`[mc] 查询服务器状态失败: ${err.message}`);
     return { ok: false, reason: err.message };
   }
 }
@@ -133,9 +133,9 @@ function renderStatus(result, name) {
   if (result.ok) return formatStatus(result.data, name);
   if (result.reason === 'offline') return formatStatus({ online: false }, name);
   if (result.reason === 'invalid') {
-    return `“${getBotName()}”无法查询“${name}”的状态，因为返回的数据不符合“Joyous StatusAPI”的格式。`;
+    return `“${NeonaicConfManager.getBotName()}”无法查询“${name}”的状态，因为返回的数据不符合“Joyous StatusAPI”的格式。`;
   }
-  return `“${getBotName()}”无法查询“${name}”的状态，因为“${result.reason}”。`;
+  return `“${NeonaicConfManager.getBotName()}”无法查询“${name}”的状态，因为“${result.reason}”。`;
 }
 
 // -- API --
@@ -143,7 +143,7 @@ function renderStatus(result, name) {
 /**
  * 查询 Streack 服务器状态（命令版本）
  */
-registerCommand('joyous', 'mc', async function (address) {
+NeonaicCommandServer.registerCommand('joyous', 'mc', async function (address) {
   const name = address || DEFAULT_SRVNAME;
   return renderStatus(await fetchStatus(address), name);
 }, {
@@ -155,7 +155,7 @@ registerCommand('joyous', 'mc', async function (address) {
 /**
  * 查询 Streack 服务器世界信息，给AI用的。
  */
-registerAITool("joyous", "worldMeta", {
+NeonaicAI.registerAITool("joyous", "worldMeta", {
   description: "查询世界天气状况与时间情况。默认从 " + DEFAULT_ADDRESS + " 处获取数据。",
   inputSchema: z.object({
     address: z.string().describe("数据来源，需要是Joyous StatusAPI格式。"),
@@ -164,7 +164,7 @@ registerAITool("joyous", "worldMeta", {
     try {
       const res = await fetchWithTimeout(address || DEFAULT_ADDRESS, TIMEOUT_MS);
       if (!res.ok) {
-        getLogger().main.warn(`[mc] 状态接口返回非 2xx: ${res.status}`);
+        NeonaicLogger.getLogger().main.warn(`[mc] 状态接口返回非 2xx: ${res.status}`);
         return "无法获取，接口响应不对。";
       }
 
@@ -186,7 +186,7 @@ registerAITool("joyous", "worldMeta", {
       } else return "接口没有返回该信息。";
     } catch (err) {
       // 网络错误 / 超时（AbortError）/ DNS 失败等
-      getLogger().main.warn(`[mc] 查询服务器状态失败: ${err.message}`);
+      NeonaicLogger.getLogger().main.warn(`[mc] 查询服务器状态失败: ${err.message}`);
       return "无法获取，请求失败。";
     }
   },
@@ -195,7 +195,7 @@ registerAITool("joyous", "worldMeta", {
 /**
  * 查询 Streack 服务器状态，给 AI 用的。
  */
-registerAITool("joyous", "serverStatus", {
+NeonaicAI.registerAITool("joyous", "serverStatus", {
   description: "查询 Minecraft 服务器在线状态（TPS、在线玩家数、玩家列表、下次更新时间等）。默认从 " + DEFAULT_ADDRESS + " 处获取数据。",
   inputSchema: z.object({
     address: z.string().optional().describe("数据来源地址，需符合 Joyous StatusAPI 格式；缺省时使用默认地址。"),

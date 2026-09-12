@@ -1,5 +1,5 @@
 /**
- * platform-manager.js — 平台 Profile 生命周期管理器
+ * platformManager.js — 平台 Profile 生命周期管理器
  *
  * 维护三个映射：
  *   _profileClasses  profileName → Platform class
@@ -10,12 +10,11 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import JSON5 from 'json5';
 
-import { registerCommand } from '../command/commandServer.js';
-import { getDebugMode, getLogger } from '../system/logger/Logger.js';
-import { CONFIG_PATHS, getBotName, getConfig } from '../system/confManager.js';
-import { NeonaicConfig } from "../system/NeonaicConfig.js";
-import { COMMAND_ENUMS } from '../command/commandInterface.js';
-import { NeonaicNewable } from '../system/NeonaicNewableClass.js';
+import { NeonaicCommandServer } from '../command/commandServer.js';
+import { NeonaicLogger } from '../logger/Logger.js';
+import { NeonaicConfManager } from '../system/confManager.js';
+import { NeonaicCommandInterface } from '../command/commandInterface.js';
+import { NeonaicNewableModule } from '../system/NeonaicNewableClass.js';
 
 // ---- 颜色 ----
 const CYAN   = '\x1b[36m';
@@ -25,12 +24,7 @@ const RED    = '\x1b[31m';
 const DIM    = '\x1b[2m';
 const R      = '\x1b[0m';
 
-/** 语法糖，获取PM */
-export function getPlatformManager() {
-  return PlatformManager.instance;
-}
-
-export class PlatformManager extends NeonaicNewable {
+class PlatformManager extends NeonaicNewableModule.NeonaicNewable {
   /** @type {PlatformManager | null} */
   static _instance = null;
 
@@ -42,7 +36,7 @@ export class PlatformManager extends NeonaicNewable {
   /**
    * @param {object} opts
    * @param {string} opts.configPath secret.json 的绝对路径
-   * @param {import('../system/logger/Logger.js').Logger} opts.logger
+   * @param {import('../logger/Logger.js').NeonaicLogger} opts.logger
    */
   constructor({ configPath, logger }) {
     super();
@@ -53,18 +47,18 @@ export class PlatformManager extends NeonaicNewable {
     this._configPath = configPath;
     this._logger = logger;
 
-    /** profileName → Platform class @type {Map<String, typeof import('./platformInterface.js').NeonaiPlatform>} */
+    /** profileName → Platform class @type {Map<String, typeof import('./platformInterface.js').NeonaicPlatformInterface.NeonaiPlatform>} */
     this._profileClasses = new Map();
-    /** profileName → Profile 配置对象 @type {Map<String, NeonaicConfig>} */
+    /** profileName → Profile 配置对象 @type {Map<String, object>} */
     this._profiles = new Map();
-    /** profileName → Platform 实例 @type {Map<String, import('./platformInterface.js').NeonaiPlatform>} */
+    /** profileName → Platform 实例 @type {Map<String, import('./platformInterface.js').NeonaicPlatformInterface.NeonaiPlatform>} */
     this._platforms = new Map();
     /** profileName → close 函数 @type {Map<String, Function>} */
     this._closers = new Map();
 
     // 加载所有 Profiles 配置
     for (const raw of this._getRawProfiles()) {
-      const profile = { ...raw, _debug: getDebugMode() };
+      const profile = { ...raw, _debug: NeonaicLogger.getDebugMode() };
       this._profiles.set(raw.name, profile);
     }
 
@@ -75,7 +69,7 @@ export class PlatformManager extends NeonaicNewable {
   // ---- 内部辅助 ----
 
   _getRawProfiles() {
-    return getConfig(CONFIG_PATHS.secret).getList('platforms');
+    return NeonaicConfManager.getConfig(NeonaicConfManager.CONFIG_PATHS.secret).getList('platforms');
   }
 
   _readConfig() {
@@ -92,11 +86,11 @@ export class PlatformManager extends NeonaicNewable {
 
   _registerCLI() {
     const clazzThis = this;
-    registerCommand('neonaic', 'platform', async function (...args) {
-      /** @type {import('../command/commandServer.js').NeonaicCommandContext} */
+    NeonaicCommandServer.registerCommand('neonaic', 'platform', async function (...args) {
+      /** @type {import('../command/commandServer.js').NeonaicCommandServer.NeonaicCommandContext} */
       const ctx = this;
       const [sub, name] = args;
-      if (!ctx.privateExecutor) return `${RED}“${getBotName()}”无法执行“platform”，因为当前上下文不是私密的。`;
+      if (!ctx.privateExecutor) return `${RED}“${NeonaicConfManager.getBotName()}”无法执行“platform”，因为当前上下文不是私密的。`;
       if (!sub) return `${RED}用法: platform ${CYAN}start|stop|enable|disable${R} ${DIM}<name>${R}  或  platform ${CYAN}list${R}`;
 
       switch (sub) {
@@ -127,7 +121,7 @@ export class PlatformManager extends NeonaicNewable {
     }, {
       description: '平台 Profile 生命周期管理',
       usage: 'platform start|stop|enable|disable|list [name]',
-      permissions: [[COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.commmand.platform"]],
+      permissions: [[NeonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.commmand.platform"]],
       alias: ["pm"]
     });
   }
@@ -145,7 +139,7 @@ export class PlatformManager extends NeonaicNewable {
 
   /**
    * 注册 Platform 类，并为匹配 Profiles 创建实例。
-   * @param {{ new(profile: string): import('./platformInterface.js').NeonaiPlatform }} Cls
+   * @param {{ new(profile: string): import('./platformInterface.js').NeonaicPlatformInterface.NeonaiPlatform }} Cls
    */
   _registerClass(Cls) {
     if (this._profileClasses.has(Cls.type)) {
@@ -177,20 +171,20 @@ export class PlatformManager extends NeonaicNewable {
   async start(name) {
     const profile = this._profiles.get(name);
     if (!profile) {
-      getLogger().platM.info(`${RED}未知 Profile: ${name}${R}\n`);
+      NeonaicLogger.getLogger().platM.info(`${RED}未知 Profile: ${name}${R}\n`);
       return;
     }
     if (!profile.enabled) {
-      getLogger().platM.info(`${YELLOW}${name}${R} Profile 未启用\n`);
+      NeonaicLogger.getLogger().platM.info(`${YELLOW}${name}${R} Profile 未启用\n`);
       return;
     }
     const platform = this._platforms.get(name);
     if (!platform) {
-      getLogger().platM.info(`${YELLOW}${name}${R} 无匹配的 Platform 实现\n`);
+      NeonaicLogger.getLogger().platM.info(`${YELLOW}${name}${R} 无匹配的 Platform 实现\n`);
       return;
     }
     if (this._closers.has(name)) {
-      getLogger().platM.info(`${YELLOW}${name}${R} Profile 已在运行中\n`);
+      NeonaicLogger.getLogger().platM.info(`${YELLOW}${name}${R} Profile 已在运行中\n`);
       return;
     }
 
@@ -204,9 +198,9 @@ export class PlatformManager extends NeonaicNewable {
       } else {
         this._closers.set(name, () => {});
       }
-      getLogger().platM.info(`${GREEN}${name}${R} Profile 已启动\n`);
+      NeonaicLogger.getLogger().platM.info(`${GREEN}${name}${R} Profile 已启动\n`);
     } catch (err) {
-      getLogger().platM.info(`${RED}Profile ${name} 启动失败: ${err.message}${R}\n`);
+      NeonaicLogger.getLogger().platM.info(`${RED}Profile ${name} 启动失败: ${err.message}${R}\n`);
     }
   }
 
@@ -216,7 +210,7 @@ export class PlatformManager extends NeonaicNewable {
    */
   async stop(name) {
     if (!this._profiles.has(name)) {
-      getLogger().platM.info(`${RED}未知 Profile: ${name}${R}\n`);
+      NeonaicLogger.getLogger().platM.info(`${RED}未知 Profile: ${name}${R}\n`);
       return;
     }
 
@@ -226,7 +220,7 @@ export class PlatformManager extends NeonaicNewable {
       try { await closer(); } catch { /* 忽略关闭错误 */ }
     }
     this._closers.delete(name);
-    getLogger().platM.info(`${GREEN}${name}${R} Profile 已停止\n`);
+    NeonaicLogger.getLogger().platM.info(`${GREEN}${name}${R} Profile 已停止\n`);
   }
 
   /**
@@ -236,16 +230,16 @@ export class PlatformManager extends NeonaicNewable {
   enable(name) {
     const profile = this._profiles.get(name);
     if (!profile) {
-      getLogger().platM.info(`${RED}未知 Profile: ${name}${R}\n`);
+      NeonaicLogger.getLogger().platM.info(`${RED}未知 Profile: ${name}${R}\n`);
       return;
     }
     if (profile.enabled) {
-      getLogger().platM.info(`${YELLOW}${name}${R} Profile 已启用\n`);
+      NeonaicLogger.getLogger().platM.info(`${YELLOW}${name}${R} Profile 已启用\n`);
       return;
     }
     this._writeProfileEnabled(name, true);
     profile.enabled = true;
-    getLogger().platM.info(`${GREEN}${name}${R} Profile 已启用（需手动 start 或重启生效）\n`);
+    NeonaicLogger.getLogger().platM.info(`${GREEN}${name}${R} Profile 已启用（需手动 start 或重启生效）\n`);
   }
 
   /**
@@ -255,11 +249,11 @@ export class PlatformManager extends NeonaicNewable {
   async disable(name) {
     const profile = this._profiles.get(name);
     if (!profile) {
-      getLogger().platM.info(`${RED}未知 Profile: ${name}${R}\n`);
+      NeonaicLogger.getLogger().platM.info(`${RED}未知 Profile: ${name}${R}\n`);
       return;
     }
     if (!profile.enabled) {
-      getLogger().platM.info(`${YELLOW}${name}${R} Profile 已禁用\n`);
+      NeonaicLogger.getLogger().platM.info(`${YELLOW}${name}${R} Profile 已禁用\n`);
       return;
     }
     if (this._closers.has(name)) {
@@ -267,13 +261,13 @@ export class PlatformManager extends NeonaicNewable {
     }
     this._writeProfileEnabled(name, false);
     profile.enabled = false;
-    getLogger().platM.info(`${GREEN}${name}${R} Profile 已禁用\n`);
+    NeonaicLogger.getLogger().platM.info(`${GREEN}${name}${R} Profile 已禁用\n`);
   }
 
   /** 列出所有 Profile 状态 */
   list() {
     if (this._profiles.size === 0) {
-      getLogger().platM.info(`${DIM}暂无 Profile${R}\n`);
+      NeonaicLogger.getLogger().platM.info(`${DIM}暂无 Profile${R}\n`);
       return;
     }
 
@@ -300,14 +294,25 @@ export class PlatformManager extends NeonaicNewable {
   }
 }
 
+/** 语法糖，获取PM */
+function getPlatformManager() {
+  return PlatformManager.instance;
+}
+
 /**
  * Platform 实现模块在 import 时调用此函数注册。
- * @param {{ new(profile: string): import('./platformInterface.js').NeonaiPlatform }} Cls
+ * @param {{ new(profile: string): import('./platformInterface.js').NeonaicPlatformInterface.NeonaiPlatform }} Cls
  */
-export function registerPlatform(Cls) {
+function registerPlatform(Cls) {
   const pm = PlatformManager.instance;
   if (!pm) {
     throw new Error('PlatformManager 尚未初始化，请确保在 system/entry.js 中先 new PlatformManager');
   }
   pm._registerClass(Cls);
 }
+
+export const NeonaicPlatformManager = {
+  getPlatformManager,
+  PlatformManager,
+  registerPlatform,
+};

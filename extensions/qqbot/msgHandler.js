@@ -1,14 +1,14 @@
 import qqBotBackend from 'qq-official-bot';
 import he from 'he';
 import JSON5 from 'json5';
-import { getLogger, parseString } from '../../src/system/logger/Logger.js';
+import { NeonaicLogger, parseString } from '../../src/logger/Logger.js';
 import { PlatformQQBot } from './index.js';
-import { resolveReply } from '../../src/handler/messageIn.js';
-import { getBotName, getConfig } from '../../src/system/Config.js';
-import { getPlatformManager } from '../../src/platform/platformManager.js';
+import { NeonaicMessageIn } from '../../src/message/messageIn.js';
+import { NeonaicConfManager } from '../../src/system/confManager.js';
+import { NeonaicPlatformManager } from '../../src/platform/platformManager.js';
 import { fromQQElement } from './emoji.js';
-import { registerCommand } from '../../src/handler/commandServer.js';
-import { COMMAND_ENUMS } from '../../src/handler/commandInterface.js';
+import { NeonaicCommandServer } from '../../src/command/commandServer.js';
+import { NeonaicCommandInterface } from '../../src/command/commandInterface.js';
 
 /**
  * 好友列表私聊
@@ -18,10 +18,10 @@ import { COMMAND_ENUMS } from '../../src/handler/commandInterface.js';
  */
 async function onPrivateMessageIn(event, pp) {
   /** 实例的 Profile 配置 */
-  const profile_config = getPlatformManager().getProfile(pp.profile);
+  const profile_config = NeonaicPlatformManager.getPlatformManager().getProfile(pp.profile);
   
   pp.logMsgIn('Private:', `from=USR#${event.user_id} | msg=` + parseString(event.message, false).replace(/\n/g, "\\n"));
-  const reply = await resolveReply(toMarkdown(event.message, pp), {
+  const reply = await NeonaicMessageIn.resolveReply(toMarkdown(event.message, pp), {
     AI: profile_config.useAI, AIlist: profile_config.allowedAI,
     resolveCommandWith: {
       executor: `USR#${event.user_id}`,
@@ -43,10 +43,10 @@ async function onPrivateMessageIn(event, pp) {
  */
 async function onGroupMessageIn(event, pp) {
   /** 实例的 Profile 配置 */
-  const profile_config = getPlatformManager().getProfile(pp.profile);
+  const profile_config = NeonaicPlatformManager.getPlatformManager().getProfile(pp.profile);
 
   pp.logMsgIn('Group:', `where=GRP#${event.group_id} | from=USR#${event.user_id} | msg=` + parseString(event.message, false).replace(/\n/g, "\\n"));
-  const reply = await resolveReply(toMarkdown(event.message, pp), {
+  const reply = await NeonaicMessageIn.resolveReply(toMarkdown(event.message, pp), {
     AI: profile_config.useAI, AIlist: profile_config.allowedAI,
     resolveCommandWith: {
       executor: [`USR#${event.user_id}`, `GRP#${event.group_id}`],
@@ -83,27 +83,27 @@ export async function sendMsg(instance, who, msg) {
   throw new Error("无法识别的用户：" + parseString(who));
 }
 
-registerCommand('qqbot', 'qbsend', async function (profile, who, ...msg) {
+NeonaicCommandServer.registerCommand('qqbot', 'qbsend', async function (profile, who, ...msg) {
   // 获取实例
-  const instance = getPlatformManager().getPlatform(parseString(profile));
+  const instance = NeonaicPlatformManager.getPlatformManager().getPlatform(parseString(profile));
   if (!(instance instanceof PlatformQQBot)) throw new Error("指定的 Platform Profile 无效");
   // 发送消息
   const messageContent = msg.map(v => parseString(v, false)).join('');
   try {
     const result = await sendMsg(instance, who, messageContent);
-    getLogger().platP.debug(`[qqbot] 向`, who, `@`, profile, `发送消息`, msg, `：`, result);
+    NeonaicLogger.getLogger().platP.debug(`[qqbot] 向`, who, `@`, profile, `发送消息`, msg, `：`, result);
     instance.logMsgOut('Command:', `to=${who} | msg=`, messageContent.replace(/\n/g, "\\n"));
     // SendResult 可能为「消息审核中」状态
     if (result?.audit_status === 'pending') {
-      return `“${getBotName()}”已向[${who}]发送消息，但消息正在审核中。`;
+      return `“${NeonaicConfManager.getBotName()}”已向[${who}]发送消息，但消息正在审核中。`;
     }
-    return `“${getBotName()}”成功向[${who}]发送指定消息。`;
+    return `“${NeonaicConfManager.getBotName()}”成功向[${who}]发送指定消息。`;
   } catch (err) {
-    getLogger().platP.debug(`[qqbot] 向`, who, `@`, profile, `发送消息失败：`, err.message);
-    return `“${getBotName()}”无法向[${who}]发送指定消息，因为“${err.message}”。`;
+    NeonaicLogger.getLogger().platP.debug(`[qqbot] 向`, who, `@`, profile, `发送消息失败：`, err.message);
+    return `“${NeonaicConfManager.getBotName()}”无法向[${who}]发送指定消息，因为“${err.message}”。`;
   }
 }, {
-  permissions: [[COMMAND_ENUMS.PERM_SUPERADMIN, "qqbot.command.qbsend"]],
+  permissions: [[NeonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "qqbot.command.qbsend"]],
   description: "使用官方QQBOT向指定渠道发送消息，需要对应渠道允许接收机器人消息：群聊需要群主开启推送权限；私聊需要加为好友并开启推送权限。",
   usage: "qbsend <profile> <who> <...msg>",
 })

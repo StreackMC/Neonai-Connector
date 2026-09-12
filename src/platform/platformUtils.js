@@ -1,12 +1,12 @@
 /**
  * 为 Profile 组件提供预定义的 API 能力
- * 
+ *
  * @module PlatformUtils
  * @author kdxiaoyi
  * @since 0.1.0
  */
 
-import { NeonaicNewable } from '../system/NeonaicNewableClass.js';
+import { NeonaicNewableModule } from '../system/NeonaicNewableClass.js';
 
 /**
  * 判断主机地址的格式类型
@@ -79,7 +79,7 @@ function normalizeUrl(uri) {
  * @class NeonaicUriMeta
  * @since 0.1.0
  */
-export class NeonaicUriMeta extends NeonaicNewable {
+class NeonaicUriMeta extends NeonaicNewableModule.NeonaicNewable {
   /**
    * 该 URI 是否尝试访问内网资源，推荐开启 {@link NeonaicUriOptions.resolveRealAddress} 提高准确性
    * @type {boolean}
@@ -249,7 +249,7 @@ async function lookupBindedDomainF(meta) {
  * @return {NeonaicUriMeta|Promise<NeonaicUriMeta>} 返回是否为 Promise 取决于参数
  * @since 0.1.0
  */
-export function resolveUri(uri, options = {}) {
+function resolveUri(uri, options = {}) {
   const { resolveRealAddress = false, lookupBindedDomain = false } = options;
   const meta = new NeonaicUriMeta(uri, options);
 
@@ -265,3 +265,8 @@ export function resolveUri(uri, options = {}) {
     return meta;
   })();
 }
+
+export const NeonaicPlatformUtils = {
+  NeonaicUriMeta,
+  resolveUri,
+};

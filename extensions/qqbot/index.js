@@ -1,18 +1,18 @@
 /**
- * platform/qqbot/qqbot.js — QQ 机器人 Platform 实现
+ * platform/qqbot/index.js — QQ 机器人 Platform 实现
  *
  * 通过 registerPlatform(Cls) 注册，PM 用 Profile 名称实例化。
  * 运行时配置通过 PlatformManager.getProfile(this.profile) 获取。
  */
 
-import { PlatformManager, registerPlatform } from '../../src/platform/platformManager.js';
-import { Platform } from '../../src/platform/platformInterface.js';
+import { NeonaicPlatformManager } from '../../src/platform/platformManager.js';
+import { NeonaicPlatformInterface } from '../../src/platform/platformInterface.js';
 import qqBotBackend from 'qq-official-bot';
 const { Bot, ReceiverMode } = qqBotBackend;
 import MsgHandler from "./msgHandler.js";
 import { EVENTS, INTENTS } from "./enums.js";
 
-export class PlatformQQBot extends Platform {
+export class PlatformQQBot extends NeonaicPlatformInterface.NeonaiPlatform {
   static type = 'qqbot';
   #botInstance = null;
 
@@ -25,7 +25,7 @@ export class PlatformQQBot extends Platform {
   get bot() { return this.#botInstance; }
 
   async start() {
-    const cfg = PlatformManager.instance.getProfile(this.profile);
+    const cfg = NeonaicPlatformManager.PlatformManager.instance.getProfile(this.profile);
     if (!cfg) throw new Error(`Profile "${this.profile}" 配置不存在`);
 
     this.#botInstance = new Bot({
@@ -56,4 +56,4 @@ export class PlatformQQBot extends Platform {
   }
 }
 
-registerPlatform(PlatformQQBot);
+NeonaicPlatformManager.registerPlatform(PlatformQQBot);

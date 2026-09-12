@@ -1,7 +1,12 @@
 import { readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import JSON5 from 'json5';
-import { NeonaicNewable } from './NeonaicNewableClass.js';
+import { NeonaicNewableModule } from './NeonaicNewableClass.js';
+
+// 本模块自算项目根路径，避免与 entry.js 形成循环依赖
+// NeonaicConfig.js 位于 <根>/src/system/，故向上 2 层为项目根
+const ROOT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
 // ---- 嵌套路径工具 ----
 
@@ -40,7 +45,7 @@ function setNested(map, key, value) {
 
 // ---- Config 类 ----
 
-export class NeonaicConfig extends NeonaicNewable {
+class NeonaicConfig extends NeonaicNewableModule.NeonaicNewable {
   /**
    * 按路径读取单个配置文件。
    * @param {string} path 配置文件路径（相对项目根或绝对路径）
@@ -166,3 +171,7 @@ export class NeonaicConfig extends NeonaicNewable {
     return Array.isArray(v) ? v : [v];
   }
 }
+
+export const NeonaicConfigModule = {
+  NeonaicConfig,
+};

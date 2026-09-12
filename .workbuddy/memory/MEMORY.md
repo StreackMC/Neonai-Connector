@@ -3,7 +3,7 @@
 ## 项目概览
 
 - **名称**：Neonai-Connector — 基于 Node.js (ESM) 的服务端项目，作为与"澪奈 (Neonai)"沟通的桥梁
-- **显示名称**：Neonai / 澪奈（配置在 config/main.json 的 name / name_cn）
+- **显示名称**：澪奈 / Neonai（配置在 config/main.json 的 `name` / `subname`，当前为「澪奈」/「Neonai」）
 - **License**：AGPL-3.0 + 附加条款（禁止复用美术资源、禁止将 "Neonai""澪奈" 用作自身品牌，项目名 "Neonai-Connector" 除外）
 - **远程仓库**：`git@github.com:StreackMC/Neonai.git`（GitHub）
 
@@ -11,56 +11,77 @@
 
 采用 **三层架构 + 组合根 (Composition Root) + 依赖注入** 模式：
 
-### 三层划分
+### 目录 / 层划分
 
 | 层 | 目录 | 职责 |
 |----|------|------|
-| **System** | `src/system/` | 底层基础设施：bootstrap、config、logger、CLI、PID 锁 |
-| **Handler** | `src/handler/` | IN→OUT 中转：调用 AI/Tool 将输入转换为输出 |
-| **Platform** | `src/platform/` | 平台适配：接收消息流（IN），调用 Handler 获取回复（OUT），发回平台 |
+| **System** | `src/system/` | 底层基础设施：entry（组合根）、confManager、NeonaicConfig、Logger 之外的 CLI / PID |
+| **Logger** | `src/logger/` | 日志系统（Logger.js）+ log4js 注入 |
+| **Command** | `src/command/` | 命令引擎 commandServer + 权限 permissionServer + 枚举 commandInterface |
+| **Message** | `src/message/` | IN→OUT 中转：ai.js（AI 交互）、messageIn.js（命令→AI 双层回复） |
+| **Platform** | `src/platform/` | 平台适配：platformInterface（基类）、platformManager、platformUtils |
+| **Extension** | `src/extension/` | 拓展加载（extLoader；extMgr.js 目前为空文件） |
+| **Extensions** | `extensions/` | 具体拓展：`qqbot/`、`joyous/` |
 
-### 模块清单
+### 模块清单（当前真实布局）
 
-- `main.js` — 瘦入口（仅调用 system/entry.bootstrap 并兜底错误）
-- `src/system/entry.js` — 组合根（惰性单例 getConfigs/getLogger、平台管理器初始化、CLI 启动、优雅关闭）
-- `src/system/conf.js` — 声明式配置：`CONFIG_PATHS` 硬编码，JSON5 解析
-- `src/system/logger.js` — 分模块日志：`LOG_TYPES` 声明式定义，Proxy 路由，gzip 轮转，console 劫持。落盘日志自动截断（对象/数组仅展开前 3 属性，字符串超 80 字符截断）
-- `src/system/pid.js` — PID 进程锁（通过参数接收 logger）
-- `src/system/cli.js` — 注册式命令系统：`registerCommand(name, handler, opts)`，参数校验，防抖错误，TAB 补全，readline REPL + 保活定时器。非 TTY 时跳过 REPL
-- `src/system/platform-manager.js` — 平台生命周期管理：registerPlatform(name, {start,stop})，提供 `platform` CLI 命令（list/start/stop/enable/disable），enable/disable 直接写入 config/main.json
-- `src/platform/qqbot.js` — QQ 频道机器人适配器，通过 registerPlatform 注册到管理器
+- `main.js` — 瘦入口（仅调用 `NeonaicEntry.bootstrap()` 并兜底错误）
+- `src/system/entry.js` — 组合根：PID 锁、平台管理器初始化、CLI 启动、权限/配置命令安装、优雅关闭
+- `src/system/confManager.js` — 声明式配置：`CONFIG_PATHS` 硬编码，JSON5 解析，按路径缓存单例 `getConfig(path)`
+- `src/system/NeonaicConfig.js` — 单个配置文件的读写类（点号嵌套路径 + 类型化 getter）
+- `src/system/NeonaicNewableClass.js` — `NeonaicNewable` 基类 + `getUniqueId()`
+- `src/system/cliProcessor.js` — CLI 交互层：readline REPL、TAB 补全、保活定时器、prompt 擦除/重绘
+- `src/logger/Logger.js` — 分模块日志：`LOG_TYPES` 声明式定义，Proxy 路由，gzip 轮转，console 劫持，落盘自动截断
+- `src/command/commandServer.js` — 注册式命令引擎：`registerCommand` / `executeCommand(Silent)` / `inferNext`，冲突检测
+- `src/command/permissionServer.js` — 4 层权限（临时 > 永久 > 全局临时 > 全局），持久化到 `config/saves/permissions.json`
+- `src/message/ai.js` — Vercel AI SDK 封装（`askAI`、`registerAITool`，Profile 从 `secret.json` 的 `oai` 读取）
+- `src/platform/platformManager.js` — 平台生命周期：`registerPlatform(Cls)`，`platform` CLI 命令（list/start/stop/enable/disable），enable/disable 写回 `secret.json`
+- `src/platform/platformInterface.js` — `NeonaiPlatform` 基类
+- `src/platform/platformUtils.js` — `resolveUri` / `NeonaicUriMeta`（含内网判定、DNS 异步解析）
 - `debug.cjs` — 调试会话入口（CJS→ESM 过渡），非 TTY 下通过全局 `$("cmd")` 模拟 CLI 输入
+
+### 模块导出约定（强制）
+
+- 每个模块**只导出一个命名空间对象**：`export const NeonaicXxx = { ... }`，禁止分散具名导出。
+- 命名规则：`Neonaic` + 文件名 PascalCase（如 `commandServer.js` → `NeonaicCommandServer`）。
+- 文件名与类名同名的模块，对象加 `Module` 后缀、类名不变：`NeonaicConfigModule`、`NeonaicNewableModule`。
+- **仅有的两个例外**：`Logger.js` 的 `parseString`、`log4js_inject.js` 的 `configure`（后者是 log4js appender 的硬性要求）。
+- 调用点一律走对象访问：`NeonaicLogger.getLogger()`、`NeonaicCommandInterface.COMMAND_ENUMS.X`；类继承写作 `extends NeonaicNewableModule.NeonaicNewable`。
+- 对象字面量统一放在文件**末尾**（类声明不会提升，提前引用会 TDZ 报错）。
 
 ### CLI 命令系统
 
-通过 `registerCommand(name, handler, options?)` 注册命令，各层模块在 import 时自动注册。启动后进入 readline REPL（`>` 提示符）。
+签名：`NeonaicCommandServer.registerCommand(namespace, name, handler, opts)`。各模块在 import 时自注册，`handler` 的 `this` 是 `NeonaicCommandContext`。
 
-options 包含：`description`（帮助文本）、`argsCount`（参数数量校验，支持数字精确匹配和 [min, max] 范围）、`usage`（用法示例）。
+opts 包含：`alias`（别名）、`permissions`（第一层 AND、第二层 OR，`!perm` 表示须缺失）、`description`、`usage`。命令引用支持 `name` / `alias` / `ns:name` / `ns:alias`。
 
-特性：TAB 补全命令名、参数校验（红色高亮出错部分+原因说明）、错误防抖（800ms 内相同错误不重复）、保活定时器（无平台时进程不退出，仅 stop 命令安全关闭）。
+特性：TAB 补全（`inferNext`）、别名撞原名的覆盖例外、保活定时器（无平台时进程不退出，仅 `stop` 安全关闭）。
 
 **调试模式**：非 TTY 环境（VS Code 调试等）跳过 REPL，通过 `globalThis.$("cmd")` 模拟 CLI 输入。使用 `debug.cjs` 作为入口（CJS → ESM 过渡）。
 
-内置系统命令：`help`（美化输出含描述）、`version`（版本/版权/系统信息）、`status`、`stop`、`platform list|start|stop|enable|disable`。QQBot 提供 `qqbot status|reconnect`。
+内置命令：`neonaic:{help, sudo, runuser, version, stop}` + `neonaic:permission`(perm) / `whoami` / `reload` / `platform`(pm) / `ai`(askai)；扩展注册 `joyous:mc`、`qqbot:qbsend`。（旧记忆里的 `status` 命令、`argsCount` 校验、错误防抖均已不存在。）
 
 设计原则：声明式（模块顶部硬编码映射表）、解耦（子模块互不引用，经组合根注入）、惰性单例（import 无副作用）、优雅关闭（5s 超时强制退出）。
 
 ## 扩展系统 (Extensions)
 
-项目通过 **扩展自动发现** 实现插件化，无需在入口硬编码路径：
+项目规划通过 **扩展自动发现** 实现插件化，无需在入口硬编码路径：
 
-- 加载器：`src/system/extensionLoader.js` 的 `loadExtensions()`，在 `entry.js` 启动流程中调用。
-- 扫描目录：`extensions/handler/` 与 `extensions/platform/` 下的**一级子目录**，每个子目录的 `index.js` 即入口，被动态 `import()` 加载。
-- **约定**：handler 扩展放 `extensions/handler/<name>/index.js`，platform 扩展放 `extensions/platform/<name>/index.js`。模块在 import 时自注册（`registerCommand` / `registerPlatform`）。
-- 扩展内导入内核模块用 `../../../src/...`（相对本文件向上三层）。
-- 注意：扩展文件必须叫 `index.js` 且位于子目录中；`extensions/handler/<name>.js` 这种扁平文件**不会被加载**。
+- 加载器：`src/extension/extLoader.js`（`NeonaicExtItem` / `MANIFEST_STRUCTURE`）。**当前尚未接入 `entry.js`**（组合根里留了 `// todo: refactor`），`extMgr.js` 还是 0 字节空文件。
+- 布局：`extensions/<name>/index.js` + 同目录 `manifest.json`。
+- `manifest.json` 结构：`meta.version`（如 `[1, "0.1.0"]`）、`meta.id`（须匹配 `^[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*$`）、`particulars.{name,author,description,url,license}`、`entry`（如 `./index.js`）、`depends` / `softdepends`。
+- `NeonaicExtItem.enable()` 要求入口模块导出 `onEnable` 与 `onDisable`。
+- **约定**：扩展内导入内核模块用 `../../src/...`（相对本文件向上两层）。
+- 注意：扩展文件必须叫 `index.js` 且位于子目录中；扁平文件不会被加载。
 
 ## 配置文件
 
-- `config/main.json` — 监听平台开关、console 重定向开关（JSONC）
-- `config/logger.json` — 日志目录、单文件大小上限
-- `config/secret.json` — 凭据模板文件（key 为随意填充），**已入库 Git 跟踪**
-- `secret.json`（根目录）— 真实敏感信息（OAI 配置、QQBot 凭据），**已 gitignore，不入库**
+- `config/main.json` — 机器人名称/次名、命令前缀 `prefix`、`maxLogFileSize`、`detailedLog`（JSONC）
+- `config/prompts/<profile>.md` — 各 AI Profile 的系统提示词，按 `oai[].name` 加载；`config/prompts` **已 gitignore**
+- `config/saves/permissions.json` — 权限持久化（运行时写入）
+- `config/saves/ext.json` — 拓展启用状态
+- `config/secret.json` — 凭据模板文件（假 key），**已入库 Git 跟踪**
+- `secret.json`（根目录）— 真实敏感信息（`oai` Profile、`platforms`），**已 gitignore，不入库**
 
 ## Git 提交约定（全局强制）
 
@@ -80,5 +101,8 @@ options 包含：`description`（帮助文本）、`argsCount`（参数数量校
 
 ## 已知待办
 
-- Handler 层已实现：`src/handler/` 含 commandServer（命令引擎）、permissionServer（权限）、ai.js（OpenAI 兼容问答）、msgin.js（命令→AI 双层回复）；扩展 `extensions/handler/ai`（askAI）、`extensions/handler/streackserver`（mc 服务器状态命令）。
-- 平台层：QQBot 适配器已迁移至 `extensions/platform/qqbot/`；后续可照此约定扩展其他平台。
+- 拓展加载链路未打通：`extLoader.js` 未接入 `entry.js`，`extMgr.js` 为空；`extensions/qqbot/index.js` 在 import 时靠 `registerPlatform` 自注册、并未导出 `onEnable`/`onDisable`，与 `NeonaicExtItem.enable()` 的契约不一致。
+- `extensions/joyous` 的 `onEnable`/`onDisable` 是空实现。
+- `src/message/ai.js` 底部的 `neonaic:webfetch` 工具是半成品：`uri = new URL(address)` 赋值给未声明变量（严格模式下会抛错），内网校验逻辑也没写完。
+- `entry.js` 的 `neonaic:version` 里 `checkPermissionFromContext(this)` 只传了 1 个参数（签名是 `(ctx, permission)`），导致 `systemLine` 永远为空；`platformManager` 的命令权限串拼写为 `neonaic.commmand.platform`（多一个 m）。
+- CLI 命令系统的 `argsCount` 参数校验、错误防抖在现行 commandServer 中已不存在（旧记忆已过时）。

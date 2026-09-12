@@ -1,5 +1,5 @@
 /**
- * handler/ai.js — AI 交互模块（Vercel AI SDK）
+ * ai.js — AI 交互模块（Vercel AI SDK）
  *
  * 保留 askAI(userMessage, AIlist) 接口，内部全面使用 Vercel AI SDK：
  *   - createOpenAI 构建 provider，通过 fetch 中间件严格遵循用户配置的完整 address
@@ -19,15 +19,15 @@ import { generateText, streamText, tool, stepCountIs } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import JSON5 from 'json5';
 
-import { CONFIG_PATHS, getConfig } from '../system/Config.js';
-import { getLogger, parseString } from '../system/logger/Logger.js';
-import { NeonaicCommandContext, registerCommand } from './commandServer.js';
-import { COMMAND_ENUMS } from './commandInterface.js';
-import { clearPermission, checkPermission, parseDuration, setPermission, setTempPermission } from './permissionServer.js';
+import { NeonaicConfManager } from '../system/confManager.js';
+import { NeonaicLogger, parseString } from '../logger/Logger.js';
+import { NeonaicCommandServer } from '../command/commandServer.js';
+import { NeonaicCommandInterface } from '../command/commandInterface.js';
+import { NeonaicPermissionServer } from '../command/permissionServer.js';
 import z from 'zod';
 
 // 本模块自算项目根路径，避免与 entry.js 形成循环依赖
-// ai.js 位于 <根>/src/handler/，故向上 2 层为项目根
+// ai.js 位于 <根>/src/message/，故向上 2 层为项目根
 const ROOT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
 /** 封禁用户使用 AI 的权限名 */
@@ -45,7 +45,7 @@ function loadSystemPrompt(providerName) {
     prompt = readFileSync(resolve(ROOT_PATH, `config/prompts/${providerName}.md`), 'utf8').trim();
   } catch (e) {
     prompt = '你是一个有用的 AI 助手。';
-    getLogger().tool.debug(`无法加载提示词 config/prompts/${providerName}.md：`, e);
+    NeonaicLogger.getLogger().tool.debug(`无法加载提示词 config/prompts/${providerName}.md：`, e);
   }
   _promptCache.set(providerName, prompt);
   return prompt;
@@ -81,19 +81,19 @@ const _toolFqn = new Map();
  * @param {Function} definition.execute 执行函数，接收模型生成的输入
  * @returns {boolean} true 注册成功；false 冲突（已存在同名工具）
  */
-export function registerAITool(namespace, name, definition) {
+function registerAITool(namespace, name, definition) {
   if (!namespace || !name) {
-    getLogger().tool.warn(`AI 工具注册失败：无效的命名空间或名称 (ns=${namespace}, name=${name})`);
+    NeonaicLogger.getLogger().tool.warn(`AI 工具注册失败：无效的命名空间或名称 (ns=${namespace}, name=${name})`);
     return false;
   }
   if (!definition || typeof definition.execute !== 'function') {
-    getLogger().tool.warn(`AI 工具注册失败：无效的定义或 execute (${namespace}:${name})`);
+    NeonaicLogger.getLogger().tool.warn(`AI 工具注册失败：无效的定义或 execute (${namespace}:${name})`);
     return false;
   }
 
   const fqn = `${namespace}:${name}`;
   if (_toolFqn.has(fqn)) {
-    getLogger().tool.warn(`AI 工具 "${fqn}" 已被注册`);
+    NeonaicLogger.getLogger().tool.warn(`AI 工具 "${fqn}" 已被注册`);
     return false;
   }
 
@@ -110,7 +110,7 @@ export function registerAITool(namespace, name, definition) {
 }
 
 /** 获取所有已注册的 AI 工具（按注册顺序） */
-export function getAITools() { return _allTools; }
+function getAITools() { return _allTools; }
 
 // ---- 工具过滤 ----
 
@@ -144,7 +144,7 @@ function matchToolPattern(pattern) {
  * @param {string|string[]|undefined} toolsConfig
  * @returns {string[]} 可用工具的 fqn 列表
  */
-export function resolveToolList(toolsConfig) {
+function resolveToolList(toolsConfig) {
   if (toolsConfig == null) return [];
   const rules = Array.isArray(toolsConfig) ? toolsConfig : [toolsConfig];
   if (!rules.length) return [];
@@ -238,7 +238,7 @@ async function callProvider(provider, userMessage) {
   // 下限钳制为 1，避免配置为 0/负数导致 stepCountIs 失效。
   const rawMax = Number(provider.maxToolcall);
   const maxToolcall = Math.max(1, Number.isFinite(rawMax) ? rawMax : 5);
-  getLogger().tool.debug(
+  NeonaicLogger.getLogger().tool.debug(
     `→ ${provider.name}: ${provider.address}#${provider.model} (${endpoint}${provider.stream ? ', stream' : ''}, ${toolList.length} tools, maxToolcall=${maxToolcall})`,
   );
 
@@ -263,16 +263,16 @@ async function callProvider(provider, userMessage) {
     const summary = toolCalls
       .map((t) => `${t.toolName}(${JSON.stringify(t.input ?? {})})`)
       .join('; ');
-    getLogger().tool.debug(`◉ ${provider.name} 调用工具: ${summary}`);
+    NeonaicLogger.getLogger().tool.debug(`◉ ${provider.name} 调用工具: ${summary}`);
     const toolResults = await (result.toolResults ?? []);
     for (const tr of toolResults) {
       const out = typeof tr.output === 'string' ? tr.output : JSON.stringify(tr.output);
-      getLogger().tool.debug(`  ↳ ${tr.toolName} → ${out.slice(0, 200)}`);
+      NeonaicLogger.getLogger().tool.debug(`  ↳ ${tr.toolName} → ${out.slice(0, 200)}`);
     }
   }
 
   const reply = (await result.text) ?? '';
-  getLogger().tool.debug(`← ${provider.name}: ${reply.length} 字符`);
+  NeonaicLogger.getLogger().tool.debug(`← ${provider.name}: ${reply.length} 字符`);
   return reply;
 }
 
@@ -283,10 +283,10 @@ async function callProvider(provider, userMessage) {
  * @param {string|string[]|null|undefined} caller 调用者标识（执行者链）
  * @returns {boolean} true = 已被封禁
  */
-export function isAIBanned(caller) {
+function isAIBanned(caller) {
   if (caller == null) return false;
   // 权限被明确设置为 false 视为封禁；未设置（null）默认允许
-  return checkPermission(caller, AI_BAN_PERMISSION) === false;
+  return NeonaicPermissionServer.checkPermission(caller, AI_BAN_PERMISSION) === false;
 }
 
 /**
@@ -296,14 +296,14 @@ export function isAIBanned(caller) {
  * @returns {Promise<string>} AI 回复文本
  * @throws 调用者被封禁 / 无可用 Profile / 所有 Profile 请求失败
  */
-export async function askAI(userMessage, AIlist, caller) {
-  if (isAIBanned(caller)) return `（${getBotName()}静静地看着别处，并未言语）`;
+async function askAI(userMessage, AIlist, caller) {
+  if (isAIBanned(caller)) return `（${NeonaicConfManager.getBotName()}静静地看着别处，并未言语）`;
 
   if (!Array.isArray(AIlist)) AIlist = [AIlist];
   AIlist = AIlist.map((v) => (typeof v === 'string' ? v.trim() : parseString(v, false).trim()));
 
   const isAll = AIlist.includes('*');
-  const oaiList = getConfig(CONFIG_PATHS.secret).getList('oai').filter((v) => {
+  const oaiList = NeonaicConfManager.getConfig(NeonaicConfManager.CONFIG_PATHS.secret).getList('oai').filter((v) => {
     if (v?.available === false) return false;
     if (isAll) return true;
     return AIlist.includes(v?.name);
@@ -315,7 +315,7 @@ export async function askAI(userMessage, AIlist, caller) {
     try {
       return await callProvider(provider, userMessage);
     } catch (err) {
-      getLogger().tool.debug(`× ${provider.name}: ${err.message}`);
+      NeonaicLogger.getLogger().tool.debug(`× ${provider.name}: ${err.message}`);
       errors.set(provider.name, err.message);
     }
   }
@@ -332,7 +332,7 @@ export async function askAI(userMessage, AIlist, caller) {
  * @param {string} ref 工具引用：fqn（ns:name）或 name（模糊匹配）
  * @returns {AIToolDef[]}
  */
-export function findTool(ref) {
+function findTool(ref) {
   if (!ref) return null;
   const fqn = matchToolPattern(ref);
   return fqn.map((name) => _toolFqn.get(name));
@@ -343,8 +343,8 @@ export function findTool(ref) {
  * @param {string} name Profile 名
  * @returns {object|null}
  */
-export function findProvider(name) {
-  return getConfig(CONFIG_PATHS.secret).getList('oai').find((p) => p?.name === name) ?? null;
+function findProvider(name) {
+  return NeonaicConfManager.getConfig(NeonaicConfManager.CONFIG_PATHS.secret).getList('oai').find((p) => p?.name === name) ?? null;
 }
 
 // ---- ai 基础工具 ----
@@ -369,8 +369,8 @@ registerAITool('neonaic', 'webfetch', {
 
 // ---- ai 命令 ----
 
-registerCommand('neonaic', 'ai', async function (sub, ...args) {
-  /** @type {NeonaicCommandContext} */
+NeonaicCommandServer.registerCommand('neonaic', 'ai', async function (sub, ...args) {
+  /** @type {import('./commandServer.js').NeonaicCommandServer.NeonaicCommandContext} */
   const ctx = this;
 
   switch (sub) {
@@ -386,7 +386,7 @@ registerCommand('neonaic', 'ai', async function (sub, ...args) {
       return `用法: ${cmdAIUsage()}`;
   }
 }, {
-  permissions: [[COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.command.ai"]],
+  permissions: [[NeonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.command.ai"]],
   description: "AI 工具与 Profile 管理",
   usage: "ai <tool|profile|ban|pardon> ...",
   alias: ['askai'],
@@ -399,7 +399,7 @@ function cmdAIUsage() {
 
 /**
  * ai tool 子命令。
- * @param {NeonaicCommandContext} ctx
+ * @param {import('./commandServer.js').NeonaicCommandServer.NeonaicCommandContext} ctx
  * @param {...string} args
  */
 async function aiTool(ctx, ...args) {
@@ -438,14 +438,14 @@ async function aiTool(ctx, ...args) {
 
 /**
  * ai profile 子命令。
- * @param {NeonaicCommandContext} ctx
+ * @param {import('./commandServer.js').NeonaicCommandServer.NeonaicCommandContext} ctx
  * @param {...string} args
  */
 async function aiProfile(ctx, ...args) {
   const op = args[0];
   switch (op) {
     case 'list': {
-      const list = getConfig(CONFIG_PATHS.secret).getList('oai');
+      const list = NeonaicConfManager.getConfig(NeonaicConfManager.CONFIG_PATHS.secret).getList('oai');
       if (!list.length) return '暂无 AI Profile';
       return list.map((p) => `${p.name} (${p.model})${p.available === false ? ' [禁用]' : ''}`).join('\n');
     }
@@ -454,7 +454,7 @@ async function aiProfile(ctx, ...args) {
       const profileName = args[1];
       if (!profileName) return '用法: ai profile <enable|disable> <profile>';
       const want = op === 'enable';
-      const cfg = getConfig(CONFIG_PATHS.secret);
+      const cfg = NeonaicConfManager.getConfig(NeonaicConfManager.CONFIG_PATHS.secret);
       const list = cfg.getList('oai');
       const target = list.find((p) => p?.name === profileName);
       if (!target) return `未找到 AI Profile: ${profileName}`;
@@ -483,7 +483,7 @@ async function aiProfile(ctx, ...args) {
 
 /**
  * ai ban 子命令：封禁用户使用 AI。
- * @param {NeonaicCommandContext} ctx
+ * @param {import('./commandServer.js').NeonaicCommandServer.NeonaicCommandContext} ctx
  * @param {string} user
  * @param {string} [time] 持续时间（如 '1h'、'2d'、'1y2M3d4h5m6s'），存在则设临时封禁
  */
@@ -492,24 +492,34 @@ function aiBan(ctx, user, time) {
 
   if (time !== undefined) {
     // 临时封禁：解析持续时间 → 过期时间 = 当前 + 持续
-    const ms = parseDuration(time);
+    const ms = NeonaicPermissionServer.parseDuration(time);
     if (ms == null) return `无法解析持续时间: "${time}"（如 '1h'、'2d'、'1y2M3d4h5m6s'）`;
     const until = Date.now() + ms;
-    setTempPermission(user, AI_BAN_PERMISSION, false, until);
+    NeonaicPermissionServer.setTempPermission(user, AI_BAN_PERMISSION, false, until);
     return `已临时封禁 ${user} 使用 AI 功能，持续 ${time}，过期 ${new Date(until).toLocaleString()}`;
   }
 
-  setPermission(user, AI_BAN_PERMISSION, false);
+  NeonaicPermissionServer.setPermission(user, AI_BAN_PERMISSION, false);
   return `已封禁 ${user} 使用 AI 功能`;
 }
 
 /**
  * ai pardon 子命令：解封用户。
- * @param {NeonaicCommandContext} ctx
+ * @param {import('./commandServer.js').NeonaicCommandServer.NeonaicCommandContext} ctx
  * @param {string} user
  */
 function aiPardon(ctx, user) {
   if (!user) return '用法: ai pardon <user>';
-  clearPermission(user, AI_BAN_PERMISSION);
+  NeonaicPermissionServer.clearPermission(user, AI_BAN_PERMISSION);
   return `已解封 ${user}`;
 }
+
+export const NeonaicAI = {
+  registerAITool,
+  getAITools,
+  resolveToolList,
+  isAIBanned,
+  askAI,
+  findTool,
+  findProvider,
+};

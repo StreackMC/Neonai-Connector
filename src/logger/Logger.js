@@ -1,5 +1,5 @@
 /**
- * logger.js — 分模块日志系统
+ * Logger.js — 分模块日志系统
  *
  * 模块加载时立即劫持 console.* 为蹦床，后续由 redirectConsole 控制目标。
  * 所有日志接口接受无限参数。调试模式（_isDebug）强制输出到原生 console，
@@ -14,12 +14,12 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { createRequire } from 'node:module';
 
-import { getConfig, CONFIG_PATHS } from '../Config.js';
-import { putEmit } from './log4js_inject.js';
+import { NeonaicConfManager } from '../system/confManager.js';
+import { NeonaicLog4jsInject } from './log4js_inject.js';
 
 // 本模块自算项目根路径，避免与 entry.js 形成循环依赖
-// logger.js 位于 <根>/src/system/logger/，故向上 3 层为项目根
-const ROOT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+// Logger.js 位于 <根>/src/logger/，故向上 2 层为项目根
+const ROOT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const DEBUGING = process.argv.some((a) => a === '--debug=true' || a === '--debug');
 
 // ---- 常量与工具函数 ----
@@ -111,8 +111,8 @@ console.error = (...a) => _target.error.apply(console, a);
 
 // ---- 全局调试标志（由 entry.js 通过 setDebugMode 控制）----
 let _isDebug = false;
-export function setDebugMode(on) { _isDebug = !!on; }
-export function getDebugMode(on) { return !!_isDebug; }
+function setDebugMode(on) { _isDebug = !!on; }
+function getDebugMode(on) { return !!_isDebug; }
 
 // ---- 控制台输出钩子（与 REPL 协作：输出前清 prompt，输出后重绘）----
 let _beforeWrite = null;
@@ -123,7 +123,7 @@ let _afterWrite = null;
  * @param {() => void} [before] 输出到控制台前调用（清掉当前 prompt）
  * @param {() => void} [after] 输出到控制台后调用（重绘 prompt）
  */
-export function setConsoleHooks(before, after) {
+function setConsoleHooks(before, after) {
   _beforeWrite = before ?? null;
   _afterWrite = after ?? null;
 }
@@ -134,8 +134,10 @@ export function setConsoleHooks(before, after) {
  * @param {boolean} [short] 是否要截断：会只枚举前3个属性/对象；当调试模式时默认禁用，反之同理。**需要严格为真以防传入参数语义不明**
  * @param {boolean} [processString=false] 是否要把文本规整化。**需要严格为真以防传入参数语义不明**
  * @returns {String} 处理后的文本。Array→[1, 2, ...]  Map→{key=value, k=v, ...}  Set→{1, 2, ...}  Object→.toString()/{key: value, ...}
+ * @apiNote 本函数为全项目通用文本化工具，被大量模块直接引用；为避免调用点过度冗长，
+ *          它保持顶层具名导出，不收纳进 NeonaicLogger 对象。
  */
-export function parseString(val, short = !(DEBUGING || getConfig(CONFIG_PATHS.main).getBoolean('detailedLog', false)), processString = false) {
+export function parseString(val, short = !(DEBUGING || NeonaicConfManager.getConfig(NeonaicConfManager.CONFIG_PATHS.main).getBoolean('detailedLog', false)), processString = false) {
   // 基础类型：字符串加单引号，并转义特殊字符
   if (typeof val === 'string') {
     return (processString === true) ? `'${val.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t')}'` : val;
@@ -205,7 +207,7 @@ function toText(args) { return args.map(parseString).join(' '); }
  * @param {number} [options.maxFileSize]
  * @returns {Logger}
  */
-export function createLogger(options = {}) {
+function createLogger(options = {}) {
   const logDir      = options.logDir ?? './logs';
   const maxFileSize = options.maxFileSize ?? DEFAULT_MAX_FILE_SIZE;
   const levelColors = { ...LEVEL_COLORS, ...(options.levelColors ?? {}) };
@@ -375,12 +377,12 @@ function injectLog4js(emit) {
     return;
   }
 
-  putEmit(emit);
+  NeonaicLog4jsInject.putEmit(emit);
   log4js.configure({
     appenders: {
       // 使用自定义 appender
       cliForward: {
-        type: join(ROOT_PATH, 'src', 'system', 'logger', 'log4js_inject.js')
+        type: join(ROOT_PATH, 'src', 'logger', 'log4js_inject.js')
       }
     },
     categories: {
@@ -394,9 +396,17 @@ function injectLog4js(emit) {
  *
  * @returns {Logger} 共享日志器实例
  */
-export function getLogger() {
+function getLogger() {
   if (!_logger) {
-    _logger = createLogger({ logDir: './logs', maxFileSize: getConfig(CONFIG_PATHS.main).getInt('maxLogFileSize', 1048576) });
+    _logger = createLogger({ logDir: './logs', maxFileSize: NeonaicConfManager.getConfig(NeonaicConfManager.CONFIG_PATHS.main).getInt('maxLogFileSize', 1048576) });
   }
   return _logger;
 }
+
+export const NeonaicLogger = {
+  setDebugMode,
+  getDebugMode,
+  setConsoleHooks,
+  createLogger,
+  getLogger,
+};
