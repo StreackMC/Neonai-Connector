@@ -1,3 +1,7 @@
+import { neonaicConfManager } from '../system/confManager.js';
+
+/** 当前是否处于调试模式（与 entry.js / Logger.js 保持同一判定） */
+const DEBUGING = process.argv.some((a) => a === '--debug=true' || a === '--debug');
 
 /**
  * 尝试将输入尽可能地转化为文本
