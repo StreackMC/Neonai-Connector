@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { lstatSync, realpathSync } from 'node:fs';
 import { lstat, realpath } from 'node:fs/promises';
 
-import { NeonaicIOError, NeonaicNetworkError } from "./NeonaicNewableError.js";
+import { NeonaicIllegalArgumentError, NeonaicIOError, NeonaicNetworkError } from "./NeonaicNewableError.js";
 import { parseString } from "./text.js";
 
 /**
@@ -202,11 +202,14 @@ async function containsSymlink(p, everySegment = false) {
 export const neonaicFileSystem = {
   /**
    * 安全解析路径，自动阻止路径穿越，**不会处理软链接，无论软链接指向哪里**
-   * @apiNote 本方法会将项目文件夹虚拟为文件系统根目录进行求值，这样路径将始终维持在项目路径内。**如果需要得知发生路径穿越请用{@link neonaicFileSystem.resolveStrict}。**
+   * @apiNote 本方法会将首个参数虚拟为文件系统根目录进行求值，这样路径将始终维持在项目路径内。**如果需要得知发生路径穿越请用{@link neonaicFileSystem.resolveStrict}。**
+   * @param {String} root 父路径，默认为项目根路径，自动以项目根路径进行解析
    * @param {String[]|*[]} path 路径符
    * @returns {String} 返回求值后路径
    */
-  resolve: function (...path) {
+  resolve: function (root = ROOT_PATH, ...path) {
+    if (typeof root !== 'string') throw new NeonaicIllegalArgumentError("无法解析路径，因为根路径不是有效的字符串。");
+    root = resolve(ROOT_PATH, root);
     /** 递归逐层求值 */
     function digAndEnsure(input, next) {
       if (Array.isArray(next)) {
@@ -222,31 +225,34 @@ export const neonaicFileSystem = {
         // 本闭包函数的 input 始终不是用户输入，因此无需穿越检测
       } else {
         // 非数组：把 next 当“相对片段”，去掉前导分隔符，
-        // 这样 /a.js 在虚拟根下解析为 ROOT_PATH/a.js，而不是重置到文件系统根
+        // 这样 /a.js 在虚拟根下解析为 $root/a.js，而不是重置到文件系统根
         const seg = parseString(next).replace(/^[/\\]+/, '');
 
         // 用 join 而非 resolve：join 不会因绝对段重置基准
         const pending = join(input, seg);
 
-        const rel = relative(ROOT_PATH, pending);
+        const rel = relative(root, pending);
 
         // 第一段是 '..' 才算越界；isAbsolute(rel) 兜 Windows 跨盘
         if (rel === '..' || rel.startsWith('..' + sep) || isAbsolute(rel)) {
-          return ROOT_PATH;
+          return root;
         }
         return pending;
       };
     }
-    return digAndEnsure(ROOT_PATH, path);
+    return digAndEnsure(root, path);
   },
 
   /**
    * 安全解析路径，路径穿越自动抛错，**包括任何形式的软链接，无论软链接指向哪里**
+   * @param {String} root 父路径，默认为项目根路径，自动以项目根路径进行解析
    * @param {String[]|*[]} path 路径符
    * @throws {NeonaicIOError} 发生路径穿越
    * @returns {String} 返回求值后路径
    */
-  resolveStrict: function (...path) {
+  resolveStrict: function (root = ROOT_PATH, ...path) {
+    if (typeof root !== 'string') throw new NeonaicIllegalArgumentError("无法解析路径，因为根路径不是有效的字符串。");
+    root = resolve(ROOT_PATH, root);
     /** 递归逐层求值 */
     function digAndEnsure(input, next) {
       if (Array.isArray(next)) {
@@ -262,7 +268,7 @@ export const neonaicFileSystem = {
         // 本闭包函数的 input 始终不是用户输入，因此无需穿越检测
       } else {
         // 非数组：把 next 当“相对片段”，去掉前导分隔符，
-        // 这样 /a.js 在虚拟根下解析为 ROOT_PATH/a.js，而不是重置到文件系统根
+        // 这样 /a.js 在虚拟根下解析为 $root/a.js，而不是重置到文件系统根
         const seg = parseString(next).replace(/^[/\\]+/, '');
 
         // 用 join 而非 resolve：join 不会因绝对段重置基准
@@ -276,7 +282,7 @@ export const neonaicFileSystem = {
         return pending;
       };
     }
-    return digAndEnsure(ROOT_PATH, path);
+    return digAndEnsure(root, path);
   },
 
   /**
