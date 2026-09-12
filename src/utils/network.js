@@ -1,4 +1,5 @@
-import { NeonaicError } from "./NeonaicNewableError.js";
+import { NeonaicNetworkError } from "./NeonaicNewableError.js";
+import { parseString } from "./text.js";
 
 /**
  * Neonaic 网络相关工具
@@ -18,7 +19,9 @@ export const neonaicNetwork = {
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') {
         // 被超时中断
-        throw new NeonaicError("Timeout for fetch");
+        throw new NeonaicNetworkError("Timeout for fetch", e);
+      } else {
+        throw new NeonaicNetworkError('Failed to fetch: ' + parseString(e), e); 
       }
     } finally {
       clearTimeout(timer);
