@@ -87,7 +87,7 @@ export class NeonaicIllegalArgumentError extends NeonaicError {
 }
 
 /**
- * 当前状态不适合调用某方法
+ * 当前状态不适合调用某方法，或者当前状态不合适
  */
 export class NeonaicIllegalStateError extends NeonaicError {
   constructor(reason = "", cause = null) {
@@ -97,7 +97,7 @@ export class NeonaicIllegalStateError extends NeonaicError {
 }
 
 /**
- * 算术异常，典型是整数除以零
+ * 算术异常，典型是整数除以零，或者算出来了一个 NaN
  */
 export class NeonaicArithmeticError extends NeonaicError {
   constructor(reason = "", cause = null) {

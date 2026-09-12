@@ -1,4 +1,5 @@
 import { neonaicConfManager } from '../system/confManager.js';
+import { NeonaicIllegalArgumentError, NeonaicIllegalStateError } from './NeonaicNewableError.js';
 
 /** 当前是否处于调试模式（与 entry.js / Logger.js 保持同一判定） */
 const DEBUGING = process.argv.some((a) => a === '--debug=true' || a === '--debug');
@@ -72,3 +73,37 @@ export function parseString(val, short = !(DEBUGING || neonaicConfManager.getCon
   // 数字等直接转字符串
   return String(val);
 }
+
+export const neonaicText = {
+  parseString,
+
+  /**
+   * 断言一个函数返回值严格相等指定值，否则将抛出{@link NeonaicIllegalStateError}。
+   * @template T
+   * @param {(...any) => T} operation 函数
+   * @param {any} excepted 期望结果
+   * @param {any} args 函数参数
+   * @returns {T} 断言成功返回函数结果
+   */
+  assertResult: (operation, excepted, ...args) => {
+    if (typeof operation !== 'function') throw new NeonaicIllegalArgumentError("期待的传入值不是函数：" + parseString(operation));
+    const v = operation.apply(this, args);
+    if (v !== excepted) throw new NeonaicIllegalStateError(`断言函数的返回值为“${parseString(excepted)}”时失败了，发现了:${parseString(v)}`);
+    return v;
+  },
+
+  /**
+   * 断言一个函数返回文本合理，否则将抛出{@link NeonaicIllegalStateError}。
+   * @param {(...any) => String} operation 函数
+   * @param {RegExp|String} excepted 期望结果，文本时返回值需要包含，正则时需要匹配。**复用正则可能导致 last_index 紊乱，需要手动重置。**
+   * @param {any} args 函数参数
+   * @returns {String} 断言成功返回函数结果
+   */
+  assertResultFullfill: (operation, excepted, ...args) => {
+    if (typeof operation !== 'function') throw new NeonaicIllegalArgumentError("期待的传入值不是函数：" + parseString(operation));
+    if (typeof excepted !== 'string' || !(excepted instanceof RegExp)) throw new NeonaicIllegalArgumentError("期待的传入值类型不是文本或正则：" + parseString(operation));
+    const v = parseString(operation.apply(this, args));
+    if (!(typeof excepted === 'string' && v.includes(excepted)) && !(excepted instanceof RegExp && excepted.test(v))) throw new NeonaicIllegalStateError(`断言函数的返回值为“${parseString(excepted)}”时失败了，发现了:${v}`);
+    return v;
+  },
+};
