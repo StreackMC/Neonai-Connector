@@ -20,36 +20,43 @@
 | **Command** | `src/command/` | 命令引擎 commandServer + 权限 permissionServer + 枚举 commandInterface |
 | **Message** | `src/message/` | IN→OUT 中转：ai.js（AI 交互）、messageIn.js（命令→AI 双层回复） |
 | **Platform** | `src/platform/` | 平台适配：platformInterface（基类）、platformManager、platformUtils |
-| **Extension** | `src/extension/` | 拓展加载（extLoader；extMgr.js 目前为空文件） |
+| **Extension** | `src/extension/` | 拓展加载（extLoader；extManager 正在改写） |
+| **Utils** | `src/utils/` | 通用件：NeonaicConfig / NeonaicNewableClass / NeonaicNewableError / NeonaicUriMeta / network / text |
 | **Extensions** | `extensions/` | 具体拓展：`qqbot/`、`joyous/` |
 
 ### 模块清单（当前真实布局）
 
-- `main.js` — 瘦入口（仅调用 `NeonaicEntry.bootstrap()` 并兜底错误）
+- `main.js` — 瘦入口（仅调用 `neonaicEntry.bootstrap()` 并兜底错误）
 - `src/system/entry.js` — 组合根：PID 锁、平台管理器初始化、CLI 启动、权限/配置命令安装、优雅关闭
 - `src/system/confManager.js` — 声明式配置：`CONFIG_PATHS` 硬编码，JSON5 解析，按路径缓存单例 `getConfig(path)`
-- `src/system/NeonaicConfig.js` — 单个配置文件的读写类（点号嵌套路径 + 类型化 getter）
-- `src/system/NeonaicNewableClass.js` — `NeonaicNewable` 基类 + `getUniqueId()`
+- `src/utils/NeonaicConfig.js` — 单文件配置处理器（SConfig 的 JS 移植，详见下节）
+- `src/utils/NeonaicNewableClass.js` — `NeonaicNewable` 基类 + 静态 `getUniqueId()`
+- `src/utils/NeonaicNewableError.js` — 错误类体系：`NeonaicError` 及 Command / Extension / Network / IO / FileNotFound / IllegalArgument / IllegalState / Arithmetic / UnsupportedOperation 子类
+- `src/utils/text.js` — `parseString`（从 Logger.js 抽出，顶层具名导出）
+- `src/utils/NeonaicUriMeta.js`、`src/utils/network.js`（`neonaicNetwork`）
 - `src/system/cliProcessor.js` — CLI 交互层：readline REPL、TAB 补全、保活定时器、prompt 擦除/重绘
-- `src/logger/Logger.js` — 分模块日志：`LOG_TYPES` 声明式定义，Proxy 路由，gzip 轮转，console 劫持，落盘自动截断
+- `src/logger/Logger.js` — 分模块日志：`LOG_TYPES` 声明式定义，Proxy 路由，gzip 轮转，console 劫持，`getLogger()` 顶层语法糖
 - `src/command/commandServer.js` — 注册式命令引擎：`registerCommand` / `executeCommand(Silent)` / `inferNext`，冲突检测
 - `src/command/permissionServer.js` — 4 层权限（临时 > 永久 > 全局临时 > 全局），持久化到 `config/saves/permissions.json`
 - `src/message/ai.js` — Vercel AI SDK 封装（`askAI`、`registerAITool`，Profile 从 `secret.json` 的 `oai` 读取）
 - `src/platform/platformManager.js` — 平台生命周期：`registerPlatform(Cls)`，`platform` CLI 命令（list/start/stop/enable/disable），enable/disable 写回 `secret.json`
 - `src/platform/platformInterface.js` — `NeonaiPlatform` 基类
-- `src/platform/platformUtils.js` — `resolveUri` / `NeonaicUriMeta`（含内网判定、DNS 异步解析）
 - `debug.cjs` — 调试会话入口（CJS→ESM 过渡），非 TTY 下通过全局 `$("cmd")` 模拟 CLI 输入
 
 ### 模块导出约定（强制）
 
-- 函数 / 常量**只导出一个命名空间对象**：`export const NeonaicXxx = { ... }`，禁止分散具名导出。
-- 命名规则：`Neonaic` + 文件名 PascalCase（如 `commandServer.js` → `NeonaicCommandServer`）。
-- **类一律直接导出**（`export class NeonaicCommandContext`），**不嵌套进对象**；只有类的模块（`platformInterface.js` → `NeonaiPlatform`、`NeonaicConfig.js` → `NeonaicConfig`）因此没有对象导出。
-- 混合模块：类顶层直接导出 + 其余成员进对象。如 `NeonaicNewableClass.js` 导出 `class NeonaicNewable` 与 `NeonaicNewableClass = { getUniqueId }`。
-- **例外**：`Logger.js` 的 `parseString` 与 `getLogger()`——两者都是「高频调用点的语法糖」，保持顶层具名导出，**且不再重复放进 `NeonaicLogger` 对象**（避免双重暴露）。`NeonaicLogger` 对象现只剩 `{ setDebugMode, getDebugMode, setConsoleHooks, createLogger }`。另 `log4js_inject.js` 的 `configure` 是 log4js appender 的硬性要求。
-- 调用点：对象成员走对象访问（`NeonaicConfManager.getBotName()`、`NeonaicCommandInterface.COMMAND_ENUMS.X`）；日志入口直接用 `getLogger()`；类直接按类名用，继承写作 `extends NeonaicNewable`。
-- JSDoc 类型引用用 `import('./x.js').类名`（类直接导出才合法）。
-- 对象字面量统一放在文件**末尾**（类声明不会提升，提前引用会 TDZ 报错）。
+- 函数 / 常量**只导出一个命名空间对象**，禁止分散具名导出；类**一律直接导出**（`export class X`），不嵌套进对象。
+- **命名风格正从 PascalCase 迁往 camelCase**（`neonaicConfManager` / `neonaicCommandServer` / `neonaicAI` / `neonaicNetwork` / `neonaicEntry` …）。**迁移尚未完成**（`extensions/joyous` 还在用旧名与旧大小写 `AI.js`），改任何导入前先 grep 实际导出名。
+- 只有类的模块没有对象导出（`platformInterface.js` → `NeonaiPlatform`、`NeonaicConfig.js` → `NeonaicConfig`）。
+- **例外（高频调用点的语法糖，顶层具名导出、不再放进对象）**：`text.js` 的 `parseString`、`Logger.js` 的 `getLogger()`；另 `log4js_inject.js` 的 `configure` 是 log4js appender 的硬性要求。
+- 对象字面量统一放在文件**末尾**（类声明不提升，提前引用会 TDZ 报错）。
+- 错误统一抛 `NeonaicNewableError.js` 里的 `Neonaic*Error`，不再抛裸 `Error`（`IllegalState` ↔ Java 的 IllegalStateException，`IllegalArgument` ↔ IllegalArgumentException，`IO` ↔ IOException）。
+
+### NeonaicConfig（SConfig 的 JS 移植）
+
+对齐 `StreackLib` 的 `SConfig.java` / `docs/types/SConfig.md`，已实现：`WRITE_MODES` 五种写入模式（**默认 AUTOSAVE**）、自动重载（`setAutoReload` / `setAutoReloadInterval` / `setAutoReloadBreak` / `onAutoReloaded`）、`onLoadFailure`、`reload` / `getRawData` / `getFile`、`isExist` / `isReachable` / `remove`、全套类型化 getter/putter（含 `Date` 版 LocalDate / LocalTime / LocalDateTime）、`getListOfString` / `getSection`（浅拷贝）/ `putSection`、链式调用、原子写入、`_root_array` 根数组特例、`\.` 转义点号、静态工厂 `fromObject` / `fromJSON5`（仅内存态 + 惰性临时文件）、可配编码。
+
+有意不实现：多格式（只有 JSON5）、注释、RootName（后两者是 Java 后端专属能力）、BigDecimal（JS 无原生十进制类型）。
 
 ### CLI 命令系统
 
@@ -100,11 +107,15 @@ opts 包含：`alias`（别名）、`permissions`（第一层 AND、第二层 OR
 
 - 凭据管理：`config/secret.json` 是模板（假 key），`secret.json`（根目录）是真凭据，gitignore 已正确排除根目录版本
 - 运行程序前需确保根目录 `secret.json` 已填入真实凭据
+- **⚠️ NeonaicConfig 默认 AUTOSAVE**：任何 `put*` / `set` / `remove` 都会**立即落盘**。写测试或脚本时**绝不要指向真实配置文件**（`config/*.json`、`secret.json`），一律用临时副本；需要只改内存就先 `setWriteMode('inertia')`。（已踩过一次：把测试键写进了 `config/saves/ext.json`。）
+- `NeonaicConfig` 写出的文件是 **JSON5**（键无引号、字符串单引号），要用 `JSON5.parse` 读回，不能用 `JSON.parse`。
+- 嵌套路径**不能下探数组**（`a.0.b` 会退化成顶层字面键），Java 版行为相同；用 `isReachable` 可提前发现退化。
 
 ## 已知待办
 
-- 拓展加载链路未打通：`extLoader.js` 未接入 `entry.js`，`extMgr.js` 为空；`extensions/qqbot/index.js` 在 import 时靠 `registerPlatform` 自注册、并未导出 `onEnable`/`onDisable`，与 `NeonaicExtItem.enable()` 的契约不一致。
+- 拓展加载链路未打通：`extLoader.js` 未接入 `entry.js`；`extensions/qqbot/index.js` 在 import 时靠 `registerPlatform` 自注册、并未导出 `onEnable`/`onDisable`，与 `NeonaicExtItem.enable()` 的契约不一致。
 - `extensions/joyous` 的 `onEnable`/`onDisable` 是空实现。
+- **camelCase 迁移的遗留失配**（非本轮引入，属用户 in-flight 工作）：`src/extension/extLoader.js` 与 `extManager.js` 仍 import `../system/NeonaicNewableClass.js`（已迁到 `../utils/`）；`extensions/joyous/index.js` 仍用旧导出名 `NeonaicAI` / `NeonaicCommandServer` / `NeonaicConfManager` 且路径写成 `../message/AI.js`。
 - `src/message/ai.js` 底部的 `neonaic:webfetch` 工具是半成品：`uri = new URL(address)` 赋值给未声明变量（严格模式下会抛错），内网校验逻辑也没写完。
 - `entry.js` 的 `neonaic:version` 里 `checkPermissionFromContext(this)` 只传了 1 个参数（签名是 `(ctx, permission)`），导致 `systemLine` 永远为空；`platformManager` 的命令权限串拼写为 `neonaic.commmand.platform`（多一个 m）。
 - CLI 命令系统的 `argsCount` 参数校验、错误防抖在现行 commandServer 中已不存在（旧记忆已过时）。
