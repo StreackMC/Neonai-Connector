@@ -21,7 +21,7 @@ import { NeonaicCommandServer } from '../command/commandServer.js';
 import { NeonaicCommandInterface } from '../command/commandInterface.js';
 import { NeonaicPermissionServer } from '../command/permissionServer.js';
 import { NeonaicCliProcessor } from './cliProcessor.js';
-import { NeonaicPlatformManager } from '../platform/platformManager.js';
+import { NeonaicPlatformManager, PlatformManager } from '../platform/platformManager.js';
 
 // ---- 常量 ----
 
@@ -62,7 +62,7 @@ async function shutdown(signal) {
   forceTimer.unref();
 
   // 释放所有平台
-  const pm = NeonaicPlatformManager.PlatformManager.instance;
+  const pm = PlatformManager.instance;
   if (pm) {
     await Promise.allSettled(pm.getClosers().map((close) => close()));
   }
@@ -76,7 +76,7 @@ async function shutdown(signal) {
 // ---- 系统级 CLI 命令 ----
 
 NeonaicCommandServer.registerCommand('neonaic', 'version', function () {
-  /** @type {import('../command/commandServer.js').NeonaicCommandServer.NeonaicCommandContext} */
+  /** @type {import('../command/commandServer.js').NeonaicCommandContext} */
   const ctx = this;
 
   // ---- 硬编码 ----
@@ -159,7 +159,7 @@ async function bootstrap() {
   }
 
   // 初始化平台管理器（单例）
-  new NeonaicPlatformManager.PlatformManager({
+  new PlatformManager({
     configPath: resolve(ROOT_PATH, 'secret.json'),
     logger: NeonaicLogger.getLogger(),
   });
@@ -178,7 +178,7 @@ async function bootstrap() {
   NeonaicConfManager.installConfigCommands(NeonaicCommandServer.registerCommand);
 
   // 按配置启动已启用的平台
-  NeonaicPlatformManager.PlatformManager.instance.loadEnabled();
+  PlatformManager.instance.loadEnabled();
 
   // 监听 SIGNAL 等
   process.on('SIGINT', () => shutdown('SIGINT'));

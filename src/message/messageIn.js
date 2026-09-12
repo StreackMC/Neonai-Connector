@@ -17,7 +17,7 @@ import stripAnsi from 'strip-ansi';
  * @param {boolean} [options.AI=true]
  * @param {string[]|string} [options.AIlist="*"]
  * @param {boolean} [options.resolveCommand=true] 是否要执行命令
- * @param {NeonaicCommandServer.NeonaicCommandContext} options.resolveCommandWith 执行时命令上下文
+ * @param {import('./commandServer.js').NeonaicCommandContext} options.resolveCommandWith 执行时命令上下文
  * @returns {Promise<string>}
  */
 async function resolveReply(msg, options) {
@@ -26,7 +26,7 @@ async function resolveReply(msg, options) {
     AI: true,
     AIlist: '*',
     resolveCommand: true,
-    /** @type { import('./commandServer.js').NeonaicCommandServer.NeonaicCommandContext } */
+    /** @type { import('./commandServer.js').NeonaicCommandContext } */
     resolveCommandWith: {
       executor: [this],
       this: this,

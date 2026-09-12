@@ -16,7 +16,6 @@ import { fileURLToPath } from 'node:url';
 import JSON5 from 'json5';
 import { parseString } from '../logger/Logger.js';
 import { NeonaicConfManager } from '../system/confManager.js';
-import { NeonaicCommandServer } from './commandServer.js';
 import { NeonaicCommandInterface } from './commandInterface.js';
 
 // 注：本模块不 import commandServer.js 的运行期能力，避免循环依赖。
@@ -182,7 +181,7 @@ function checkPermission(user, permission) {
 /**
  * 测试命令上下文是否满足权限规则。
  * CLI/internalCall 始终返回 true。
- * @param { import('./commandServer.js').NeonaicCommandServer.NeonaicCommandContext } ctx
+ * @param { import('./commandServer.js').NeonaicCommandContext } ctx
  * @param {string|(string|string[])[]} permission
  * @returns {boolean}
  */
@@ -386,11 +385,11 @@ function clearGlobalTempPermission(permission, until = -1) {
  * @param {string} permission 权限名
  * @param {string} [status] 'true' | 'false'（仅 set）
  * @param {string} [lasting] 持续时间（仅 set）
- * @this { import('./commandServer.js').NeonaicCommandServer.NeonaicCommandContext }
+ * @this { import('./commandServer.js').NeonaicCommandContext }
  * @returns {string} 执行结果描述
  */
 function cmd(type, user, permission, status, lasting) {
-  /** @type { import('./commandServer.js').NeonaicCommandServer.NeonaicCommandContext } */
+  /** @type { import('./commandServer.js').NeonaicCommandContext } */
   const ctx = this;
 
   // 不允许大庭广众下进行权限操作
@@ -498,7 +497,7 @@ function installPermissionCommands(registerCommand) {
   });
   registerCommand('neonaic', 'whoami', function () {
     const LEFT_CHAR_IF_HIDDING_RATE = .4;
-    /** @type { import('./commandServer.js').NeonaicCommandServer.NeonaicCommandContext } */
+    /** @type { import('./commandServer.js').NeonaicCommandContext } */
     const ctx = this;
     const singalExecutor = (ctx.executor instanceof Array) ? (ctx.executor.length > 0) ? ctx.executor[0] : undefined : ctx.executor;
     let result = '';

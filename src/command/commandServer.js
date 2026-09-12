@@ -18,7 +18,7 @@
 import { NeonaicPermissionServer } from './permissionServer.js';
 import { NeonaicLogger, parseString } from '../logger/Logger.js';
 import { NeonaicCommandInterface } from './commandInterface.js';
-import { NeonaicNewableModule } from "../system/NeonaicNewableClass.js";
+import { NeonaicNewable } from "../system/NeonaicNewableClass.js";
 
 // ---- 颜色 ----
 const RED = '\x1b[31m';
@@ -254,7 +254,7 @@ function executeCommandSilent(cmdName, ctx = {}, ...args) {
 }
 
 /** 命令上下文 */
-class NeonaicCommandContext extends NeonaicNewableModule.NeonaicNewable {
+export class NeonaicCommandContext extends NeonaicNewable {
   #privateExecutor = false; #internalCall = false; #this = undefined; #executor = []; #timestamp = new Date();
 
   /** 命令开始执行时的时间 @type {Date} */
@@ -376,7 +376,6 @@ export const NeonaicCommandServer = {
   resolveCommand,
   executeCommand,
   executeCommandSilent,
-  NeonaicCommandContext,
   inferNext,
   getCommands,
   hasCommand,

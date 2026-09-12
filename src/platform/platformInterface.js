@@ -9,9 +9,9 @@
  */
 
 import { NeonaicLogger } from "../logger/Logger.js";
-import { NeonaicNewableModule } from "../system/NeonaicNewableClass.js";
+import { NeonaicNewable } from "../system/NeonaicNewableClass.js";
 
-class NeonaiPlatform extends NeonaicNewableModule.NeonaicNewable {
+export class NeonaiPlatform extends NeonaicNewable {
   /** Platform Profile 名称 @type {String} */
   profile;
 
@@ -69,6 +69,3 @@ class NeonaiPlatform extends NeonaicNewableModule.NeonaicNewable {
   }
 }
 
-export const NeonaicPlatformInterface = {
-  NeonaiPlatform,
-};

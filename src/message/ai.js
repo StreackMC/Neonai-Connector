@@ -370,7 +370,7 @@ registerAITool('neonaic', 'webfetch', {
 // ---- ai 命令 ----
 
 NeonaicCommandServer.registerCommand('neonaic', 'ai', async function (sub, ...args) {
-  /** @type {import('./commandServer.js').NeonaicCommandServer.NeonaicCommandContext} */
+  /** @type {import('./commandServer.js').NeonaicCommandContext} */
   const ctx = this;
 
   switch (sub) {
@@ -399,7 +399,7 @@ function cmdAIUsage() {
 
 /**
  * ai tool 子命令。
- * @param {import('./commandServer.js').NeonaicCommandServer.NeonaicCommandContext} ctx
+ * @param {import('./commandServer.js').NeonaicCommandContext} ctx
  * @param {...string} args
  */
 async function aiTool(ctx, ...args) {
@@ -438,7 +438,7 @@ async function aiTool(ctx, ...args) {
 
 /**
  * ai profile 子命令。
- * @param {import('./commandServer.js').NeonaicCommandServer.NeonaicCommandContext} ctx
+ * @param {import('./commandServer.js').NeonaicCommandContext} ctx
  * @param {...string} args
  */
 async function aiProfile(ctx, ...args) {
@@ -483,7 +483,7 @@ async function aiProfile(ctx, ...args) {
 
 /**
  * ai ban 子命令：封禁用户使用 AI。
- * @param {import('./commandServer.js').NeonaicCommandServer.NeonaicCommandContext} ctx
+ * @param {import('./commandServer.js').NeonaicCommandContext} ctx
  * @param {string} user
  * @param {string} [time] 持续时间（如 '1h'、'2d'、'1y2M3d4h5m6s'），存在则设临时封禁
  */
@@ -505,7 +505,7 @@ function aiBan(ctx, user, time) {
 
 /**
  * ai pardon 子命令：解封用户。
- * @param {import('./commandServer.js').NeonaicCommandServer.NeonaicCommandContext} ctx
+ * @param {import('./commandServer.js').NeonaicCommandContext} ctx
  * @param {string} user
  */
 function aiPardon(ctx, user) {

@@ -2,8 +2,8 @@ import { existsSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { parseString } from '../logger/Logger.js';
 import { NeonaicConfManager } from "../system/confManager.js";
-import { NeonaicConfigModule } from "../system/NeonaicConfig.js";
-import { NeonaicNewableModule } from "../system/NeonaicNewableClass.js";
+import { NeonaicConfig } from "../system/NeonaicConfig.js";
+import { NeonaicNewable } from "../system/NeonaicNewableClass.js";
 
 /** 枚举清单文件属性 */
 const MANIFEST_STRUCTURE = Object.freeze({
@@ -26,11 +26,11 @@ const MANIFEST_STRUCTURE = Object.freeze({
 });
 
 /** 枚举一个拓展 */
-class NeonaicExtItem extends NeonaicNewableModule.NeonaicNewable {
+export class NeonaicExtItem extends NeonaicNewable {
   /** @throws 不可达或无效拓展 */
   constructor(path) {
     super();
-    this.#conf = new NeonaicConfigModule.NeonaicConfig(resolve(path, "manifest.json"));
+    this.#conf = new NeonaicConfig(resolve(path, "manifest.json"));
 
     // 确认清单文件合理
     const [ver, id, name, entry] = [
@@ -63,7 +63,7 @@ class NeonaicExtItem extends NeonaicNewableModule.NeonaicNewable {
   #instance = null;
   /** @type {String|null} */
   #entry = null;
-  /** @type {NeonaicConfigModule.NeonaicConfig|null} */
+  /** @type {NeonaicConfig|null} */
   #conf = null;
   /** @type {String|null} */
   #name = null;
@@ -97,5 +97,4 @@ class NeonaicExtItem extends NeonaicNewableModule.NeonaicNewable {
 
 export const NeonaicExtLoader = {
   MANIFEST_STRUCTURE,
-  NeonaicExtItem,
 };

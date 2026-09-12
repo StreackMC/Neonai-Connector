@@ -11,7 +11,7 @@
 
 import { NeonaicCommandInterface } from '../command/commandInterface.js';
 import { NeonaicLogger } from '../logger/Logger.js';
-import { NeonaicConfigModule } from './NeonaicConfig.js';
+import { NeonaicConfig } from './NeonaicConfig.js';
 
 /** 内部名 → 配置文件相对路径 */
 const CONFIG_PATHS = Object.freeze({
@@ -26,17 +26,17 @@ const _cache = new Map();
 /**
  * 按路径获取配置单例（首次调用时创建并缓存）。
  * @param {string} path 配置文件路径（相对项目根或绝对路径）
- * @returns {NeonaicConfigModule.NeonaicConfig} 该路径对应的共享配置实例
+ * @returns {NeonaicConfig} 该路径对应的共享配置实例
  */
 function getConfig(path) {
-  if (!_cache.has(path)) _cache.set(path, new NeonaicConfigModule.NeonaicConfig(path));
+  if (!_cache.has(path)) _cache.set(path, new NeonaicConfig(path));
   return _cache.get(path);
 }
 
 /** reload 命令处理器（清空配置缓存） */
 function reloadCmd() {
   _cache.clear();
-  /** @type { import('../command/commandServer.js').NeonaicCommandServer.NeonaicCommandContext } */
+  /** @type { import('../command/commandServer.js').NeonaicCommandContext } */
   const ctx = this;
   if (ctx?.internalCall) NeonaicLogger.getLogger().main.info('配置文件已由控制台权限重载');
   else NeonaicLogger.getLogger().main.info(`配置文件已由${ctx?.executor?.[0] ?? '未知'}重载`);

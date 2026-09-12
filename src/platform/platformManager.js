@@ -14,7 +14,7 @@ import { NeonaicCommandServer } from '../command/commandServer.js';
 import { NeonaicLogger } from '../logger/Logger.js';
 import { NeonaicConfManager } from '../system/confManager.js';
 import { NeonaicCommandInterface } from '../command/commandInterface.js';
-import { NeonaicNewableModule } from '../system/NeonaicNewableClass.js';
+import { NeonaicNewable } from '../system/NeonaicNewableClass.js';
 
 // ---- 颜色 ----
 const CYAN   = '\x1b[36m';
@@ -24,7 +24,7 @@ const RED    = '\x1b[31m';
 const DIM    = '\x1b[2m';
 const R      = '\x1b[0m';
 
-class PlatformManager extends NeonaicNewableModule.NeonaicNewable {
+export class PlatformManager extends NeonaicNewable {
   /** @type {PlatformManager | null} */
   static _instance = null;
 
@@ -47,11 +47,11 @@ class PlatformManager extends NeonaicNewableModule.NeonaicNewable {
     this._configPath = configPath;
     this._logger = logger;
 
-    /** profileName → Platform class @type {Map<String, typeof import('./platformInterface.js').NeonaicPlatformInterface.NeonaiPlatform>} */
+    /** profileName → Platform class @type {Map<String, typeof import('./platformInterface.js').NeonaiPlatform>} */
     this._profileClasses = new Map();
     /** profileName → Profile 配置对象 @type {Map<String, object>} */
     this._profiles = new Map();
-    /** profileName → Platform 实例 @type {Map<String, import('./platformInterface.js').NeonaicPlatformInterface.NeonaiPlatform>} */
+    /** profileName → Platform 实例 @type {Map<String, import('./platformInterface.js').NeonaiPlatform>} */
     this._platforms = new Map();
     /** profileName → close 函数 @type {Map<String, Function>} */
     this._closers = new Map();
@@ -87,7 +87,7 @@ class PlatformManager extends NeonaicNewableModule.NeonaicNewable {
   _registerCLI() {
     const clazzThis = this;
     NeonaicCommandServer.registerCommand('neonaic', 'platform', async function (...args) {
-      /** @type {import('../command/commandServer.js').NeonaicCommandServer.NeonaicCommandContext} */
+      /** @type {import('../command/commandServer.js').NeonaicCommandContext} */
       const ctx = this;
       const [sub, name] = args;
       if (!ctx.privateExecutor) return `${RED}“${NeonaicConfManager.getBotName()}”无法执行“platform”，因为当前上下文不是私密的。`;
@@ -139,7 +139,7 @@ class PlatformManager extends NeonaicNewableModule.NeonaicNewable {
 
   /**
    * 注册 Platform 类，并为匹配 Profiles 创建实例。
-   * @param {{ new(profile: string): import('./platformInterface.js').NeonaicPlatformInterface.NeonaiPlatform }} Cls
+   * @param {{ new(profile: string): import('./platformInterface.js').NeonaiPlatform }} Cls
    */
   _registerClass(Cls) {
     if (this._profileClasses.has(Cls.type)) {
@@ -301,7 +301,7 @@ function getPlatformManager() {
 
 /**
  * Platform 实现模块在 import 时调用此函数注册。
- * @param {{ new(profile: string): import('./platformInterface.js').NeonaicPlatformInterface.NeonaiPlatform }} Cls
+ * @param {{ new(profile: string): import('./platformInterface.js').NeonaiPlatform }} Cls
  */
 function registerPlatform(Cls) {
   const pm = PlatformManager.instance;
@@ -313,6 +313,5 @@ function registerPlatform(Cls) {
 
 export const NeonaicPlatformManager = {
   getPlatformManager,
-  PlatformManager,
   registerPlatform,
 };

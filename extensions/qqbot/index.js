@@ -6,13 +6,13 @@
  */
 
 import { NeonaicPlatformManager } from '../../src/platform/platformManager.js';
-import { NeonaicPlatformInterface } from '../../src/platform/platformInterface.js';
+import { NeonaiPlatform } from '../../src/platform/platformInterface.js';
 import qqBotBackend from 'qq-official-bot';
 const { Bot, ReceiverMode } = qqBotBackend;
 import MsgHandler from "./msgHandler.js";
 import { EVENTS, INTENTS } from "./enums.js";
 
-export class PlatformQQBot extends NeonaicPlatformInterface.NeonaiPlatform {
+export class PlatformQQBot extends NeonaiPlatform {
   static type = 'qqbot';
   #botInstance = null;
 
@@ -25,7 +25,7 @@ export class PlatformQQBot extends NeonaicPlatformInterface.NeonaiPlatform {
   get bot() { return this.#botInstance; }
 
   async start() {
-    const cfg = NeonaicPlatformManager.PlatformManager.instance.getProfile(this.profile);
+    const cfg = PlatformManager.instance.getProfile(this.profile);
     if (!cfg) throw new Error(`Profile "${this.profile}" 配置不存在`);
 
     this.#botInstance = new Bot({
