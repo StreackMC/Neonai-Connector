@@ -395,8 +395,10 @@ function injectLog4js(emit) {
  * 获取日志器（首次调用时创建）。
  *
  * @returns {Logger} 共享日志器实例
+ * @apiNote 全项目调用最频繁的日志入口；为书写简洁保持顶层具名导出，不收纳进 NeonaicLogger 对象。
+ * @apiNote 同 parseString：属于「高频调用点的语法糖」类例外。
  */
-function getLogger() {
+export function getLogger() {
   if (!_logger) {
     _logger = createLogger({ logDir: './logs', maxFileSize: NeonaicConfManager.getConfig(NeonaicConfManager.CONFIG_PATHS.main).getInt('maxLogFileSize', 1048576) });
   }
@@ -408,5 +410,4 @@ export const NeonaicLogger = {
   getDebugMode,
   setConsoleHooks,
   createLogger,
-  getLogger,
 };

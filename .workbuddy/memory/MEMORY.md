@@ -46,8 +46,8 @@
 - 命名规则：`Neonaic` + 文件名 PascalCase（如 `commandServer.js` → `NeonaicCommandServer`）。
 - **类一律直接导出**（`export class NeonaicCommandContext`），**不嵌套进对象**；只有类的模块（`platformInterface.js` → `NeonaiPlatform`、`NeonaicConfig.js` → `NeonaicConfig`）因此没有对象导出。
 - 混合模块：类顶层直接导出 + 其余成员进对象。如 `NeonaicNewableClass.js` 导出 `class NeonaicNewable` 与 `NeonaicNewableClass = { getUniqueId }`。
-- **仅有的两个函数例外**：`Logger.js` 的 `parseString`、`log4js_inject.js` 的 `configure`（后者是 log4js appender 的硬性要求）。
-- 调用点：对象成员走对象访问（`NeonaicLogger.getLogger()`、`NeonaicCommandInterface.COMMAND_ENUMS.X`）；类直接按类名用，继承写作 `extends NeonaicNewable`。
+- **例外**：`Logger.js` 的 `parseString` 与 `getLogger()`——两者都是「高频调用点的语法糖」，保持顶层具名导出，**且不再重复放进 `NeonaicLogger` 对象**（避免双重暴露）。`NeonaicLogger` 对象现只剩 `{ setDebugMode, getDebugMode, setConsoleHooks, createLogger }`。另 `log4js_inject.js` 的 `configure` 是 log4js appender 的硬性要求。
+- 调用点：对象成员走对象访问（`NeonaicConfManager.getBotName()`、`NeonaicCommandInterface.COMMAND_ENUMS.X`）；日志入口直接用 `getLogger()`；类直接按类名用，继承写作 `extends NeonaicNewable`。
 - JSDoc 类型引用用 `import('./x.js').类名`（类直接导出才合法）。
 - 对象字面量统一放在文件**末尾**（类声明不会提升，提前引用会 TDZ 报错）。
 

@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { platform, release, tmpdir } from 'node:os';
 
 import { NeonaicConfManager } from './confManager.js';
-import { NeonaicLogger } from '../logger/Logger.js';
+import { NeonaicLogger, getLogger } from '../logger/Logger.js';
 import { NeonaicPidManager } from './pidManager.js';
 import { NeonaicCommandServer } from '../command/commandServer.js';
 import { NeonaicCommandInterface } from '../command/commandInterface.js';
@@ -55,7 +55,7 @@ async function shutdown(signal) {
   // 先关闭 CLI，避免后续日志叠加在 readline prompt 上
   NeonaicCliProcessor.stopCLI();
 
-  NeonaicLogger.getLogger().main.warn(`收到 ${signal}，正在关闭…`);
+  getLogger().main.warn(`收到 ${signal}，正在关闭…`);
 
   // 兜底：5 秒内未能优雅退出则强制退出
   const forceTimer = setTimeout(() => process.exit(1), 5000);
@@ -67,7 +67,7 @@ async function shutdown(signal) {
     await Promise.allSettled(pm.getClosers().map((close) => close()));
   }
 
-  NeonaicLogger.getLogger().main.info('服务已关闭');
+  getLogger().main.info('服务已关闭');
   // 如果在调试使用断点避免停止运行
   if (DEBUGING) debugger;
   process.exit(0);
@@ -139,8 +139,8 @@ NeonaicCommandServer.registerCommand('neonaic', 'stop', () => {
 /** 启动流程 */
 async function bootstrap() {
   // PID锁
-  NeonaicPidManager.acquirePidLock(PID_FILE_PATH, NeonaicLogger.getLogger());
-  NeonaicLogger.getLogger().main.info(`${APP_NAME} 服务启动`);
+  NeonaicPidManager.acquirePidLock(PID_FILE_PATH, getLogger());
+  getLogger().main.info(`${APP_NAME} 服务启动`);
 
   // 调试模式分支
   if (DEBUGING) {
@@ -151,17 +151,17 @@ async function bootstrap() {
       const [cmdName, cmdArgs] = args;
       return NeonaicCommandServer.executeCommand(cmdName, { internalCall: true, privateExecutor: true }, ...cmdArgs);
     };
-    NeonaicLogger.getLogger().main.info('调试模式已启用，$(cmd) 可用');
+    getLogger().main.info('调试模式已启用，$(cmd) 可用');
   } else {
     // 正常模式：劫持 console 到日志系统
     globalThis.$ = null;
-    NeonaicLogger.getLogger().redirectConsole(true);
+    getLogger().redirectConsole(true);
   }
 
   // 初始化平台管理器（单例）
   new PlatformManager({
     configPath: resolve(ROOT_PATH, 'secret.json'),
-    logger: NeonaicLogger.getLogger(),
+    logger: getLogger(),
   });
 
   // 立即启动 CLI，让提示符尽快出现（平台加载不阻塞交互）
@@ -187,14 +187,14 @@ async function bootstrap() {
 
   // 顶层未捕获异常：写崩溃报告后走安全关闭流程
   process.on('uncaughtException', (err) => {
-    NeonaicLogger.getLogger().main.error(`未捕获异常:`, err);
-    NeonaicLogger.getLogger().writeCrashReport(err);
+    getLogger().main.error(`未捕获异常:`, err);
+    getLogger().writeCrashReport(err);
     // shutdown('uncaughtException');
   });
   process.on('unhandledRejection', (reason) => {
     const err = reason instanceof Error ? reason : new Error(String(reason));
-    NeonaicLogger.getLogger().main.error(`未处理的 Promise 拒绝异常:`, err);
-    NeonaicLogger.getLogger().writeCrashReport(err);
+    getLogger().main.error(`未处理的 Promise 拒绝异常:`, err);
+    getLogger().writeCrashReport(err);
     // shutdown('unhandledRejection');
   });
 }

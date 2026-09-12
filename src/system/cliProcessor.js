@@ -12,7 +12,7 @@
 import { createInterface } from 'node:readline';
 import { NeonaicCommandServer } from '../command/commandServer.js';
 import { NeonaicCommandInterface } from '../command/commandInterface.js';
-import { NeonaicLogger } from '../logger/Logger.js';
+import { getLogger } from '../logger/Logger.js';
 
 // ---- 颜色 ----
 const CYAN   = '\x1b[36m';
@@ -66,9 +66,9 @@ function startCLI() {
           internalCall: true, privateExecutor: true,
           executor: NeonaicCommandInterface.COMMAND_ENUMS.FROM_CONSOLE
         }, ...cmdArgs);
-        if (result) NeonaicLogger.getLogger().main.info(`${result}`);
+        if (result) getLogger().main.info(`${result}`);
       } catch (err) {
-        NeonaicLogger.getLogger().main.error(err.message);
+        getLogger().main.error(err.message);
       }
     }
     if (_rl) _rl.prompt();

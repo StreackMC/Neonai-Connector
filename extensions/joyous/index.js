@@ -19,7 +19,7 @@ import { NeonaicAI } from '../../src/message/ai.js';
 // -- import --
 import { NeonaicCommandServer } from '../../src/command/commandServer.js';
 import { NeonaicConfManager } from '../../src/system/confManager.js';
-import { NeonaicLogger } from '../../src/logger/Logger.js';
+import { getLogger } from '../../src/logger/Logger.js';
 import { fetchWithTimeout, formatDateTime, formatMcTime } from "./utils.js";
 
 // -- Tools --
@@ -101,7 +101,7 @@ async function fetchStatus(address) {
   try {
     const res = await fetchWithTimeout(url, TIMEOUT_MS);
     if (!res.ok) {
-      NeonaicLogger.getLogger().main.warn(`[mc] 状态接口返回非 2xx: ${res.status}`);
+      getLogger().main.warn(`[mc] 状态接口返回非 2xx: ${res.status}`);
       return { ok: false, reason: 'offline' };
     }
 
@@ -118,7 +118,7 @@ async function fetchStatus(address) {
     return { ok: true, data };
   } catch (err) {
     // 网络错误 / 超时（AbortError）/ DNS 失败等
-    NeonaicLogger.getLogger().main.warn(`[mc] 查询服务器状态失败: ${err.message}`);
+    getLogger().main.warn(`[mc] 查询服务器状态失败: ${err.message}`);
     return { ok: false, reason: err.message };
   }
 }
@@ -164,7 +164,7 @@ NeonaicAI.registerAITool("joyous", "worldMeta", {
     try {
       const res = await fetchWithTimeout(address || DEFAULT_ADDRESS, TIMEOUT_MS);
       if (!res.ok) {
-        NeonaicLogger.getLogger().main.warn(`[mc] 状态接口返回非 2xx: ${res.status}`);
+        getLogger().main.warn(`[mc] 状态接口返回非 2xx: ${res.status}`);
         return "无法获取，接口响应不对。";
       }
 
@@ -186,7 +186,7 @@ NeonaicAI.registerAITool("joyous", "worldMeta", {
       } else return "接口没有返回该信息。";
     } catch (err) {
       // 网络错误 / 超时（AbortError）/ DNS 失败等
-      NeonaicLogger.getLogger().main.warn(`[mc] 查询服务器状态失败: ${err.message}`);
+      getLogger().main.warn(`[mc] 查询服务器状态失败: ${err.message}`);
       return "无法获取，请求失败。";
     }
   },

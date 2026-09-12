@@ -10,7 +10,7 @@
  */
 
 import { NeonaicCommandInterface } from '../command/commandInterface.js';
-import { NeonaicLogger } from '../logger/Logger.js';
+import { getLogger } from '../logger/Logger.js';
 import { NeonaicConfig } from './NeonaicConfig.js';
 
 /** 内部名 → 配置文件相对路径 */
@@ -38,8 +38,8 @@ function reloadCmd() {
   _cache.clear();
   /** @type { import('../command/commandServer.js').NeonaicCommandContext } */
   const ctx = this;
-  if (ctx?.internalCall) NeonaicLogger.getLogger().main.info('配置文件已由控制台权限重载');
-  else NeonaicLogger.getLogger().main.info(`配置文件已由${ctx?.executor?.[0] ?? '未知'}重载`);
+  if (ctx?.internalCall) getLogger().main.info('配置文件已由控制台权限重载');
+  else getLogger().main.info(`配置文件已由${ctx?.executor?.[0] ?? '未知'}重载`);
   return;
 }
 reloadCmd.meta = {

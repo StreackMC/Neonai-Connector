@@ -20,7 +20,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import JSON5 from 'json5';
 
 import { NeonaicConfManager } from '../system/confManager.js';
-import { NeonaicLogger, parseString } from '../logger/Logger.js';
+import { getLogger, parseString } from '../logger/Logger.js';
 import { NeonaicCommandServer } from '../command/commandServer.js';
 import { NeonaicCommandInterface } from '../command/commandInterface.js';
 import { NeonaicPermissionServer } from '../command/permissionServer.js';
@@ -45,7 +45,7 @@ function loadSystemPrompt(providerName) {
     prompt = readFileSync(resolve(ROOT_PATH, `config/prompts/${providerName}.md`), 'utf8').trim();
   } catch (e) {
     prompt = '你是一个有用的 AI 助手。';
-    NeonaicLogger.getLogger().tool.debug(`无法加载提示词 config/prompts/${providerName}.md：`, e);
+    getLogger().tool.debug(`无法加载提示词 config/prompts/${providerName}.md：`, e);
   }
   _promptCache.set(providerName, prompt);
   return prompt;
@@ -83,17 +83,17 @@ const _toolFqn = new Map();
  */
 function registerAITool(namespace, name, definition) {
   if (!namespace || !name) {
-    NeonaicLogger.getLogger().tool.warn(`AI 工具注册失败：无效的命名空间或名称 (ns=${namespace}, name=${name})`);
+    getLogger().tool.warn(`AI 工具注册失败：无效的命名空间或名称 (ns=${namespace}, name=${name})`);
     return false;
   }
   if (!definition || typeof definition.execute !== 'function') {
-    NeonaicLogger.getLogger().tool.warn(`AI 工具注册失败：无效的定义或 execute (${namespace}:${name})`);
+    getLogger().tool.warn(`AI 工具注册失败：无效的定义或 execute (${namespace}:${name})`);
     return false;
   }
 
   const fqn = `${namespace}:${name}`;
   if (_toolFqn.has(fqn)) {
-    NeonaicLogger.getLogger().tool.warn(`AI 工具 "${fqn}" 已被注册`);
+    getLogger().tool.warn(`AI 工具 "${fqn}" 已被注册`);
     return false;
   }
 
@@ -238,7 +238,7 @@ async function callProvider(provider, userMessage) {
   // 下限钳制为 1，避免配置为 0/负数导致 stepCountIs 失效。
   const rawMax = Number(provider.maxToolcall);
   const maxToolcall = Math.max(1, Number.isFinite(rawMax) ? rawMax : 5);
-  NeonaicLogger.getLogger().tool.debug(
+  getLogger().tool.debug(
     `→ ${provider.name}: ${provider.address}#${provider.model} (${endpoint}${provider.stream ? ', stream' : ''}, ${toolList.length} tools, maxToolcall=${maxToolcall})`,
   );
 
@@ -263,16 +263,16 @@ async function callProvider(provider, userMessage) {
     const summary = toolCalls
       .map((t) => `${t.toolName}(${JSON.stringify(t.input ?? {})})`)
       .join('; ');
-    NeonaicLogger.getLogger().tool.debug(`◉ ${provider.name} 调用工具: ${summary}`);
+    getLogger().tool.debug(`◉ ${provider.name} 调用工具: ${summary}`);
     const toolResults = await (result.toolResults ?? []);
     for (const tr of toolResults) {
       const out = typeof tr.output === 'string' ? tr.output : JSON.stringify(tr.output);
-      NeonaicLogger.getLogger().tool.debug(`  ↳ ${tr.toolName} → ${out.slice(0, 200)}`);
+      getLogger().tool.debug(`  ↳ ${tr.toolName} → ${out.slice(0, 200)}`);
     }
   }
 
   const reply = (await result.text) ?? '';
-  NeonaicLogger.getLogger().tool.debug(`← ${provider.name}: ${reply.length} 字符`);
+  getLogger().tool.debug(`← ${provider.name}: ${reply.length} 字符`);
   return reply;
 }
 
@@ -315,7 +315,7 @@ async function askAI(userMessage, AIlist, caller) {
     try {
       return await callProvider(provider, userMessage);
     } catch (err) {
-      NeonaicLogger.getLogger().tool.debug(`× ${provider.name}: ${err.message}`);
+      getLogger().tool.debug(`× ${provider.name}: ${err.message}`);
       errors.set(provider.name, err.message);
     }
   }

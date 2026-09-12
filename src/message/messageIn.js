@@ -7,7 +7,7 @@
 
 import { NeonaicCommandServer } from '../command/commandServer.js';
 import { NeonaicAI } from './ai.js';
-import { NeonaicLogger } from '../logger/Logger.js';
+import { getLogger } from '../logger/Logger.js';
 import { NeonaicConfManager } from '../system/confManager.js';
 import stripAnsi from 'strip-ansi';
 
@@ -21,7 +21,7 @@ import stripAnsi from 'strip-ansi';
  * @returns {Promise<string>}
  */
 async function resolveReply(msg, options) {
-  NeonaicLogger.getLogger().tool.debug('[msgIn] 正为消息生成回复：', { msg, options });
+  getLogger().tool.debug('[msgIn] 正为消息生成回复：', { msg, options });
   const config = Object.assign({
     AI: true,
     AIlist: '*',
@@ -56,7 +56,7 @@ async function resolveReply(msg, options) {
         const result = await NeonaicCommandServer.executeCommandSilent(cmdName, ctx, ...cmdArgs);
         return result != null ? stripAnsi(String(result)).trim() : `“${NeonaicConfManager.getBotName()}”成功执行了“${cmdName}”。`;
       } catch (err) {
-        NeonaicLogger.getLogger().cmd.warn(`[msgIn] 无法以“`, ctx,`”执行命令“${cmdName}”: ${err.message}`);
+        getLogger().cmd.warn(`[msgIn] 无法以“`, ctx,`”执行命令“${cmdName}”: ${err.message}`);
         return stripAnsi(`“${NeonaicConfManager.getBotName()}”无法执行“${cmdName}”，因为“${stripAnsi(err.message)}”。`);
       }
     }
@@ -67,7 +67,7 @@ async function resolveReply(msg, options) {
   try {
     return stripAnsi(await NeonaicAI.askAI(msg, config.AIlist, config.resolveCommandWith?.executor)).trim();
   } catch (err) {
-    NeonaicLogger.getLogger().tool.error(`[msgIn] AI 回复失败: ${err.message}`);
+    getLogger().tool.error(`[msgIn] AI 回复失败: ${err.message}`);
     return `（${NeonaicConfManager.getBotName()}静静地看着你，并未言语）`;
   }
 }

@@ -11,7 +11,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import JSON5 from 'json5';
 
 import { NeonaicCommandServer } from '../command/commandServer.js';
-import { NeonaicLogger } from '../logger/Logger.js';
+import { NeonaicLogger, getLogger } from '../logger/Logger.js';
 import { NeonaicConfManager } from '../system/confManager.js';
 import { NeonaicCommandInterface } from '../command/commandInterface.js';
 import { NeonaicNewable } from '../system/NeonaicNewableClass.js';
@@ -171,20 +171,20 @@ export class PlatformManager extends NeonaicNewable {
   async start(name) {
     const profile = this._profiles.get(name);
     if (!profile) {
-      NeonaicLogger.getLogger().platM.info(`${RED}未知 Profile: ${name}${R}\n`);
+      getLogger().platM.info(`${RED}未知 Profile: ${name}${R}\n`);
       return;
     }
     if (!profile.enabled) {
-      NeonaicLogger.getLogger().platM.info(`${YELLOW}${name}${R} Profile 未启用\n`);
+      getLogger().platM.info(`${YELLOW}${name}${R} Profile 未启用\n`);
       return;
     }
     const platform = this._platforms.get(name);
     if (!platform) {
-      NeonaicLogger.getLogger().platM.info(`${YELLOW}${name}${R} 无匹配的 Platform 实现\n`);
+      getLogger().platM.info(`${YELLOW}${name}${R} 无匹配的 Platform 实现\n`);
       return;
     }
     if (this._closers.has(name)) {
-      NeonaicLogger.getLogger().platM.info(`${YELLOW}${name}${R} Profile 已在运行中\n`);
+      getLogger().platM.info(`${YELLOW}${name}${R} Profile 已在运行中\n`);
       return;
     }
 
@@ -198,9 +198,9 @@ export class PlatformManager extends NeonaicNewable {
       } else {
         this._closers.set(name, () => {});
       }
-      NeonaicLogger.getLogger().platM.info(`${GREEN}${name}${R} Profile 已启动\n`);
+      getLogger().platM.info(`${GREEN}${name}${R} Profile 已启动\n`);
     } catch (err) {
-      NeonaicLogger.getLogger().platM.info(`${RED}Profile ${name} 启动失败: ${err.message}${R}\n`);
+      getLogger().platM.info(`${RED}Profile ${name} 启动失败: ${err.message}${R}\n`);
     }
   }
 
@@ -210,7 +210,7 @@ export class PlatformManager extends NeonaicNewable {
    */
   async stop(name) {
     if (!this._profiles.has(name)) {
-      NeonaicLogger.getLogger().platM.info(`${RED}未知 Profile: ${name}${R}\n`);
+      getLogger().platM.info(`${RED}未知 Profile: ${name}${R}\n`);
       return;
     }
 
@@ -220,7 +220,7 @@ export class PlatformManager extends NeonaicNewable {
       try { await closer(); } catch { /* 忽略关闭错误 */ }
     }
     this._closers.delete(name);
-    NeonaicLogger.getLogger().platM.info(`${GREEN}${name}${R} Profile 已停止\n`);
+    getLogger().platM.info(`${GREEN}${name}${R} Profile 已停止\n`);
   }
 
   /**
@@ -230,16 +230,16 @@ export class PlatformManager extends NeonaicNewable {
   enable(name) {
     const profile = this._profiles.get(name);
     if (!profile) {
-      NeonaicLogger.getLogger().platM.info(`${RED}未知 Profile: ${name}${R}\n`);
+      getLogger().platM.info(`${RED}未知 Profile: ${name}${R}\n`);
       return;
     }
     if (profile.enabled) {
-      NeonaicLogger.getLogger().platM.info(`${YELLOW}${name}${R} Profile 已启用\n`);
+      getLogger().platM.info(`${YELLOW}${name}${R} Profile 已启用\n`);
       return;
     }
     this._writeProfileEnabled(name, true);
     profile.enabled = true;
-    NeonaicLogger.getLogger().platM.info(`${GREEN}${name}${R} Profile 已启用（需手动 start 或重启生效）\n`);
+    getLogger().platM.info(`${GREEN}${name}${R} Profile 已启用（需手动 start 或重启生效）\n`);
   }
 
   /**
@@ -249,11 +249,11 @@ export class PlatformManager extends NeonaicNewable {
   async disable(name) {
     const profile = this._profiles.get(name);
     if (!profile) {
-      NeonaicLogger.getLogger().platM.info(`${RED}未知 Profile: ${name}${R}\n`);
+      getLogger().platM.info(`${RED}未知 Profile: ${name}${R}\n`);
       return;
     }
     if (!profile.enabled) {
-      NeonaicLogger.getLogger().platM.info(`${YELLOW}${name}${R} Profile 已禁用\n`);
+      getLogger().platM.info(`${YELLOW}${name}${R} Profile 已禁用\n`);
       return;
     }
     if (this._closers.has(name)) {
@@ -261,13 +261,13 @@ export class PlatformManager extends NeonaicNewable {
     }
     this._writeProfileEnabled(name, false);
     profile.enabled = false;
-    NeonaicLogger.getLogger().platM.info(`${GREEN}${name}${R} Profile 已禁用\n`);
+    getLogger().platM.info(`${GREEN}${name}${R} Profile 已禁用\n`);
   }
 
   /** 列出所有 Profile 状态 */
   list() {
     if (this._profiles.size === 0) {
-      NeonaicLogger.getLogger().platM.info(`${DIM}暂无 Profile${R}\n`);
+      getLogger().platM.info(`${DIM}暂无 Profile${R}\n`);
       return;
     }
 

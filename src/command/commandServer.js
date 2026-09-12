@@ -16,7 +16,7 @@
  */
 
 import { NeonaicPermissionServer } from './permissionServer.js';
-import { NeonaicLogger, parseString } from '../logger/Logger.js';
+import { getLogger, parseString } from '../logger/Logger.js';
 import { NeonaicCommandInterface } from './commandInterface.js';
 import { NeonaicNewable } from "../system/NeonaicNewableClass.js";
 
@@ -214,7 +214,7 @@ function executeCommand(cmdName, ctx, ...args) {
   try {
     return executeCommandSilent(cmdName, ctx, ...args);
   } catch (err) {
-    NeonaicLogger.getLogger().cmd.error(err.message);
+    getLogger().cmd.error(err.message);
   }
 }
 

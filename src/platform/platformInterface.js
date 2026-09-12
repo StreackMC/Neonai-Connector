@@ -8,7 +8,7 @@
  * 所有运行时参数通过 this.profile 获取。
  */
 
-import { NeonaicLogger } from "../logger/Logger.js";
+import { getLogger } from "../logger/Logger.js";
 import { NeonaicNewable } from "../system/NeonaicNewableClass.js";
 
 export class NeonaiPlatform extends NeonaicNewable {
@@ -46,7 +46,7 @@ export class NeonaiPlatform extends NeonaicNewable {
    */
   logMsgIn(...msg) {
     const type_ = (this.constructor.type) ? this.constructor.type : '<UNKNOWN>';
-    NeonaicLogger.getLogger().chatIn.info(`<${type_}/${this.profile}>`, ...msg);
+    getLogger().chatIn.info(`<${type_}/${this.profile}>`, ...msg);
   }
 
   /**
@@ -56,7 +56,7 @@ export class NeonaiPlatform extends NeonaicNewable {
    */
   log(type, ...msg) {
     const type_ = (this.constructor.type) ? this.constructor.type : '<UNKNOWN>';
-    NeonaicLogger.getLogger().platP[type](`<${type_}/${this.profile}>`, ...msg);
+    getLogger().platP[type](`<${type_}/${this.profile}>`, ...msg);
   }
 
   /**
@@ -65,7 +65,7 @@ export class NeonaiPlatform extends NeonaicNewable {
    */
   logMsgOut(...msg) {
     const type_ = (this.constructor.type) ? this.constructor.type : '<UNKNOWN>';
-    NeonaicLogger.getLogger().chatOut.info(`<${type_}/${this.profile}>`, ...msg);
+    getLogger().chatOut.info(`<${type_}/${this.profile}>`, ...msg);
   }
 }
 

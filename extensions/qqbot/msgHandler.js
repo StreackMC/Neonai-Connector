@@ -1,7 +1,7 @@
 import qqBotBackend from 'qq-official-bot';
 import he from 'he';
 import JSON5 from 'json5';
-import { NeonaicLogger, parseString } from '../../src/logger/Logger.js';
+import { getLogger, parseString } from '../../src/logger/Logger.js';
 import { PlatformQQBot } from './index.js';
 import { NeonaicMessageIn } from '../../src/message/messageIn.js';
 import { NeonaicConfManager } from '../../src/system/confManager.js';
@@ -91,7 +91,7 @@ NeonaicCommandServer.registerCommand('qqbot', 'qbsend', async function (profile,
   const messageContent = msg.map(v => parseString(v, false)).join('');
   try {
     const result = await sendMsg(instance, who, messageContent);
-    NeonaicLogger.getLogger().platP.debug(`[qqbot] 向`, who, `@`, profile, `发送消息`, msg, `：`, result);
+    getLogger().platP.debug(`[qqbot] 向`, who, `@`, profile, `发送消息`, msg, `：`, result);
     instance.logMsgOut('Command:', `to=${who} | msg=`, messageContent.replace(/\n/g, "\\n"));
     // SendResult 可能为「消息审核中」状态
     if (result?.audit_status === 'pending') {
@@ -99,7 +99,7 @@ NeonaicCommandServer.registerCommand('qqbot', 'qbsend', async function (profile,
     }
     return `“${NeonaicConfManager.getBotName()}”成功向[${who}]发送指定消息。`;
   } catch (err) {
-    NeonaicLogger.getLogger().platP.debug(`[qqbot] 向`, who, `@`, profile, `发送消息失败：`, err.message);
+    getLogger().platP.debug(`[qqbot] 向`, who, `@`, profile, `发送消息失败：`, err.message);
     return `“${NeonaicConfManager.getBotName()}”无法向[${who}]发送指定消息，因为“${err.message}”。`;
   }
 }, {
