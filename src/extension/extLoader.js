@@ -44,7 +44,7 @@ export class NeonaicExtItem extends NeonaicNewable {
     if (!(typeof path === 'string')) throw new NeonaicIllegalArgumentError("NeonaicExtItem 构造器的第一个参数应该是 String", path);
     if (!(saves instanceof NeonaicConfig)) throw new NeonaicIllegalArgumentError("NeonaicExtItem 构造器的第二个参数应该是 NeonaicConfig", saves);
     const manifest_file = resolve(path, "manifest.json");
-    if (!existsSync(manifest_file)) throw new NeonaicFileNotFoundError(`拓展“${parseString(path)}”的描述文件不存在或无法访问。`);
+    if (!existsSync(manifest_file)) throw new NeonaicFileNotFoundError(`拓展“${parseString(path)}”的描述文件不存在或无法访问`);
     this.#manifest_config = new NeonaicConfig(manifest_file);
 
     // 确认清单文件合理
@@ -54,7 +54,7 @@ export class NeonaicExtItem extends NeonaicNewable {
       this.#manifest_config.getString(MANIFEST_STRUCTURE.particulars.name, undefined),
       this.#manifest_config.getString(MANIFEST_STRUCTURE.entry, undefined)
     ];
-    if (!ver || !id || !name || !entry || !name?.trim() || !/^[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*$/.test(parseString(id))) throw new NeonaicFileNotFoundError(`拓展“${parseString(path)}”的描述文件无效。`);
+    if (!ver || !id || !name || !entry || !name?.trim() || !/^[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*$/.test(parseString(id))) throw new NeonaicFileNotFoundError(`拓展“${parseString(path)}”的描述文件无效`);
     this.#name = this.#manifest_config.getString(MANIFEST_STRUCTURE.particulars.name, undefined);
     this.#id = this.#manifest_config.getString(MANIFEST_STRUCTURE.meta.id, undefined);
 
@@ -62,11 +62,11 @@ export class NeonaicExtItem extends NeonaicNewable {
     const entry_file = resolve(path, entry);
     if (!existsSync(entry_file)) {
       // 文件不存在
-      throw new NeonaicFileNotFoundError(`拓展“${parseString(this.fullname)}”的入口文件不存在或无法访问。`);
+      throw new NeonaicFileNotFoundError(`拓展“${parseString(this.fullname)}”的入口文件不存在或无法访问`);
     }
     if (neonaicFileSystem.isTraversalSync(entry_file, path)) {
       // 阻止路径穿越
-      throw new NeonaicIllegalArgumentError(`拓展“${parseString(this.fullname)}”的加载会产生意外访问，因此“${neonaicConfManager.getBotName()}”拒绝加载。`);
+      throw new NeonaicIllegalArgumentError(`拓展“${parseString(this.fullname)}”的加载会产生意外访问，因此“${neonaicConfManager.getBotName()}”拒绝加载`);
     }
 
     // 缓存一些数据
@@ -110,12 +110,12 @@ export class NeonaicExtItem extends NeonaicNewable {
    * @throws {NeonaicExtensionError} 加载时发生错误
    */
   async enable() {
-    if (!this.enabled) throw new NeonaicIllegalStateError(`“${this.fullname}”已被禁用而无法加载 。`)
+    if (!this.enabled) throw new NeonaicIllegalStateError(`“${this.fullname}”已被禁用而无法加载`)
     try {
       if (!this.#instance) {
         this.#instance = await import(this.#entry);
       };
-      if (typeof this.#instance.onEnable !== 'function' || typeof this.#instance.onDisable !== 'function') throw new NeonaicExtensionError(`拓展“${this.fullname}”没有提供有效的入口函数，因此“${neonaicConfManager.getBotName()}”无法加载。`);
+      if (typeof this.#instance.onEnable !== 'function' || typeof this.#instance.onDisable !== 'function') throw new NeonaicExtensionError(`拓展“${this.fullname}”没有提供有效的入口函数，因此“${neonaicConfManager.getBotName()}”无法加载`);
       await this.#instance.onEnable.apply(this, {
         manifest: this.#manifest_config,
         pwd: resolve(this.entry_path, '..'),

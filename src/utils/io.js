@@ -208,7 +208,7 @@ export const neonaicFileSystem = {
    * @returns {String} 返回求值后路径
    */
   resolve: function (root = ROOT_PATH, ...path) {
-    if (typeof root !== 'string') throw new NeonaicIllegalArgumentError("无法解析路径，因为根路径不是有效的字符串。");
+    if (typeof root !== 'string') throw new NeonaicIllegalArgumentError("无法解析路径，因为根路径不是有效的字符串");
     root = resolve(ROOT_PATH, root);
     /** 递归逐层求值 */
     function digAndEnsure(input, next) {
@@ -251,7 +251,7 @@ export const neonaicFileSystem = {
    * @returns {String} 返回求值后路径
    */
   resolveStrict: function (root = ROOT_PATH, ...path) {
-    if (typeof root !== 'string') throw new NeonaicIllegalArgumentError("无法解析路径，因为根路径不是有效的字符串。");
+    if (typeof root !== 'string') throw new NeonaicIllegalArgumentError("无法解析路径，因为根路径不是有效的字符串");
     root = resolve(ROOT_PATH, root);
     /** 递归逐层求值 */
     function digAndEnsure(input, next) {

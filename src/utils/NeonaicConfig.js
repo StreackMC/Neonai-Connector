@@ -524,7 +524,7 @@ export class NeonaicConfig extends NeonaicNewable {
    */
   setWriteMode(mode) {
     if (this.#writeModeLocked) {
-      throw new NeonaicIllegalStateError('写入模式已被锁定，无法修改。');
+      throw new NeonaicIllegalStateError('写入模式已被锁定，无法修改');
     }
     if (mode === null || mode === undefined) {
       this.#writeMode = WRITE_MODES.AUTOSAVE;

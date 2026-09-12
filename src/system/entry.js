@@ -22,6 +22,7 @@ import { neonaicCommandInterface } from '../command/commandInterface.js';
 import { neonaicPermissionServer } from '../command/permissionServer.js';
 import { neonaicCliProcessor } from './cliProcessor.js';
 import { PlatformManager } from '../platform/platformManager.js';
+import { neonaicMessageIn } from '../message/messageIn.js';
 
 // ---- 常量 ----
 

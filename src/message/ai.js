@@ -26,7 +26,8 @@ import { neonaicCommandServer } from '../command/commandServer.js';
 import { neonaicCommandInterface } from '../command/commandInterface.js';
 import { neonaicPermissionServer } from '../command/permissionServer.js';
 import z from 'zod';
-import { NeonaicIllegalArgumentError, NeonaicNetworkError } from '../utils/NeonaicNewableError.js';
+import { NeonaicIllegalArgumentError, NeonaicIllegalStateError, NeonaicNetworkError } from '../utils/NeonaicNewableError.js';
+import { neonaicFileSystem } from '../utils/io.js';
 
 // 本模块自算项目根路径，避免与 entry.js 形成循环依赖
 // ai.js 位于 <根>/src/message/，故向上 2 层为项目根
@@ -40,16 +41,17 @@ const AI_BAN_PERMISSION = 'neonaic.toolcall.ai';
 /** 文件提示词缓存 @type {Map<string, string>} */
 const _promptCache = new Map();
 
-function loadSystemPrompt(providerName) {
-  if (_promptCache.has(providerName)) return _promptCache.get(providerName);
+function loadSystemPrompt(promptFilename) {
+  if (_promptCache.has(promptFilename)) return _promptCache.get(promptFilename);
   let prompt;
   try {
-    prompt = readFileSync(resolve(ROOT_PATH, `config/prompts/${providerName}.md`), 'utf8').trim();
+    const path = neonaicFileSystem.resolveStrict('config/prompts', promptFilename);
+    prompt = readFileSync(path, 'utf8').trim();
   } catch (e) {
-    prompt = '你是一个有用的 AI 助手。';
-    getLogger().tool.debug(`无法加载提示词 config/prompts/${providerName}.md：`, e);
+    getLogger().tool.debug(`无法加载提示词 ${promptFilename}`, e);
+    throw new NeonaicIllegalStateError(`无法加载提示词：${e?.message ?? '未知原因'}`, e);
   }
-  _promptCache.set(providerName, prompt);
+  _promptCache.set(promptFilename, prompt);
   return prompt;
 }
 
@@ -210,7 +212,7 @@ function buildToolSet(toolList) {
  * @returns {Promise<string>}
  */
 async function callProvider(provider, userMessage) {
-  const systemPrompt = loadSystemPrompt(provider.name);
+  const systemPrompt = loadSystemPrompt(provider.prompt);
 
   // 严格遵循用户配置的完整 address，不依赖 SDK 的 baseURL 自动拼接端点。
   // 通过 fetch 中间件，将 SDK 拼接出的 URL 统一替换为用户配置的完整地址。
