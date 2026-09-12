@@ -5,6 +5,7 @@ import { lstat, realpath } from 'node:fs/promises';
 
 import { NeonaicIllegalArgumentError, NeonaicIOError, NeonaicNetworkError } from "./NeonaicNewableError.js";
 import { parseString } from "./text.js";
+import { NeonaicUriMeta } from './NeonaicUriMeta.js';
 
 /**
  * Neonaic 网络相关工具
@@ -12,15 +13,82 @@ import { parseString } from "./text.js";
 export const neonaicNetwork = {
   /**
    * 带有超时地请求一个地址
-   * @param {String|URL|Request} url 请求地址
+   * @param {String|URL|Request|NeonaicUriMeta} target 请求地址
    * @param {number} [timeout=10000] 默认超时时间，单位 ms
+   * @param {Object} filter 请求过滤器，如果因此导致连接被拦截会返回一个 403、带有```x-neonaic-status: 'aborted:filter'```标头的Response。**子参数需严格一致**，否则回退默认行为。如果没有指定本参数（不包括手动设为 null/undefined 等情况）则使用内置过滤器：{@link neonaicNetwork.DEFAULT_BLOCKED_URI_FILTER}。**过滤器不能处理重定向。**
+   * @param {'whitelist'|'blacklist'} [filter.mode='blacklist'] 工作模式，'blacklist'默认阻止，'whitelist'为仅放行。**设为后者但不指定名单会拦截全部请求。**
+   * @param {(String|RegExp)[]|(String|RegExp)} [filter.list=['$Internal_list']] 名单，支持文本匹配和正则过滤。不是 String/RegExp 的值会被忽略。
+   * @param {boolean} [filter.allow_lan=true] 如果设为 false 将不允许请求本地地址。安全原因不接受 falsy。
    * @returns {Promise<Response>}
    */
-  fetch: async function (url, timeout = 10 * 1e3) {
+  fetch: async function (target, timeout = 10 * 1e3, filter = { allow_lan: true, mode: 'blacklist', list: neonaicNetwork.DEFAULT_BLOCKED_URI_FILTER }) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), Math.abs(parseInt(timeout)));
+    const time = (!timeout) ? 10 * 1e3 : Math.abs(parseInt(timeout));
+    const timer = setTimeout(() => controller.abort(), time);
     try {
-      return await fetch(url, { signal: controller.signal });
+      // 尝试解析地址
+      let addr, rqt;
+      if (target instanceof NeonaicUriMeta) {
+        addr = target.url;
+        rqt = addr;
+      } else if (target instanceof Request) {
+        addr = target.url;
+        rqt = target;
+      } else if (target instanceof URL) {
+        addr = target.href;
+        rqt = target;
+      } else if (typeof target === 'string') {
+        addr = NeonaicUriMeta.resolve(target).url;
+        rqt = addr;
+      } else {
+        addr = NeonaicUriMeta.resolve(parseString(target)).url;
+        rqt = addr;
+      }
+
+      // 拦截本地地址
+      if (!(filter?.allow_lan === false)) {
+        const dns_processed_real_addr = await NeonaicUriMeta.resolve(addr, {resolveRealAddress: true});
+        if (dns_processed_real_addr.isAccessingIntranet) return new Response(
+          '403 Forbidden: Neonaic has prevented the request for security reasons.',
+          {
+            headers: {
+              "x-neonaic-status": 'aborted:filter'
+            },
+            status: 403
+          }
+        );
+      }
+
+      // 拦截地址
+      let matched = false;
+      let filterList = filter?.list;
+      if (!Array.isArray(filterList)) {
+        filterList = [filterList];
+      }
+      for (let index = 0; index < filterList.length; index++) {
+        const item = filterList[index];
+        if (item instanceof RegExp) {
+          item.lastIndex = 0;
+          matched = item.test(addr);
+          if (matched) break;
+        };
+        if (typeof item === 'string') {
+          matched = parseString(addr).includes(item);
+          if (matched) break;
+        };
+      }
+      if ((filter?.mode === 'whitelist' && !matched) || (matched)) return new Response(
+        '403 Forbidden: Neonaic has prevented the request for security reasons.',
+        {
+          headers: {
+            "x-neonaic-status": 'aborted:filter'
+          },
+          status: 403
+        }
+      );
+
+      // 请求
+      return await fetch(rqt, { signal: controller.signal });
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') {
         // 被超时中断
@@ -32,6 +100,28 @@ export const neonaicNetwork = {
       clearTimeout(timer);
     }
   },
+
+  /** 默认阻止的 URI 过滤器 */
+  DEFAULT_BLOCKED_URI_FILTER: Object.freeze([
+    /(^|\/\/|\.)yahoo\.[a-z]{2,}(\.[a-z]{2,})?/i,
+    /(^|\/\/|\.)facebook\.[a-z]{2,}(\.[a-z]{2,})?/i,
+    /(^|\/\/|\.)twitter\.[a-z]{2,}(\.[a-z]{2,})?/i,
+    /(^|\/\/|\.)x\.[a-z]{2,}(\.[a-z]{2,})?/i,
+    /(^|\/\/|\.)twitch\.[a-z]{2,}(\.[a-z]{2,})?/i,
+    /(^|\/\/|\.)taiwan\.[a-z]{2,}(\.[a-z]{2,})?/i,
+    /(^|\/\/|\.)roc-taiwan\.[a-z]{2,}(\.[a-z]{2,})?/i,
+    /(^|\/\/|\.)taiwanembassy\.[a-z]{2,}(\.[a-z]{2,})?/i,
+    /(^|\/\/|\.)gov\.[a-z]{2,}(\.[a-z]{2,})?/i,
+    /(^|\/\/|\.)twgov\.[a-z]{2,}(\.[a-z]{2,})?/i,
+    /(^|\/\/|\.)taipei/i,
+    /(^|\/\/|\.)tw/i,
+    /(^|\/\/|\.)google\.[a-z]{2,}(\.[a-z]{2,})?/i,
+    /(^|\/\/|\.)youtube\.[a-z]{2,}(\.[a-z]{2,})?/i,
+    /(^|\/\/|\.)wikipedia\.[a-z]{2,}(\.[a-z]{2,})?/i,
+    /(^|\/\/|\.)miraheze\.[a-z]{2,}(\.[a-z]{2,})?/i,
+    /(^|\/\/|\.)gongbiquanshu\.[a-z]{2,}(\.[a-z]{2,})?/i,
+    /(^|\/\/|\.)qiuwenbaike\.[a-z]{2,}(\.[a-z]{2,})?/i,
+  ]),
 };
 
 /** 项目根路径 */
