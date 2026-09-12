@@ -76,12 +76,13 @@ opts 包含：`alias`（别名）、`permissions`（第一层 AND、第二层 OR
 
 项目规划通过 **扩展自动发现** 实现插件化，无需在入口硬编码路径：
 
-- 加载器：`src/extension/extLoader.js`（`NeonaicExtItem` / `MANIFEST_STRUCTURE`）。**当前尚未接入 `entry.js`**（组合根里留了 `// todo: refactor`），`extMgr.js` 还是 0 字节空文件。
+- 加载器：`src/extension/extLoader.js`（`NeonaicExtItem` / `neonaicExtensionLoader`）+ 管理器 `src/extension/extManager.js`（`neonaicExtensionManager`）。**当前尚未接入 `entry.js`**（组合根里留了 `// todo: refactor`）。
+- 管理器 API：`scan(root)` / `list()` / `find(id)` / `load` / `unload` / `loadAll` / `unloadAll` / `enable` / `disable` / `enableAll` / `disableAll`；命令 `neonaic:extension`（别名 ext / plugin / extensions / plugins），子命令 `list`(默认) / `scan [dir]` / `info <ext>` / `load|enable` / `unload|disable`。
+- **两套语义正交**：`load`/`unload` 只管运行期（`unload` 标了 `@deprecated`，有内存泄漏风险）；`enable`/`disable` 只管 `config/saves/ext.json` 里的开关，**默认不改运行状态**（故 `disable` 后仍在运行是预期行为，结果里 `running` 会如实反馈）。
 - 布局：`extensions/<name>/index.js` + 同目录 `manifest.json`。
 - `manifest.json` 结构：`meta.version`（如 `[1, "0.1.0"]`）、`meta.id`（须匹配 `^[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*$`）、`particulars.{name,author,description,url,license}`、`entry`（如 `./index.js`）、`depends` / `softdepends`。
-- `NeonaicExtItem.enable()` 要求入口模块导出 `onEnable` 与 `onDisable`。
-- **约定**：扩展内导入内核模块用 `../../src/...`（相对本文件向上两层）。
-- 注意：扩展文件必须叫 `index.js` 且位于子目录中；扁平文件不会被加载。
+- `NeonaicExtItem.enable()` 要求入口模块导出 `onEnable` 与 `onDisable`；开关存在 `config/saves/ext.json` 的 `<id>.enabled`（缺省 true）。
+- **约定**：扩展内导入内核模块用 `../../src/...`（相对本文件向上两层）；扩展必须是子目录下的 `index.js`，扁平文件不会被加载。
 
 ## 配置文件
 
@@ -113,8 +114,13 @@ opts 包含：`alias`（别名）、`permissions`（第一层 AND、第二层 OR
 
 ## 已知待办
 
-- 拓展加载链路未打通：`extLoader.js` 未接入 `entry.js`；`extensions/qqbot/index.js` 在 import 时靠 `registerPlatform` 自注册、并未导出 `onEnable`/`onDisable`，与 `NeonaicExtItem.enable()` 的契约不一致。
+- 拓展加载链路未打通：`extManager.js` 未接入 `entry.js`；`extensions/qqbot/index.js` 在 import 时靠 `registerPlatform` 自注册、并未导出 `onEnable`/`onDisable`，与 `NeonaicExtItem.enable()` 的契约不一致。
+- **`extLoader.js` 的加载/卸载缺陷**：`NeonaicExtItem.enable()` 先 `this.#instance = await import(entry)` 再校验 `onEnable`/`onDisable`，导致「加载失败」的拓展其 `#instance` 已被缓存 → 被误判为已加载，且 `unload()` 必抛 `Cannot read properties of undefined (reading 'apply')`。修法：先存局部变量、校验通过再赋值；并给 `disable()` 加 `if (!this.#instance) return;` 守卫。
 - `extensions/joyous` 的 `onEnable`/`onDisable` 是空实现。
+- `extLoader.js` 的 `this.id.replaceAll('.', '\.')` 里 `'\.'` 在 JS 中就等于 `'.'`，转义是空操作（点号 id 会按嵌套路径写入 ext.json，能读回但会与前缀冲突）；且键名用的是 `.enabled`，而 `config/saves/ext.json` 现存样例写的是 `enable`，两者不一致。
+- `src/message/ai.js` 底部的 `neonaic:webfetch` 工具是半成品：`uri = new URL(address)` 赋值给未声明变量（严格模式下会抛错），内网校验逻辑也没写完。
+- `entry.js` 的 `neonaic:version` 里 `checkPermissionFromContext(this)` 只传了 1 个参数（签名是 `(ctx, permission)`），导致 `systemLine` 永远为空；`platformManager` 的命令权限串拼写为 `neonaic.commmand.platform`（多一个 m）。
+- CLI 命令系统的 `argsCount` 参数校验、错误防抖在现行 commandServer 中已不存在（旧记忆已过时）。
 - **camelCase 迁移的遗留失配**（非本轮引入，属用户 in-flight 工作）：`src/extension/extLoader.js` 与 `extManager.js` 仍 import `../system/NeonaicNewableClass.js`（已迁到 `../utils/`）；`extensions/joyous/index.js` 仍用旧导出名 `NeonaicAI` / `NeonaicCommandServer` / `NeonaicConfManager` 且路径写成 `../message/AI.js`。
 - `src/message/ai.js` 底部的 `neonaic:webfetch` 工具是半成品：`uri = new URL(address)` 赋值给未声明变量（严格模式下会抛错），内网校验逻辑也没写完。
 - `entry.js` 的 `neonaic:version` 里 `checkPermissionFromContext(this)` 只传了 1 个参数（签名是 `(ctx, permission)`），导致 `systemLine` 永远为空；`platformManager` 的命令权限串拼写为 `neonaic.commmand.platform`（多一个 m）。

@@ -42,6 +42,7 @@ const LOG_TYPES = {
   "Platform:Manager": { console: true, file: true, call: 'platM' },
   "Platform:Profile": { console: true, file: true, call: 'platP' },
   "Command": { console: true, file: true, call: 'cmd' },
+  "ExtensionHost": { console: true, file: true, call: 'ext' },
 };
 
 /**
@@ -55,6 +56,7 @@ const LOG_TYPES = {
  * @property {LoggerInstance} platP
  * @property {LoggerInstance} tool
  * @property {LoggerInstance} cmd
+ * @property {LoggerInstance} ext
  * @property {(...args: any[]) => void} log         无类型默认日志（走 Other）
  * @property {(err?: Error) => void} writeCrashReport
  * @property {(enable?: boolean, |debugMode?: boolean) => void} redirectConsole

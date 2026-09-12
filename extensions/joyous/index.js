@@ -15,13 +15,13 @@ const TIMEOUT_MS = 5000;
 const MAX_PLAYER_LISTED = 3;
 
 import z from 'zod';
-import { NeonaicAI } from '../../src/message/ai.js';
+import { NeonaicAI } from '../../src/message/AI.js';
 // -- import --
 import { NeonaicCommandServer } from '../../src/command/commandServer.js';
 import { NeonaicConfManager } from '../../src/system/confManager.js';
 import { getLogger } from '../../src/logger/Logger.js';
 import { formatDateTime, formatMcTime } from "./utils.js";
-import { neonaicNetwork } from '../../src/utils/network.js';
+import { neonaicNetwork } from '../../src/utils/io.js';
 
 // -- Tools --
 /** TPS 数值格式化：负数（如 -1 表示无数据）显示为 N/A */
@@ -187,7 +187,7 @@ NeonaicAI.registerAITool("joyous", "worldMeta", {
       } else return "接口没有返回该信息。";
     } catch (err) {
       // 网络错误 / 超时（AbortError）/ DNS 失败等
-      getLogger().main.warn(`[mc] 查询服务器状态失败: ${err.message}`);
+      getLogger().main.warn(`[mc] 查询服务器状态失败: ${err?.message}`);
       return "无法获取，请求失败。";
     }
   },
