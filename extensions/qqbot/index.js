@@ -5,7 +5,7 @@
  * 运行时配置通过 PlatformManager.getProfile(this.profile) 获取。
  */
 
-import { NeonaicPlatformManager } from '../../src/platform/platformManager.js';
+import { neonaicPlatformManager } from '../../src/platform/platformManager.js';
 import { NeonaiPlatform } from '../../src/platform/platformInterface.js';
 import qqBotBackend from 'qq-official-bot';
 const { Bot, ReceiverMode } = qqBotBackend;
@@ -57,4 +57,4 @@ export class PlatformQQBot extends NeonaiPlatform {
   }
 }
 
-NeonaicPlatformManager.registerPlatform(PlatformQQBot);
+neonaicPlatformManager.registerPlatform(PlatformQQBot);

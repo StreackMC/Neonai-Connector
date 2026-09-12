@@ -115,14 +115,12 @@ opts 包含：`alias`（别名）、`permissions`（第一层 AND、第二层 OR
 
 ## 已知待办
 
-- 拓展加载链路未打通：`extManager.js` 未接入 `entry.js`；`extensions/qqbot/index.js` 在 import 时靠 `registerPlatform` 自注册、并未导出 `onEnable`/`onDisable`，与 `NeonaicExtItem.enable()` 的契约不一致。
+- 拓展加载已接入 `entry.js`（bootstrap 里 `scan()` + `loadAll([...keys()])`）。
+- **`extensions/joyous/index.js` 与 `extensions/qqbot/*.js` 的 import 已修**：camelCase 迁移当时只覆盖了 `src/`，拓展侧留了一批旧导出名（`NeonaicAI` / `NeonaicCommandServer` / `NeonaicConfManager` / `NeonaicPlatformManager` / `NeonaicMessageIn` / `NeonaicCommandInterface`），另有 `../message/AI.js` 的大小写错。**改拓展前先对齐 `src/` 的实际导出名。**
+- **`extensions/qqbot/index.js` 仍未导出 `onEnable` / `onDisable`**，与 `NeonaicExtItem.enable()` 的契约不符，故它加载失败（报「没有提供有效的入口函数」）；`joyous` 有两个空实现，可正常加载。qqbot 现设计为 import 时 `registerPlatform` 自注册、连接由 `PlatformManager.start()` 驱动。
+- `entry.js` 的拓展加载结果只打印 `succeed` / `disabled`，**不打印 `failed`** —— qqbot 这类加载失败在启动日志里是静默的（只有 debug 级 dump）。
 - **`extLoader.js` 的加载/卸载缺陷**：`NeonaicExtItem.enable()` 先 `this.#instance = await import(entry)` 再校验 `onEnable`/`onDisable`，导致「加载失败」的拓展其 `#instance` 已被缓存 → 被误判为已加载，且 `unload()` 必抛 `Cannot read properties of undefined (reading 'apply')`。修法：先存局部变量、校验通过再赋值；并给 `disable()` 加 `if (!this.#instance) return;` 守卫。
-- `extensions/joyous` 的 `onEnable`/`onDisable` 是空实现。
 - `extLoader.js` 的 `this.id.replaceAll('.', '\.')` 里 `'\.'` 在 JS 中就等于 `'.'`，转义是空操作（点号 id 会按嵌套路径写入 ext.json，能读回但会与前缀冲突）；且键名用的是 `.enabled`，而 `config/saves/ext.json` 现存样例写的是 `enable`，两者不一致。
-- `src/message/ai.js` 底部的 `neonaic:webfetch` 工具是半成品：`uri = new URL(address)` 赋值给未声明变量（严格模式下会抛错），内网校验逻辑也没写完。
-- `entry.js` 的 `neonaic:version` 里 `checkPermissionFromContext(this)` 只传了 1 个参数（签名是 `(ctx, permission)`），导致 `systemLine` 永远为空；`platformManager` 的命令权限串拼写为 `neonaic.commmand.platform`（多一个 m）。
-- CLI 命令系统的 `argsCount` 参数校验、错误防抖在现行 commandServer 中已不存在（旧记忆已过时）。
-- **camelCase 迁移的遗留失配**（非本轮引入，属用户 in-flight 工作）：`src/extension/extLoader.js` 与 `extManager.js` 仍 import `../system/NeonaicNewableClass.js`（已迁到 `../utils/`）；`extensions/joyous/index.js` 仍用旧导出名 `NeonaicAI` / `NeonaicCommandServer` / `NeonaicConfManager` 且路径写成 `../message/AI.js`。
 - `src/message/ai.js` 底部的 `neonaic:webfetch` 工具是半成品：`uri = new URL(address)` 赋值给未声明变量（严格模式下会抛错），内网校验逻辑也没写完。
 - `entry.js` 的 `neonaic:version` 里 `checkPermissionFromContext(this)` 只传了 1 个参数（签名是 `(ctx, permission)`），导致 `systemLine` 永远为空；`platformManager` 的命令权限串拼写为 `neonaic.commmand.platform`（多一个 m）。
 - CLI 命令系统的 `argsCount` 参数校验、错误防抖在现行 commandServer 中已不存在（旧记忆已过时）。
