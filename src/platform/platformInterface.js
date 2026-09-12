@@ -9,7 +9,7 @@
  */
 
 import { getLogger } from "../logger/Logger.js";
-import { NeonaicNewable } from "../system/NeonaicNewableClass.js";
+import { NeonaicNewable } from "../utils/NeonaicNewableClass.js";
 
 export class NeonaiPlatform extends NeonaicNewable {
   /** Platform Profile 名称 @type {String} */

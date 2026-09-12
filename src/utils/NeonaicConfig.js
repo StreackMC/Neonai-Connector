@@ -5,7 +5,7 @@ import JSON5 from 'json5';
 import { NeonaicNewable } from './NeonaicNewableClass.js';
 
 // 本模块自算项目根路径，避免与 entry.js 形成循环依赖
-// NeonaicConfig.js 位于 <根>/src/system/，故向上 2 层为项目根
+// NeonaicConfig.js 位于 <根>/src/utils/，故向上 2 层为项目根
 const ROOT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
 // ---- 嵌套路径工具 ----

@@ -11,7 +11,7 @@
 
 import { neonaicCommandInterface } from '../command/commandInterface.js';
 import { getLogger } from '../logger/Logger.js';
-import { NeonaicConfig } from './NeonaicConfig.js';
+import { NeonaicConfig } from '../utils/NeonaicConfig.js';
 
 /** 内部名 → 配置文件相对路径 */
 const CONFIG_PATHS = Object.freeze({
@@ -20,7 +20,7 @@ const CONFIG_PATHS = Object.freeze({
   secret: './secret.json',
 });
 
-/** @type {Map<string, import('./NeonaicConfig.js').NeonaicConfig>} */
+/** @type {Map<string, import('../utils/NeonaicConfig.js').NeonaicConfig>} */
 const _cache = new Map();
 
 /**

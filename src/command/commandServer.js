@@ -18,7 +18,7 @@
 import { neonaicPermissionServer } from './permissionServer.js';
 import { getLogger, parseString } from '../logger/Logger.js';
 import { neonaicCommandInterface } from './commandInterface.js';
-import { NeonaicNewable } from "../system/NeonaicNewableClass.js";
+import { NeonaicNewable } from "../utils/NeonaicNewableClass.js";
 
 // ---- 颜色 ----
 const RED = '\x1b[31m';

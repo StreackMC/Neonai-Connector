@@ -14,7 +14,7 @@ import { neonaicCommandServer } from '../command/commandServer.js';
 import { neonaicLogger, getLogger } from '../logger/Logger.js';
 import { neonaicConfManager } from '../system/confManager.js';
 import { neonaicCommandInterface } from '../command/commandInterface.js';
-import { NeonaicNewable } from '../system/NeonaicNewableClass.js';
+import { NeonaicNewable } from '../utils/NeonaicNewableClass.js';
 
 // ---- 颜色 ----
 const CYAN   = '\x1b[36m';
