@@ -20,11 +20,13 @@ import { createOpenAI } from '@ai-sdk/openai';
 import JSON5 from 'json5';
 
 import { neonaicConfManager } from '../system/confManager.js';
-import { getLogger, parseString } from '../logger/Logger.js';
+import { getLogger } from '../logger/Logger.js';
+import { parseString } from '../utils/text.js';
 import { neonaicCommandServer } from '../command/commandServer.js';
 import { neonaicCommandInterface } from '../command/commandInterface.js';
 import { neonaicPermissionServer } from '../command/permissionServer.js';
 import z from 'zod';
+import { NeonaicIllegalArgumentError, NeonaicNetworkError } from '../utils/NeonaicNewableError.js';
 
 // 本模块自算项目根路径，避免与 entry.js 形成循环依赖
 // ai.js 位于 <根>/src/message/，故向上 2 层为项目根
@@ -308,7 +310,7 @@ async function askAI(userMessage, AIlist, caller) {
     if (isAll) return true;
     return AIlist.includes(v?.name);
   });
-  if (!oaiList.length) throw new Error('未找到可用的 AI Profile');
+  if (!oaiList.length) throw new NeonaicIllegalArgumentError('未找到可用的 AI Profile');
 
   const errors = new Map();
   for (const provider of oaiList) {
@@ -322,7 +324,7 @@ async function askAI(userMessage, AIlist, caller) {
 
   let detail = '所有 AI Profile 请求失败: ';
   errors.forEach((v, k) => { detail += `${k}: "${String(v).replace(/\n/g, '\\n')}"; `; });
-  throw new Error(detail);
+  throw new NeonaicNetworkError(detail);
 }
 
 // ---- 命令辅助 ----

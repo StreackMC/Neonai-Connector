@@ -11,6 +11,7 @@ import qqBotBackend from 'qq-official-bot';
 const { Bot, ReceiverMode } = qqBotBackend;
 import MsgHandler from "./msgHandler.js";
 import { EVENTS, INTENTS } from "./enums.js";
+import { NeonaicIllegalArgumentError } from '../../src/utils/NeonaicNewableError.js';
 
 export class PlatformQQBot extends NeonaiPlatform {
   static type = 'qqbot';
@@ -26,7 +27,7 @@ export class PlatformQQBot extends NeonaiPlatform {
 
   async start() {
     const cfg = PlatformManager.instance.getProfile(this.profile);
-    if (!cfg) throw new Error(`Profile "${this.profile}" 配置不存在`);
+    if (!cfg) throw new NeonaicIllegalArgumentError(`Profile "${this.profile}" 配置不存在`);
 
     this.#botInstance = new Bot({
       appid: cfg.appid ?? '',

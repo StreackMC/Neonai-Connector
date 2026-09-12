@@ -14,7 +14,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import JSON5 from 'json5';
-import { parseString } from '../logger/Logger.js';
+import { parseString } from '../utils/text.js';
 import { neonaicConfManager } from '../system/confManager.js';
 import { neonaicCommandInterface } from './commandInterface.js';
 

@@ -1,7 +1,8 @@
 import qqBotBackend from 'qq-official-bot';
 import he from 'he';
 import JSON5 from 'json5';
-import { getLogger, parseString } from '../../src/logger/Logger.js';
+import { getLogger } from '../../src/logger/Logger.js';
+import { parseString } from '../../src/utils/text.js';
 import { PlatformQQBot } from './index.js';
 import { NeonaicMessageIn } from '../../src/message/messageIn.js';
 import { NeonaicConfManager } from '../../src/system/confManager.js';
@@ -9,6 +10,7 @@ import { NeonaicPlatformManager } from '../../src/platform/platformManager.js';
 import { fromQQElement } from './emoji.js';
 import { NeonaicCommandServer } from '../../src/command/commandServer.js';
 import { NeonaicCommandInterface } from '../../src/command/commandInterface.js';
+import { NeonaicIllegalArgumentError } from '../../src/utils/NeonaicNewableError.js';
 
 /**
  * 好友列表私聊
@@ -69,8 +71,8 @@ async function onGroupMessageIn(event, pp) {
  * @throws 无法识别参数 / 发送失败
  */
 export async function sendMsg(instance, who, msg) {
-  if (!(instance instanceof PlatformQQBot)) throw new Error("指定的 Platform 无效");
-  if (!instance.bot) throw new Error("QQBot 实例尚未启动");
+  if (!(instance instanceof PlatformQQBot)) throw new NeonaicIllegalArgumentError("指定的 Platform 无效");
+  if (!instance.bot) throw new NeonaicIllegalArgumentError("QQBot 实例尚未启动");
   who = parseString(who).trim();
   if (who.startsWith('USR#')) {
     // 私聊
@@ -80,13 +82,13 @@ export async function sendMsg(instance, who, msg) {
     return await instance.bot.sendGroupMessage(who.slice(4), msg);
   }
   // 无效用户
-  throw new Error("无法识别的用户：" + parseString(who));
+  throw new NeonaicIllegalArgumentError("无法识别的用户：" + parseString(who));
 }
 
 NeonaicCommandServer.registerCommand('qqbot', 'qbsend', async function (profile, who, ...msg) {
   // 获取实例
   const instance = NeonaicPlatformManager.getPlatformManager().getPlatform(parseString(profile));
-  if (!(instance instanceof PlatformQQBot)) throw new Error("指定的 Platform Profile 无效");
+  if (!(instance instanceof PlatformQQBot)) throw new NeonaicIllegalArgumentError("指定的 Platform Profile 无效");
   // 发送消息
   const messageContent = msg.map(v => parseString(v, false)).join('');
   try {

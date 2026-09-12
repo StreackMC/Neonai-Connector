@@ -11,6 +11,7 @@
  */
 
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { NeonaicIllegalStateError } from '../utils/NeonaicNewableError.js';
 
 /**
  * 判断某 PID 是否仍在运行。
@@ -40,7 +41,7 @@ function acquirePidLock(pidFile, logger) {
   if (existsSync(pidFile)) {
     const oldPid = Number.parseInt(readFileSync(pidFile, 'utf8'), 10);
     if (pidAlive(oldPid)) {
-      throw new Error(`检测到已有实例正在运行（PID ${oldPid}），拒绝重复启动`);
+      throw new NeonaicIllegalStateError(`检测到已有实例正在运行（PID ${oldPid}），拒绝重复启动`);
     }
     logger.main.warn(`自动清理失效 PID 锁（PID ${oldPid} 已不在运行）`);
     unlinkSync(pidFile);

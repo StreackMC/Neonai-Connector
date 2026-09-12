@@ -1,3 +1,5 @@
+import { NeonaicUnsupportedOperationError } from "./NeonaicNewableError.js";
+
 /**
  * @abstract Neonaic可实例化类的通用基类
  * @internalApi For Neonaic only
@@ -8,7 +10,7 @@ export class NeonaicNewable {
   get TIMESTAMP() { return this.#TIMESTAMP; };
 
   constructor() {
-    if (new.target === NeonaicNewable) throw new Error("NeonaicNewable is a raw class, which is not allowed to be create directly");
+    if (new.target === NeonaicNewable) throw new NeonaicUnsupportedOperationError("NeonaicNewable is a raw class, which is not allowed to be create directly");
   }
 
   /** @returns 全局唯一的 number 数据 */

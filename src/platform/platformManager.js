@@ -15,6 +15,7 @@ import { neonaicLogger, getLogger } from '../logger/Logger.js';
 import { neonaicConfManager } from '../system/confManager.js';
 import { neonaicCommandInterface } from '../command/commandInterface.js';
 import { NeonaicNewable } from '../utils/NeonaicNewableClass.js';
+import { NeonaicIllegalStateError } from '../utils/NeonaicNewableError.js';
 
 // ---- 颜色 ----
 const CYAN   = '\x1b[36m';
@@ -41,7 +42,7 @@ export class PlatformManager extends NeonaicNewable {
   constructor({ configPath, logger }) {
     super();
     if (PlatformManager._instance) {
-      throw new Error('PlatformManager 已是单例，不可重复创建');
+      throw new NeonaicIllegalStateError('PlatformManager 已是单例，不可重复创建');
     }
 
     this._configPath = configPath;
@@ -143,7 +144,7 @@ export class PlatformManager extends NeonaicNewable {
    */
   _registerClass(Cls) {
     if (this._profileClasses.has(Cls.type)) {
-      throw new Error(`Platform 类 "${Cls.type}" 已被注册`);
+      throw new NeonaicIllegalStateError(`Platform 类 "${Cls.type}" 已被注册`);
     }
 
     for (const [name, profile] of this._profiles) {
@@ -306,7 +307,7 @@ export function getPlatformManager() {
 function registerPlatform(Cls) {
   const pm = PlatformManager.instance;
   if (!pm) {
-    throw new Error('PlatformManager 尚未初始化，请确保在 system/entry.js 中先 new PlatformManager');
+    throw new NeonaicIllegalStateError('PlatformManager 尚未初始化，请确保在 system/entry.js 中先 new PlatformManager');
   }
   pm._registerClass(Cls);
 }

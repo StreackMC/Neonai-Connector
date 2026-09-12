@@ -1,10 +1,12 @@
 /** 用于注入log4js的模块 */
 
+import { NeonaicError } from "../utils/NeonaicNewableError.js";
+
 let emit = (type, level, timestamp = new Date(), ...msgs) => { };
 let emitSet = false;
 
 function putEmit(emitFunc) {
-  if (emitSet) throw new Error("重复设置 log4j_inject.emit()");
+  if (emitSet) throw new NeonaicError("重复设置 log4j_inject.emit()");
   emit = emitFunc;
   emitSet = true;
 }

@@ -16,9 +16,11 @@
  */
 
 import { neonaicPermissionServer } from './permissionServer.js';
-import { getLogger, parseString } from '../logger/Logger.js';
+import { getLogger } from '../logger/Logger.js';
+import { parseString } from '../utils/text.js';
 import { neonaicCommandInterface } from './commandInterface.js';
 import { NeonaicNewable } from "../utils/NeonaicNewableClass.js";
+import { NeonaicCommandError, NeonaicIllegalArgumentError, NeonaicIllegalStateError } from "../utils/NeonaicNewableError.js";
 
 // ---- 颜色 ----
 const RED = '\x1b[31m';
@@ -86,9 +88,9 @@ function parseArgs(input) {
  * @throws 命名空间、命名或处理器无效
  */
 function registerCommand(namespace, name, /** @this {NeonaicCommandContext} */handler, opts = {}) {
-  if (!namespace) throw new Error("命令具有无效的命名空间：" + namespace);
-  if (!name) throw new Error("命令具有无效的命名：" + name);
-  if (!(typeof handler === 'function')) throw new Error("命令具有无效的处理器：" + handler);
+  if (!namespace) throw new NeonaicIllegalArgumentError("命令具有无效的命名空间：" + namespace);
+  if (!name) throw new NeonaicIllegalArgumentError("命令具有无效的命名：" + name);
+  if (!(typeof handler === 'function')) throw new NeonaicIllegalArgumentError("命令具有无效的处理器：" + handler);
   const aliases = opts.alias ? (Array.isArray(opts.alias) ? opts.alias : [opts.alias]) : [];
   const perms = opts.permissions
     ? (Array.isArray(opts.permissions) ? opts.permissions : [opts.permissions])
@@ -232,7 +234,7 @@ function executeCommandSilent(cmdName, ctx = {}, ...args) {
   const meta = resolveCommand(cmdName);
 
   if (!meta) {
-    throw new Error(buildError(cmdName, '未知命令'));
+    throw new NeonaicIllegalArgumentError(buildError(cmdName, '未知命令'));
   }
 
   // 构建执行上下文
@@ -242,14 +244,14 @@ function executeCommandSilent(cmdName, ctx = {}, ...args) {
   if (!context.internalCall && context.executor) {
     const permErr = checkCommandPerms(cmdName, meta.permissions, context.executor);
     if (permErr) {
-      throw new Error(buildError(cmdName, permErr));
+      throw new NeonaicIllegalStateError(buildError(cmdName, permErr));
     }
   }
 
   try {
     return meta.handler.call(context, ...args);
   } catch (err) {
-    throw new Error(buildError(cmdName, `执行失败: ${err.message}`));
+    throw new NeonaicCommandError(buildError(cmdName, `执行失败: ${err.message}`), err);
   }
 }
 
@@ -341,9 +343,9 @@ function sudoOrRunuser(inherit, who, cmd, ...args) {
   /** @type {NeonaicCommandContext} */
   const ctx = this;
   const targetCmd = typeof cmd === 'string' ? cmd.trim() : '';
-  if (/* 不检查who是考虑到部分情形下可能有转到匿名上下文的可能 */!targetCmd) throw new Error("参数不完整，应为 [sudo|runuser] <who> <cmd> [...args]");
+  if (/* 不检查who是考虑到部分情形下可能有转到匿名上下文的可能 */!targetCmd) throw new NeonaicIllegalArgumentError("参数不完整，应为 [sudo|runuser] <who> <cmd> [...args]");
   if (/* 嵌套保护 */targetCmd === 'sudo' || targetCmd === 'runuser' || targetCmd === 'neonaic:sudo' || targetCmd === 'neonaic:runuser') {
-    throw new Error("要执行的命令不能是 sudo 或 runuser");
+    throw new NeonaicIllegalArgumentError("要执行的命令不能是 sudo 或 runuser");
   }
   // 切换到目标用户执行命令
   const currentExecutor = Array.isArray(ctx.executor) ? ctx.executor : (ctx.executor ? [ctx.executor] : []);
