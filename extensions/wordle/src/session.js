@@ -75,6 +75,8 @@ export class WordleSession {
       // 猜中
       clearSession(this.user);
       this.#usable = false;
+      this.#triesResult.push(WordleEnums.right);
+      this.#tries.push(input);
       return WordleEnums.right;
     } else {
       // 猜错
