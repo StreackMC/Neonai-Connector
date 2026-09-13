@@ -44,7 +44,7 @@ export const neonaicNetwork = {
       }
 
       // 拦截本地地址
-      if (!(filter?.allow_lan === false)) {
+      if (filter?.allow_lan === false) {
         const dns_processed_real_addr = await NeonaicUriMeta.resolve(addr, {resolveRealAddress: true});
         if (dns_processed_real_addr.isAccessingIntranet) return new Response(
           '403 Forbidden: Neonaic has prevented the request because accessing intranet is not allowed.',
