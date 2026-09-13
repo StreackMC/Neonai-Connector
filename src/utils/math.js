@@ -21,7 +21,7 @@ export const neonaicMath = {
     const parts = s.split('.');
     const int = parts[0];
     const dec = parts.slice(1).join('');   // 去掉后面多余的点
-    if (int.length === 0) return allowNaN ? NaN : 0;
+    if (int === "") return allowNaN ? NaN : 0;
     return Number(`${int}.${dec}`);
   },
 
@@ -36,7 +36,7 @@ export const neonaicMath = {
     min = Number.isFinite(min) ? min : Number.NEGATIVE_INFINITY;
     max = Number.isFinite(max) ? max : Number.POSITIVE_INFINITY;
     if (neonaicMath.isNaN(v, min, max).length != 0 || min > max) return NaN;
-    return (v, min, max) => v < min ? min : v > max ? max : v;
+    return v < min ? min : v > max ? max : v;
   },
 
   /**
