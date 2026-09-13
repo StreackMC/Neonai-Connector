@@ -265,11 +265,11 @@ async function callProvider(provider, userMessage) {
     const summary = toolCalls
       .map((t) => `${t.toolName}(${JSON.stringify(t.input ?? {})})`)
       .join('; ');
-    getLogger().tool.debug(`◉ ${provider.name} 调用工具: ${summary}`);
     const toolResults = await (result.toolResults ?? []);
+    getLogger().tool.debug(`◉ ${provider.name} 调用工具: ${summary.replace(/\n/g, "\\n")}`);
     for (const tr of toolResults) {
       const out = typeof tr.output === 'string' ? tr.output : JSON.stringify(tr.output);
-      getLogger().tool.debug(`  ↳ ${tr.toolName} → ${out.slice(0, 200)}`);
+      getLogger().tool.debug(`  ↳ ${tr.toolName} → ${out.replace(/\n/g, "\\n").slice(0, 200)}`);
     }
   }
 
@@ -382,7 +382,7 @@ registerAITool('neonaic', 'webfetch', {
       return `未能获取目标地址内容：${error?.message || "未知原因"}`;
     }
   },
-})
+});
 
 // ---- ai 命令 ----
 
