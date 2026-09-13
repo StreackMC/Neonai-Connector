@@ -22,12 +22,14 @@ import z from 'zod';
 
 import { neonaicConfManager } from '../system/confManager.js';
 import { getLogger } from '../logger/Logger.js';
-import { parseString } from '../utils/text.js';
+import { parseString } from '../utils/chore.js';
 import { neonaicCommandServer } from '../command/commandServer.js';
 import { neonaicCommandInterface } from '../command/commandInterface.js';
 import { neonaicPermissionServer } from '../command/permissionServer.js';
 import { NeonaicIllegalArgumentError, NeonaicIllegalStateError, NeonaicNetworkError } from '../utils/NeonaicNewableError.js';
-import { neonaicFileSystem } from '../utils/io.js';
+import { neonaicFileSystem, neonaicNetwork } from '../utils/io.js';
+import { NeonaicUriMeta } from '../utils/NeonaicUriMeta.js';
+import { neonaicMath } from '../utils/math.js';
 
 /** 封禁用户使用 AI 的权限名 */
 const AI_BAN_PERMISSION = 'neonaic.toolcall.ai';
@@ -353,17 +355,31 @@ function findProvider(name) {
 registerAITool('neonaic', 'webfetch', {
   description: "从指定地址获取Web内容",
   inputSchema: z.object({
-      address: z.string().describe("目标 URI，需要完整携带协议头等内容。"),
+    address: z.string().describe("目标 URI，协议头缺失时视作http。"),
+    timeout: z.int().describe("可接受的超时时间，不得超过5000ms，默认5000ms。"),
   }),
-  execute: async ({ address }) => {
+  execute: async ({ address, timeout }) => {
     try {
-      uri = new URL(address);
+      // 请求
+      const result = await neonaicNetwork.fetch(
+        await NeonaicUriMeta.resolve(address, {}),
+        neonaicMath.clamp(neonaicMath.assertNoNaNOrElse(neonaicMath.toNumber(timeout), 5000), 1, 5000),
+        { allow_lan: false }
+      );
 
-      // 合法性校验
-      ["127.0.0.1", "localhost", ""]
+      // 判断内置阻止
+      const neonaicTag = result.headers.get("x-neonaic-status");
+      if (neonaicTag == 'aborted:intranet') throw new NeonaicNetworkError("试图访问内网", result);
+      if (neonaicTag == 'aborted:filter') throw new NeonaicNetworkError("安全原因不得访问该地址", result);
 
+      // 处理结果
+      if (result.ok) {
+        return `<${result.type.toString()}>${result.text}</>`;
+      } else {
+        throw new NeonaicNetworkError(`远程返回HTTP代码${result.status}`, result);
+      }
     } catch (error) {
-      return `未能获取目标内容：${error?.message || "未知原因"}`;
+      return `未能获取目标地址内容：${error?.message || "未知原因"}`;
     }
   },
 })
