@@ -4,24 +4,22 @@ import { lstatSync, realpathSync } from 'node:fs';
 import { lstat, realpath } from 'node:fs/promises';
 
 import { NeonaicIllegalArgumentError, NeonaicIOError, NeonaicNetworkError } from "./NeonaicNewableError.js";
-import { parseString } from "./text.js";
+import { neonaicChore, parseString } from "./chore.js";
 import { NeonaicUriMeta } from './NeonaicUriMeta.js';
 
-/**
- * Neonaic 网络相关工具
- */
 export const neonaicNetwork = {
   /**
    * 带有超时地请求一个地址
    * @param {String|URL|Request|NeonaicUriMeta} target 请求地址
    * @param {number} [timeout=10000] 默认超时时间，单位 ms
-   * @param {Object} filter 请求过滤器，如果因此导致连接被拦截会返回一个 403、带有```x-neonaic-status: 'aborted:filter'```标头的Response。**子参数需严格一致**，否则回退默认行为。如果没有指定本参数（不包括手动设为 null/undefined 等情况）则使用内置过滤器：{@link neonaicNetwork.DEFAULT_BLOCKED_URI_FILTER}。**过滤器不能处理重定向。**
+   * @param {Object} filter 请求过滤器，如果因此导致连接被拦截会返回一个 403、带有```x-neonaic-status: 'aborted:filter'```标头的Response。**子参数需严格一致**，否则回退默认行为。**过滤器不能处理重定向。**
    * @param {'whitelist'|'blacklist'} [filter.mode='blacklist'] 工作模式，'blacklist'默认阻止，'whitelist'为仅放行。**设为后者但不指定名单会拦截全部请求。**
-   * @param {(String|RegExp)[]|(String|RegExp)} [filter.list=['$Internal_list']] 名单，支持文本匹配和正则过滤。不是 String/RegExp 的值会被忽略。
+   * @param {(String|RegExp)[]|(String|RegExp)} [filter.list=['$Internal_list']] 名单，支持文本匹配和正则过滤。不是 String/RegExp 的值会被忽略。如果没有指定本参数（不包括手动设为 null/undefined 等情况）则使用内置过滤器：{@link neonaicNetwork.DEFAULT_BLOCKED_URI_FILTER}。
    * @param {boolean} [filter.allow_lan=true] 如果设为 false 将不允许请求本地地址。安全原因不接受 falsy。
    * @returns {Promise<Response>}
    */
-  fetch: async function (target, timeout = 10 * 1e3, filter = { allow_lan: true, mode: 'blacklist', list: neonaicNetwork.DEFAULT_BLOCKED_URI_FILTER }) {
+  fetch: async function (target, timeout = 10 * 1e3, filter) {
+    filter = neonaicChore.joinObject({ allow_lan: true, mode: 'blacklist', list: neonaicNetwork.DEFAULT_BLOCKED_URI_FILTER }, filter);
     const controller = new AbortController();
     const time = (!timeout) ? 10 * 1e3 : Math.abs(parseInt(timeout));
     const timer = setTimeout(() => controller.abort(), time);

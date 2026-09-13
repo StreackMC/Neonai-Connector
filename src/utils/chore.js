@@ -74,7 +74,7 @@ export function parseString(val, short = !(DEBUGING || neonaicConfManager.getCon
   return String(val);
 }
 
-export const neonaicText = {
+export const neonaicChore = {
   parseString,
 
   /**
@@ -162,4 +162,21 @@ export const neonaicText = {
     const v = parseString(operation.apply(this, args));
     return (!(typeof excepted === 'string' && v.includes(excepted)) && !(excepted instanceof RegExp && excepted.test(v))) ? fallback : v;
   },
+
+  /**
+   * 将多个对象合并，后者覆盖前者，会自动跳过数组和原型链注入
+   * @param  {...object} objects 对象
+   * @returns {object} 合并后的对象，**不是任何 class 的实例**
+   */
+  joinObject: (...objects) => {
+    const r = {};
+    for (const v of objects) {
+      if (v === null || typeof v !== 'object' || Array.isArray(v)) continue;
+      for (const k of Object.keys(v)) {
+        if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+        r[k] = v[k];
+      }
+    }
+    return r;
+  }
 };

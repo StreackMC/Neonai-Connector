@@ -1,11 +1,29 @@
 import { NeonaicArithmeticError, NeonaicIllegalArgumentError } from "./NeonaicNewableError.js";
-import { parseString } from "./text.js";
+import { parseString } from "./chore.js";
 
 function getNaNException(where) {
   return new NeonaicArithmeticError(where ? `在${parseString(where)}发现意外的 NaN` : '发现意外的 NaN', where ? where : null);
 }
 
 export const neonaicMath = {
+  /**
+   * 将传入值尽可能地转为数字，遇到多个小数点时只保留第一个
+   * @implNote 先强转为文本，再删除非数字部分，最后得到结果
+   * @param {any} v 传入值
+   * @param {boolean} allowNaN 是否接受返回 NaN，为 false 时返回 0
+   * @returns {number|NaN} 结果，当转出字符串不含数字时为 NaN
+   */
+  toNumber: (v, allowNaN = true) => {
+    // 只保留数字和点
+    const s = parseString(v).replace(/[^0-9.]/g, '');
+    // 拆出整数部分 + 其余全部当小数
+    const parts = s.split('.');
+    const int = parts[0];
+    const dec = parts.slice(1).join('');   // 去掉后面多余的点
+    if (int.length === 0) return allowNaN ? NaN : 0;
+    return Number(`${int}.${dec}`);
+  },
+
   /**
    * 将输入钳制到一个范围里面
    * @param {number} v 输入值
