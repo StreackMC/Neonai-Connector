@@ -5,7 +5,7 @@ import { NeonaicIllegalStateError, NeonaicUnsupportedOperationError } from "../.
 import { ALL_FIVE_LETTER_WORDS, FRIENDLY_FIVE_LETTER_WORDS } from "./word_provider.js";
 
 /** Wordle 最大猜测次数 */
-const MAX_TURN = 5;
+const MAX_TURN = 6;
 
 /** {@link WordleSession}私有构造器 token */
 const WordleSession_Private_Constructure_Token = Symbol('wordle-private-construtor');
