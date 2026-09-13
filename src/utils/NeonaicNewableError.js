@@ -79,6 +79,16 @@ export class NeonaicFileNotFoundError extends NeonaicIOError {
 /**
  * 向方法传递了不合法或不合适的参数
  */
+export class NeonaicNullPointerError extends NeonaicError {
+  constructor(reason = "", cause = null) {
+    super(reason, cause);
+    this.name = 'NeonaicNullPointerError';
+  }
+}
+
+/**
+ * 向方法传递了不合法或不合适的参数
+ */
 export class NeonaicIllegalArgumentError extends NeonaicError {
   constructor(reason = "", cause = null) {
     super(reason, cause);

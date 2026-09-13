@@ -1,5 +1,5 @@
 import { neonaicConfManager } from '../system/confManager.js';
-import { NeonaicIllegalArgumentError, NeonaicIllegalStateError } from './NeonaicNewableError.js';
+import { NeonaicIllegalArgumentError, NeonaicIllegalStateError, NeonaicNullPointerError } from './NeonaicNewableError.js';
 
 /** 当前是否处于调试模式（与 entry.js / Logger.js 保持同一判定） */
 const DEBUGING = process.argv.some((a) => a === '--debug=true' || a === '--debug');
@@ -78,10 +78,34 @@ export const neonaicText = {
   parseString,
 
   /**
+   * 断言不是 Null/Undefined ，否则抛出{@link NeonaicNullPointerError}。
+   * @template T
+   * @param {T|null|undefined} v 数据
+   * @param {String} cause 抛错信息
+   * @returns {T} 断言成功返回数据
+   */
+  assertNoNull: (v, cause) => {
+    if (v === null || v === undefined) throw new NeonaicNullPointerError(parseString(cause));
+    return v;
+  },
+
+  /**
+   * 断言不是 Null/Undefined ，否则返回回退值。
+   * @template T
+   * @template V
+   * @param {T|null|undefined} v 数据
+   * @param {V} fallback 回退结果
+   * @returns {T|V} 断言成功返回数据，否则为回退值
+   */
+  assertNoNullOrElse: (v, fallback) => {
+    return v ?? fallback;
+  },
+
+  /**
    * 断言一个函数返回值严格相等指定值，否则将抛出{@link NeonaicIllegalStateError}。
    * @template T
    * @param {(...any) => T} operation 函数
-   * @param {any} excepted 期望结果
+   * @param {T} excepted 期望结果
    * @param {any} args 函数参数
    * @returns {T} 断言成功返回函数结果
    */
@@ -90,6 +114,22 @@ export const neonaicText = {
     const v = operation.apply(this, args);
     if (v !== excepted) throw new NeonaicIllegalStateError(`断言函数的返回值为“${parseString(excepted)}”时失败了，发现了:${parseString(v)}`);
     return v;
+  },
+
+  /**
+   * 断言一个函数返回值严格相等指定值，否则将返回默认值。
+   * @template T
+   * @template V
+   * @param {(...any) => T} operation 函数
+   * @param {T} excepted 期望结果
+   * @param {V} fallback 回退结果
+   * @param {any} args 函数参数
+   * @returns {T|V} 断言成功返回函数结果，否则为回退值
+   */
+  assertResultOrElse: (operation, excepted, fallback, ...args) => {
+    if (typeof operation !== 'function') throw new NeonaicIllegalArgumentError("期待的传入值不是函数：" + parseString(operation));
+    const v = operation.apply(this, args);
+    return (v !== excepted) ? fallback : v;;
   },
 
   /**
@@ -105,5 +145,21 @@ export const neonaicText = {
     const v = parseString(operation.apply(this, args));
     if (!(typeof excepted === 'string' && v.includes(excepted)) && !(excepted instanceof RegExp && excepted.test(v))) throw new NeonaicIllegalStateError(`断言函数的返回值为“${parseString(excepted)}”时失败了，发现了:${v}`);
     return v;
+  },
+
+  /**
+   * 断言一个函数返回文本合理，否则将返回默认值。
+   * @template T
+   * @param {T} fallback 回退值
+   * @param {(...any) => String} operation 函数
+   * @param {RegExp|String} excepted 期望结果，文本时返回值需要包含，正则时需要匹配。**复用正则可能导致 last_index 紊乱，需要手动重置。**
+   * @param {any} args 函数参数
+   * @returns {String|T} 断言成功返回函数结果，否则为回退值
+   */
+  assertResultFullfillOrElse: (operation, excepted, ...args) => {
+    if (typeof operation !== 'function') throw new NeonaicIllegalArgumentError("期待的传入值不是函数：" + parseString(operation));
+    if (typeof excepted !== 'string' || !(excepted instanceof RegExp)) throw new NeonaicIllegalArgumentError("期待的传入值类型不是文本或正则：" + parseString(operation));
+    const v = parseString(operation.apply(this, args));
+    return (!(typeof excepted === 'string' && v.includes(excepted)) && !(excepted instanceof RegExp && excepted.test(v))) ? fallback : v;
   },
 };
