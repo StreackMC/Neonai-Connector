@@ -30,6 +30,7 @@ import { NeonaicIllegalArgumentError, NeonaicIllegalStateError, NeonaicNetworkEr
 import { neonaicFileSystem, neonaicNetwork } from '../utils/io.js';
 import { NeonaicUriMeta } from '../utils/NeonaicUriMeta.js';
 import { neonaicMath } from '../utils/math.js';
+import { NeonaicNewable } from '../utils/NeonaicNewableClass.js';
 
 /** 封禁用户使用 AI 的权限名 */
 const AI_BAN_PERMISSION = 'neonaic.toolcall.ai';
@@ -211,6 +212,7 @@ function buildToolSet(toolList) {
  */
 async function callProvider(provider, userMessage) {
   const systemPrompt = loadSystemPrompt(provider.prompt);
+  const SESSION_ID = `#${NeonaicNewable.getUniqueId()}`;
 
   // 严格遵循用户配置的完整 address，不依赖 SDK 的 baseURL 自动拼接端点。
   // 通过 fetch 中间件，将 SDK 拼接出的 URL 统一替换为用户配置的完整地址。
@@ -240,8 +242,8 @@ async function callProvider(provider, userMessage) {
   // 下限钳制为 1，避免配置为 0/负数导致 stepCountIs 失效。
   const rawMax = Number(provider.maxToolcall);
   const maxToolcall = Math.max(1, Number.isFinite(rawMax) ? rawMax : 5);
-  getLogger().tool.debug(
-    `→ ${provider.name}: ${provider.address}#${provider.model} (${endpoint}${provider.stream ? ', stream' : ''}, ${toolList.length} tools, maxToolcall=${maxToolcall})`,
+  getLogger().tool.info(
+    `${SESSION_ID} → ${provider.name}: ${provider.address}#${provider.model} (${endpoint}${provider.stream ? ', stream' : ''}, ${toolList.length} tools, maxToolcall=${maxToolcall})`,
   );
 
   const common = {
@@ -265,16 +267,16 @@ async function callProvider(provider, userMessage) {
     const summary = toolCalls
       .map((t) => `${t.toolName}(${JSON.stringify(t.input ?? {})})`)
       .join('; ');
+    getLogger().tool.info(`${SESSION_ID} ◉ ${provider.name} 调用工具: ${summary.replace(/\n/g, "\\n")}`);
     const toolResults = await (result.toolResults ?? []);
-    getLogger().tool.debug(`◉ ${provider.name} 调用工具: ${summary.replace(/\n/g, "\\n")}`);
     for (const tr of toolResults) {
       const out = typeof tr.output === 'string' ? tr.output : JSON.stringify(tr.output);
-      getLogger().tool.debug(`  ↳ ${tr.toolName} → ${out.replace(/\n/g, "\\n").slice(0, 200)}`);
+      getLogger().tool.info(`${SESSION_ID}  ↳ ${tr.toolName} → ${out.replace(/\n/g, "\\n").slice(0, 200)}`);
     }
   }
 
   const reply = (await result.text) ?? '';
-  getLogger().tool.debug(`← ${provider.name}: ${reply.length} 字符`);
+  getLogger().tool.info(`${SESSION_ID} ← ${provider.name}: ${reply.length} 字符`);
   return (reply.length == 0) ? `“（${neonaicConfManager.getBotName()}”点了点头，并没有说什么）` : reply;
 }
 
@@ -382,6 +384,26 @@ registerAITool('neonaic', 'webfetch', {
       return `未能获取目标地址内容：${error?.message || "未知原因"}`;
     }
   },
+});
+
+registerAITool('neonaic', 'time', {
+  description: "获取指定时区的时间信息",
+  inputSchema: z.object({
+    country: z.string().describe("目标时区的ISO国家代码，用于文本格式化；传空值为默认，可以假定与用户时区相同"),
+    tz: z.string().describe("目标时区的偏移量，如\"+8\"和\"-4\"；传空值为默认，可以假定与用户时区相同；无偏移需传\"UTC\""),
+  }),
+  execute: async ({ country, tz }) => {
+    const d = new Date();
+    return d.toLocaleString([parseString(country), "zh-CN"], { timeZone: (tz || "+8") });
+  },
+});
+
+registerAITool('neonaic', 'stringlength', {
+  description: "获取输入文本的长度",
+  inputSchema: z.object({
+    text: z.string().describe("待判断文本"),
+  }),
+  execute: async ({ text }) => parseString(text).length,
 });
 
 // ---- ai 命令 ----
