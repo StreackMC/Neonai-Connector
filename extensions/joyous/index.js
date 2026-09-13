@@ -157,7 +157,7 @@ neonaicCommandServer.registerCommand('joyous', 'mc', async function (address) {
  * 查询 Streack 服务器世界信息，给AI用的。
  */
 neonaicAI.registerAITool("joyous", "worldMeta", {
-  description: "查询世界天气状况与时间情况。默认从 " + DEFAULT_ADDRESS + " 处获取数据。",
+  description: "查询 Minecraft 世界天气状况与时间情况。默认从 " + DEFAULT_ADDRESS + " 处获取数据。",
   inputSchema: z.object({
     address: z.string().describe("数据来源，需要是Joyous StatusAPI格式。"),
   }),
