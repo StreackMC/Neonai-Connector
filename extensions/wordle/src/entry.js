@@ -91,7 +91,7 @@ export function onDisable() {
 function buildHistory(session) {
   if (!(session instanceof WordleSession)) throw new NeonaicIllegalArgumentError("期待传入 WordleSession，但发现了:" + parseString(session), session);
 
-  let msg = `<第${session.triesLength}轮>\n`;
+  let msg = `◎ 第${session.triesLength}轮\n`;
   session.historyOfResult.forEach((tryResult, index) => {
     const word = session.history[index];
     tryResult.forEach((status) => {
