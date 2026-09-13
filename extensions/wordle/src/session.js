@@ -81,13 +81,6 @@ export class WordleSession {
       // 先看看猜没猜过
       if (this.#tries.includes(input)) return WordleEnums.tried;
 
-      // 如果是最后一次机会那么会话结束
-      if (this.triesLength == this.maxTries) {
-        clearSession(this.user);
-        this.#usable = false;
-        return WordleEnums.failed;
-      }
-
       // 开始遍历字母
       let result = [];
       for (let index = 0; index < input.length; index++) {
@@ -106,6 +99,13 @@ export class WordleSession {
       }
       this.#triesResult.push(result);
       this.#tries.push(input);
+
+      // 如果是最后一次机会那么会话结束
+      if (this.triesLength == this.maxTries) {
+        clearSession(this.user);
+        this.#usable = false;
+        return WordleEnums.failed;
+      }
       return result;
     }
   }
