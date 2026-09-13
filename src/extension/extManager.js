@@ -31,7 +31,7 @@ import { NeonaicExtItem } from './extLoader.js';
 import { getLogger } from '../logger/Logger.js';
 import { neonaicConfManager } from '../system/confManager.js';
 import { NeonaicExtensionError, NeonaicIllegalArgumentError } from '../utils/NeonaicNewableError.js';
-import { parseString } from '../utils/text.js';
+import { parseString } from '../utils/chore.js';
 import { NeonaicCommandContext, neonaicCommandServer } from '../command/commandServer.js';
 import { neonaicCommandInterface } from '../command/commandInterface.js';
 

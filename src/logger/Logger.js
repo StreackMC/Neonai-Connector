@@ -16,7 +16,7 @@ import { createRequire } from 'node:module';
 
 import { neonaicConfManager } from '../system/confManager.js';
 import { neonaicLog4jsInject } from './log4js_inject.js';
-import { parseString } from '../utils/text.js';
+import { parseString } from '../utils/chore.js';
 
 // 本模块自算项目根路径，避免与 entry.js 形成循环依赖
 // Logger.js 位于 <根>/src/logger/，故向上 2 层为项目根

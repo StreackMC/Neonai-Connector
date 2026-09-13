@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
 
-import { parseString } from '../utils/text.js';
+import { parseString } from '../utils/chore.js';
 import { neonaicConfManager } from "../system/confManager.js";
 import { NeonaicConfig } from "../utils/NeonaicConfig.js";
 import { NeonaicNewable } from "../utils/NeonaicNewableClass.js";

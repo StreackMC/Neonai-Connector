@@ -2,7 +2,7 @@ import qqBotBackend from 'qq-official-bot';
 import he from 'he';
 import JSON5 from 'json5';
 import { getLogger } from '../../src/logger/Logger.js';
-import { parseString } from '../../src/utils/text.js';
+import { parseString } from '../../src/utils/chore.js';
 import { PlatformQQBot } from './index.js';
 import { neonaicMessageIn } from '../../src/message/messageIn.js';
 import { neonaicConfManager } from '../../src/system/confManager.js';

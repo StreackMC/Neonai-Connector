@@ -17,7 +17,7 @@
 
 import { neonaicPermissionServer } from './permissionServer.js';
 import { getLogger } from '../logger/Logger.js';
-import { parseString } from '../utils/text.js';
+import { parseString } from '../utils/chore.js';
 import { neonaicCommandInterface } from './commandInterface.js';
 import { NeonaicNewable } from "../utils/NeonaicNewableClass.js";
 import { NeonaicCommandError, NeonaicIllegalArgumentError, NeonaicIllegalStateError } from "../utils/NeonaicNewableError.js";
