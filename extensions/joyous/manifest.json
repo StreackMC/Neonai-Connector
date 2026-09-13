@@ -7,7 +7,7 @@
     "name": "Joyous Plugin for Neonaic",
     "author": ["kdxiaoyi"],
     "description": "Make Neonaic cooperate with Minecraft Server which has Joyous Plugin/Mod.",
-    "url": "https://github.com/StreackMC/Neonai-Connector/",
+    "url": "https://github.com/StreackMC/Neonai-Connector/tree/main/extensions/joyous",
     "license": "AGPL-3.0 modified"
   },
   "entry": "./src/entry.js",

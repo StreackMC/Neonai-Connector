@@ -7,7 +7,7 @@
     "name": "Official QQBot",
     "author": ["kdxiaoyi"],
     "description": "Enable Neonaic to connect official QQBot service.",
-    "url": "https://github.com/StreackMC/Neonai-Connector/",
+    "url": "https://github.com/StreackMC/Neonai-Connector/tree/main/extensions/qqbot",
     "license": "AGPL-3.0 modified"
   },
   "entry": "./src/entry.js",
