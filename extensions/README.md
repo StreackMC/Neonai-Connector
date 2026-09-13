@@ -12,5 +12,31 @@
 
 > 以下链接只有在 [Github](https://github.com/StreackMC/Neonai-Connector/blob/main/extensions/README.md) 上点击才能生效
 
-* [joyous](./joyous/readme.md) 提供与 [Joyous Plugin](https://github.com/StreackMC/Joyous) 协作能力
-* [qqbot](./qqbot/readme.md) 提供与 [QQ 官方机器人](https://q.qq.com/qqbot/#/home)协作的能力
+* [joyous](./joyous) 提供与 [Joyous Plugin](https://github.com/StreackMC/Joyous) 协作能力
+* [qqbot](./qqbot) 提供与 [QQ 官方机器人](https://q.qq.com/qqbot/#/home)协作的能力
+* [wordle](./wordle) 为用户提供 Wordle 小游戏
+
+## 开发相关
+
+### manifest.json
+
+### Entry
+
+a js in `/extensions/xxx/src/xxx.js` should have these to make it able to be loaded.
+
+```js
+/**
+ * 拓展启用钩子
+ * @this {import('../../../src/extension/extLoader.js').NeonaicExtItem}
+ * @param {{ manifest: Object, pwd: String, ext_item_id: String, ext_item_timestamp: Number }} [ctx] 拓展上下文
+ */
+export function onEnable(ctx) {
+}
+
+/**
+ * 拓展卸载钩子
+ * @this {import('../../../src/extension/extLoader.js').NeonaicExtItem}
+ */
+export function onDisable() {
+}
+```

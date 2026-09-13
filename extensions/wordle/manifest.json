@@ -1,0 +1,16 @@
+{
+  "meta": {
+    "version": [1, "0.1.0"],
+    "id": "wordle"
+  },
+  "particulars": {
+    "name": "Wordle Game for Neonaic",
+    "author": ["kdxiaoyi"],
+    "description": "Offer",
+    "url": "https://github.com/StreackMC/Neonai-Connector/tree/main/extensions/wordle",
+    "license": "AGPL-3.0 modified"
+  },
+  "entry": "./src/entry.js",
+  "depends": {},
+  "softdepends": {}
+}
