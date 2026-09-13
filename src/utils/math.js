@@ -14,6 +14,7 @@ export const neonaicMath = {
    * @returns {number|NaN} 结果，当转出字符串不含数字时为 NaN
    */
   toNumber: (v, allowNaN = true) => {
+    if (typeof v === 'number') return v;
     // 只保留数字和点
     const s = parseString(v).replace(/[^0-9.]/g, '');
     // 拆出整数部分 + 其余全部当小数
