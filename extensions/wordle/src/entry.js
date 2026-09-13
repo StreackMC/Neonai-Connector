@@ -1,4 +1,6 @@
+import { neonaicCommandInterface } from '../../../src/command/commandInterface.js';
 import { NeonaicCommandContext, neonaicCommandServer } from '../../../src/command/commandServer.js';
+import { neonaicPermissionServer } from '../../../src/command/permissionServer.js';
 import { parseString } from '../../../src/utils/chore.js';
 import { NeonaicIllegalArgumentError, NeonaicIllegalStateError } from '../../../src/utils/NeonaicNewableError.js';
 import { clearSession, hasSession, newSession as getSession, WordleEnums, WordleSession } from './session.js';
@@ -12,11 +14,11 @@ const SESSION_TIMEOUT = 0.5 * 60 * 60;
  * @param {{ manifest: Object, pwd: String, ext_item_id: String, ext_item_timestamp: Number }} [ctx] 拓展上下文
  */
 export function onEnable(ctx) {
-  neonaicCommandServer.registerCommand('wordle', 'wordle', function (v) {
+  neonaicCommandServer.registerCommand('wordle', 'wordle', function (...v) {
     /** @type {NeonaicCommandContext} */
     const ctx = this;
     const user = ctx.executor[0];
-    const param = parseString(v || "").replace(/[^a-zA-Z]/gi, '').toLowerCase();
+    let param = v.map(parseString).join('').replace(/[^a-zA-Z]/gi, '').toLowerCase();
     if (['help', 'ver', 'version'].includes(param)) {
       return `Wordle Game for Neonaic By @kdxiaoyi\n\n/wordle help 显示本信息\n/wordle new 开始新游戏\n开始后:\n/wordle stop 放弃游戏\n/wordle <word> 提交猜测\n/wordle history 或 /wordle h 查看猜测历史`;
     } else if (['new'].includes(param)) {
@@ -30,6 +32,11 @@ export function onEnable(ctx) {
       const session = getSession(user, SESSION_TIMEOUT);
       // 处理查询请求
       if (['h', 'history', 'tries', 'try'].includes(param)) return buildHistory(getSession(user, SESSION_TIMEOUT));
+
+      // 处理作弊请求
+      if (['win'].includes(param) && neonaicPermissionServer.checkPermissionFromContext(ctx, [[neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, neonaicCommandInterface.COMMAND_ENUMS.PERM_ADMIN, 'wordle.cheat']])) {
+        param = session.answer;
+      };
 
       // 放弃游戏，等同失败
       if (['abandon', 'givenup', 'quit', 'exit', 'stop'].includes(param)) {
@@ -94,19 +101,23 @@ function buildHistory(session) {
   let msg = `◎ 第${session.triesLength}轮\n`;
   session.historyOfResult.forEach((tryResult, index) => {
     const word = session.history[index];
-    tryResult.forEach((status) => {
-      switch (status) {
-        case 'missing':
-          msg += "⬜";
-          break;
-        case 'pos_wrong':
-          msg += "🟨";
-          break;
-        case 'right':
-          msg += "🟩";
-          break;
-      }
-    });
+    if (Array.isArray(tryResult)) {
+      tryResult.forEach((status) => {
+        switch (status) {
+          case 'missing':
+            msg += "⬜";
+            break;
+          case 'pos_wrong':
+            msg += "🟨";
+            break;
+          case 'right':
+            msg += "🟩";
+            break;
+        }
+      });
+    } else {
+      msg += "🟩".repeat(5);
+    }
     msg += `\n${toFullLetter(word)}\n`;
   });
   return msg;
