@@ -58,9 +58,20 @@
 - 子命令：`list`(默认) / `scan [dir]` / `info <ext>` / `load` / `unload` / `enable` / `disable`；省略拓展名即对全部操作。
 - **返回结构以文件里的 `@typedef` 为准**（用户写的，改实现前先读）：`NeonaicExtOperateStatusPayload` = `{ operation, status, error, id }`，`operation` ∈ `load|unload|enabled|disabled`（enable/disable 用**过去分词**），`status` ∈ `notfound|successfully|failed|disabled`（`disabled` 只在 `operation='load'`）；`NeonaicExtOperateStatus` = `{ operation, succeed, notfound, disabled, failed }`，**没有 `affected`**。
 - **两套语义正交**：`load`/`unload` 只管运行期（`unload` 标 `@deprecated`，有内存泄漏风险）；`enable`/`disable` 只管 `config/saves/ext.json` 的开关、**默认不改运行状态**（故 disable 后仍在跑是预期）。运行状态不进 payload，需要时查 `list()`。
-- 布局 `extensions/<name>/index.js` + 同级 `manifest.json`；`meta.version` 如 `[1,"0.1.0"]`、`meta.id` 须匹配 `^[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*$`、`particulars.{name,author,description,url,license}`、`entry`、`depends`/`softdepends`。
+- **布局已改为 `extensions/<name>/src/*.js` + 同级 `manifest.json`**（`entry` 写 `./src/entry.js`）；`meta.version` 如 `[1,"0.1.0"]`、`meta.id` 须匹配 `^[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*$`、`particulars.{name,author,description,url,license}`、`depends`/`softdepends`。
 - `NeonaicExtItem.enable()` 要求入口模块同时导出 `onEnable` 与 `onDisable`（必须都是函数）；开关存 `ext.json` 的 `<id>.enabled`（缺省 true）。
-- **约定**：拓展内导入内核模块用 `../../src/...`；拓展必须是子目录下的 `index.js`，扁平文件不会被加载。
+- **约定**：拓展内导入内核模块用 `../../../src/...`（文件在 `extensions/<name>/src/` 下，向上三层）；入口必须叫 `entry.js` 且在 `src/` 子目录里。
+
+## 拓展：Wordle
+
+- `extensions/wordle/src/` 三个文件：`entry.js`（命令层）、`session.js`（对局与难度规则）、`word_provider.js`（词表 + 全角字母表）。命令 `wordle:wordle`（别名 `wd`/`wl`）。
+- `session.js` 导出 `WordleDifficulty`（`normal|hard|uhard`）、`resolveDifficulty`、`WordleEnums`、`WordleSession`、`newSession(user, timeout, difficulty)`、`clearSession`、`hasSession`。
+- 难度别名**刻意不收单字母 `h`**（与历史指令冲突，否则「无对局时输入 `/wordle h`」会开出一局困难）。接受 `normal|n`、`hard`、`uhard|uh|ultrahard`。
+- 困难 = 绿色位置不可动 + 黄色必须继续使用；极限 = 困难 + 黄色必须换位 + 白色不得再出现。约束由 `#constraints()` 从历史推导，`checkDifficulty()` 是公开只读版本。
+- **猜中那一行在 `#triesResult` 里存的是 `'right'` 字符串（不是数组）**，推导约束与渲染历史时都要展开成全绿。
+- `entry.js` 参数解析：`sub = args[0]` 判子命令、`param = args.join('')` 判猜测。**不要只看 join 后的整串**，否则 `/wd new hard` 会被拼成 `newhard`、`new` 分支永不触发。
+- 无对局时：`hard`/`uhard` → 按该难度开局；5 字母 → 普通开局并当作第一次猜测；其余（`stop`、`h`、乱码）→ 普通开局。
+- 已知缺陷（详见 `2026-09-13.md`）：字母判定不数份数（把不存在的重复字母标成黄/绿，实测 8.8% 组合出错）；`usable` 关闭后 `guess()` 仍作答；`set usable` 的 `throw` 漏 `new` → `clearSession` 非幂等安全、超时回调会把异常抛到进程级并留下僵尸会话。
 
 ## 配置文件
 
