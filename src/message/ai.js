@@ -275,7 +275,7 @@ async function callProvider(provider, userMessage) {
 
   const reply = (await result.text) ?? '';
   getLogger().tool.debug(`← ${provider.name}: ${reply.length} 字符`);
-  return reply;
+  return (reply.length == 0) ? `“（${neonaicConfManager.getBotName()}”点了点头，并没有说什么）` : reply;
 }
 
 // ---- 外部 API ----
@@ -374,7 +374,7 @@ registerAITool('neonaic', 'webfetch', {
 
       // 处理结果
       if (result.ok) {
-        return `<${result.type.toString()}>${result.text}</>`;
+        return `<${result.type.toString()}>${await result.text()}</>`;
       } else {
         throw new NeonaicNetworkError(`远程返回HTTP代码${result.status}`, result);
       }
