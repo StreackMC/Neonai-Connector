@@ -61,9 +61,9 @@ export const neonaicMath = {
    * @returns {number} 之间的随机整数，如果发生意外会返回 NaN，如最小值比最大值大
    */
   random: (min, max = Number.MAX_SAFE_INTEGER) => {
-    min = clamp(Number.isFinite(min) ? min : 0, 0, undefined);
+    min = neonaicMath.clamp(Number.isFinite(min) ? min : 0, 0, undefined);
     max = Number.isFinite(max) ? max : Number.MAX_SAFE_INTEGER;
-    if (neonaicMath.isNaN(v, min, max).length != 0 || min > max) return NaN;
+    if (neonaicMath.isNaN(min, max).length != 0 || min > max) return NaN;
     return Math.round(Math.random() * (max - min) + min);
   },
 
