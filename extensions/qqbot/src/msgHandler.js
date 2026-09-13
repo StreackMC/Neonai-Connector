@@ -1,16 +1,16 @@
 import qqBotBackend from 'qq-official-bot';
 import he from 'he';
 import JSON5 from 'json5';
-import { getLogger } from '../../src/logger/Logger.js';
-import { parseString } from '../../src/utils/chore.js';
-import { PlatformQQBot } from './index.js';
-import { neonaicMessageIn } from '../../src/message/messageIn.js';
-import { neonaicConfManager } from '../../src/system/confManager.js';
-import { neonaicPlatformManager } from '../../src/platform/platformManager.js';
+import { getLogger } from '../../../src/logger/Logger.js';
+import { parseString } from '../../../src/utils/chore.js';
+import { PlatformQQBot } from './entry.js';
+import { neonaicMessageIn } from '../../../src/message/messageIn.js';
+import { neonaicConfManager } from '../../../src/system/confManager.js';
+import { neonaicPlatformManager } from '../../../src/platform/platformManager.js';
 import { fromQQElement } from './emoji.js';
-import { neonaicCommandServer } from '../../src/command/commandServer.js';
-import { neonaicCommandInterface } from '../../src/command/commandInterface.js';
-import { NeonaicIllegalArgumentError } from '../../src/utils/NeonaicNewableError.js';
+import { neonaicCommandServer } from '../../../src/command/commandServer.js';
+import { neonaicCommandInterface } from '../../../src/command/commandInterface.js';
+import { NeonaicIllegalArgumentError } from '../../../src/utils/NeonaicNewableError.js';
 
 /**
  * 好友列表私聊
@@ -67,7 +67,7 @@ async function onGroupMessageIn(event, pp) {
  * @param {PlatformQQBot} instance QQ机器人实例
  * @param {string} who 目标对象
  * @param {qqBotBackend.Sendable|String} msg 消息内容
- * @returns {Promise<import('qq-official-bot').SendResult|null>} 结果（发送失败时 throw）
+ * @returns {Promise<import('../qq-official-bot/lib/index.js').SendResult|null>} 结果（发送失败时 throw）
  * @throws 无法识别参数 / 发送失败
  */
 export async function sendMsg(instance, who, msg) {

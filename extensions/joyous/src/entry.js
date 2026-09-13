@@ -15,13 +15,13 @@ const TIMEOUT_MS = 5000;
 const MAX_PLAYER_LISTED = 3;
 
 import z from 'zod';
-import { neonaicAI } from '../../src/message/ai.js';
+import { neonaicAI } from '../../../src/message/ai.js';
 // -- import --
-import { neonaicCommandServer } from '../../src/command/commandServer.js';
-import { neonaicConfManager } from '../../src/system/confManager.js';
-import { getLogger } from '../../src/logger/Logger.js';
+import { neonaicCommandServer } from '../../../src/command/commandServer.js';
+import { neonaicConfManager } from '../../../src/system/confManager.js';
+import { getLogger } from '../../../src/logger/Logger.js';
 import { formatDateTime, formatMcTime } from "./utils.js";
-import { neonaicNetwork } from '../../src/utils/io.js';
+import { neonaicNetwork } from '../../../src/utils/io.js';
 
 // -- Tools --
 /** TPS 数值格式化：负数（如 -1 表示无数据）显示为 N/A */

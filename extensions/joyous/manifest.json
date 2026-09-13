@@ -10,7 +10,7 @@
     "url": "https://github.com/StreackMC/Neonai-Connector/",
     "license": "AGPL-3.0 modified"
   },
-  "entry": "./index.js",
+  "entry": "./src/entry.js",
   "depends": {},
   "softdepends": {}
 }

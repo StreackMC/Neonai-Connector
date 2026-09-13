@@ -5,13 +5,13 @@
  * 运行时配置通过 PlatformManager.getProfile(this.profile) 获取。
  */
 
-import { neonaicPlatformManager, PlatformManager } from '../../src/platform/platformManager.js';
-import { NeonaiPlatform } from '../../src/platform/platformInterface.js';
+import { neonaicPlatformManager, PlatformManager } from '../../../src/platform/platformManager.js';
+import { NeonaiPlatform } from '../../../src/platform/platformInterface.js';
 import qqBotBackend from 'qq-official-bot';
 const { Bot, ReceiverMode } = qqBotBackend;
 import MsgHandler from "./msgHandler.js";
 import { EVENTS, INTENTS } from "./enums.js";
-import { NeonaicIllegalArgumentError } from '../../src/utils/NeonaicNewableError.js';
+import { NeonaicIllegalArgumentError } from '../../../src/utils/NeonaicNewableError.js';
 
 export class PlatformQQBot extends NeonaiPlatform {
   static type = 'qqbot';
@@ -68,7 +68,7 @@ neonaicPlatformManager.registerPlatform(PlatformQQBot);
  * 按 Profile 驱动，因此这里没有需要额外做的事；保留空实现以满足拓展加载器的
  * 入口函数契约（`onEnable` / `onDisable` 必须同时存在且为函数）。
  *
- * @this {import('../../src/extension/extLoader.js').NeonaicExtItem}
+ * @this {import('../../../src/extension/extLoader.js').NeonaicExtItem}
  * @param {{ manifest: Object, pwd: String, ext_item_id: String, ext_item_timestamp: Number }} [ctx] 拓展上下文
  */
 export function onEnable(ctx) {
@@ -79,7 +79,7 @@ export function onEnable(ctx) {
  *
  * 同 {@link onEnable}：平台实例的启停由 PlatformManager 负责，这里保持空实现。
  *
- * @this {import('../../src/extension/extLoader.js').NeonaicExtItem}
+ * @this {import('../../../src/extension/extLoader.js').NeonaicExtItem}
  */
 export function onDisable() {
 }
