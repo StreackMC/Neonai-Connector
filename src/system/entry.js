@@ -214,21 +214,6 @@ async function bootstrap() {
   });
 
   getLogger().main.info(`已启动“${neonaicConfManager.getBotName()}”，耗时 ${new Date() - when_started}ms。`);
-
-  // 执行调试侧载代码
-  if (DEBUGING) {
-    try {
-      getLogger().other.debug(`调试模式开始侧载代码执行`);
-      const sideload = await import('./sideload.js');
-      if (typeof sideload.execute === 'function') {
-        const sideload_result =await sideload.execute.apply();
-        getLogger().other.debug(`完成侧载代码执行：`, sideload_result);
-      }
-    } catch (error) {
-      getLogger().other.error(`无法完成侧载代码执行：`, error);
-      debugger;
-    }
-  }
 }
 
 export const neonaicEntry = {
