@@ -85,7 +85,7 @@ export class WordleSession {
   get usable() { return this.#usable; }
   /** 设置是否允许作答，一经设置即无法操作 */
   set usable(v) {
-    if (!this.#usable && !v) throw NeonaicIllegalStateError("Wordle 作答已关闭，无法再次恢复");
+    if (!this.#usable && !v) throw new NeonaicIllegalStateError("Wordle 作答已关闭，无法再次恢复");
     this.#usable = !!v;
   }
   /** 获取本局难度 */
