@@ -196,6 +196,7 @@ export class WordleSession {
    * @returns {'right'|'not_a_word'|'length_wrong'|'failed'|'tried'|'green_moved'|'yellow_unused'|'yellow_kept'|'missing_used'|('right'|'pos_wrong'|'missing')[]} 猜测结果
    */
   guess(v) {
+    if (!this.#usable) throw new NeonaicIllegalStateError('答题关闭不可继续作答');
     const input = parseString(v).toLowerCase();
     if (v.length != 5) return WordleEnums.length_wrong;
     if (!ALL_FIVE_LETTER_WORDS.includes(input)) return WordleEnums.not_a_word;
