@@ -85,9 +85,9 @@ export class WordleSession {
   get usable() { return this.#usable; }
   /** 设置是否允许作答，一经设置即无法操作 */
   set usable(v) {
-    if (!v) return;
-    if (!this.#usable && !v) throw new NeonaicIllegalStateError("Wordle 作答已关闭，无法再次恢复");
-    this.#usable = !!v;
+    if (this.#usable === !!v) return;          // 幂等：状态没变就直接返回
+    if (!v) { this.#usable = false; return; }  // 关闭
+    throw new NeonaicIllegalStateError("Wordle 作答已关闭，无法再次恢复");
   }
   /** 获取本局难度 */
   get difficulty() { return this.#difficulty; }
