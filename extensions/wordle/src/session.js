@@ -198,7 +198,7 @@ export class WordleSession {
   guess(v) {
     if (!this.#usable) throw new NeonaicIllegalStateError('答题关闭不可继续作答');
     const input = parseString(v).toLowerCase();
-    if (v.length != 5) return WordleEnums.length_wrong;
+    if (input.length != 5) return WordleEnums.length_wrong;
     if (!ALL_FIVE_LETTER_WORDS.includes(input)) return WordleEnums.not_a_word;
     if (this.answer == input) {
       // 猜中
