@@ -85,6 +85,7 @@ export class WordleSession {
   get usable() { return this.#usable; }
   /** 设置是否允许作答，一经设置即无法操作 */
   set usable(v) {
+    if (!v) return;
     if (!this.#usable && !v) throw new NeonaicIllegalStateError("Wordle 作答已关闭，无法再次恢复");
     this.#usable = !!v;
   }
@@ -126,6 +127,9 @@ export class WordleSession {
   /**
    * 汇总当前局势下的限制。
    * @implNote 猜中那一行在 `#triesResult` 里存的是 `'right'` 字符串，等价于整行全绿，此处一并展开。
+   * @implNote `white` 只保留「能断定不在答案里」的字母。字母判定按份数结算后，一个位置被标白
+   *           只代表「这一次出现没被匹配」，字母本身可能就在答案里（份额被别的绿/黄用光了，
+   *           例如答案 posse 猜 bokos 的第 4 个 o），因此要把已在绿/黄里出现过的字母剔掉。
    * @returns {{green: Map<number,String>, yellow: {letter: String, index: number}[], white: Set<String>}}
    */
   #constraints() {
@@ -146,6 +150,9 @@ export class WordleSession {
         }
       }
     }
+    // 已被证实存在的字母不算「排除」
+    for (const letter of green.values()) white.delete(letter);
+    for (const { letter } of yellow) white.delete(letter);
     return { green, yellow, white };
   }
 
@@ -217,20 +224,29 @@ export class WordleSession {
       if (violation) return violation.reason;
 
       // 开始遍历字母
-      let result = [];
+      // 字母必须按「份数」结算：答案里每个字母只有有限的几份，同一字母被猜多次时
+      // 最多只会有「答案里实际有多少份」个非白标记。分成两趟：
+      //   第一趟，位置正确的先把份额认领掉；
+      //   第二趟，位置不对的按剩余份额判黄，份额用尽就只能是白。
+      const rest = new Map();
+      for (const letter of this.answer) rest.set(letter, (rest.get(letter) ?? 0) + 1);
+      const result = new Array(input.length).fill(WordleEnums.missing);
       for (let index = 0; index < input.length; index++) {
+        if (input[index] != this.answer[index]) continue;
+        // 位置和字母都对
+        result[index] = WordleEnums.right;
+        rest.set(input[index], rest.get(input[index]) - 1);
+      }
+      for (let index = 0; index < input.length; index++) {
+        if (result[index] === WordleEnums.right) continue;
         const iletter = input[index];
-        const oletter = this.answer[index];
-        if (iletter == oletter) {
-          // 位置和字母都对
-          result.push(WordleEnums.right);
-        } else if (this.answer.includes(iletter)) {
-          // 位置不对，但是字母对了
-          result.push(WordleEnums.pos_wrong);
-        } else {
-          // 位置字母都不对
-          result.push(WordleEnums.missing);
+        const left = rest.get(iletter) ?? 0;
+        if (left > 0) {
+          // 位置不对，但答案里还有这个字母没被认领
+          result[index] = WordleEnums.pos_wrong;
+          rest.set(iletter, left - 1);
         }
+        // 份额用尽的保持 missing
       }
       this.#triesResult.push(result);
       this.#tries.push(input);
