@@ -3,7 +3,7 @@ import { NeonaicCommandContext, neonaicCommandServer } from '../../../src/comman
 import { neonaicPermissionServer } from '../../../src/command/permissionServer.js';
 import { parseString } from '../../../src/utils/chore.js';
 import { NeonaicIllegalArgumentError, NeonaicIllegalStateError } from '../../../src/utils/NeonaicNewableError.js';
-import { clearSession, hasSession, newSession as getSession, resolveDifficulty, WordleDifficulty, WordleEnums, WordleSession } from './session.js';
+import { clearSession, hasSession, newSession as getSession, resolveDifficulty, WordleDifficulty, WordleEnums, WordleSession, getAllSessionUser } from './session.js';
 import { toFullLetter } from './word_provider.js';
 
 /** 会话超时时间，默认半小时，单位秒 */
@@ -120,6 +120,7 @@ export function onEnable(ctx) {
  * @this {import('../../../src/extension/extLoader.js').NeonaicExtItem}
  */
 export function onDisable() {
+  getAllSessionUser().map(clearSession);
 }
 
 /**

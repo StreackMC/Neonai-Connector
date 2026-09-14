@@ -263,6 +263,7 @@ export function newSession(user, timeout = 0.5 * 60 * 60, difficulty = WordleDif
   const s = new WordleSession(WordleSession_Private_Constructure_Token, u, difficulty);
   sessions.set(u, s);
   const t = setTimeout(() => {
+    timeouts.delete(u);
     if (!sessions.has(u)) return;
     sessions.get(u).usable = false;
     sessions.delete(u);
@@ -292,4 +293,9 @@ export function clearSession(user) {
 /** 获取某个用户是否有会话 */
 export function hasSession(user) {
   return sessions.has(parseString(user));
+}
+
+/** 获取全部有会话的用户 */
+export function getAllSessionUser() {
+  return [...sessions.keys()];
 }
