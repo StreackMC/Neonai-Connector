@@ -96,9 +96,9 @@ export class WordleSession {
     if (resolved === null) throw new NeonaicIllegalArgumentError(`未知的 Wordle 难度：${parseString(v)}`);
     this.#difficulty = resolved;
   }
-  /** 获取历史猜测结果 */
+  /** 获取历史猜测结果，**不要修改** */
   get historyOfResult() { return this.#triesResult; };
-  /** 获取猜测历史 */
+  /** 获取猜测历史，**不要修改** */
   get history() { return this.#tries; };
   /**
    * 获取当前已经排除的字母（历史里出现过白色标记的字母）
