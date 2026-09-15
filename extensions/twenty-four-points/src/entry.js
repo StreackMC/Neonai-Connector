@@ -1,4 +1,6 @@
+import { neonaicCommandInterface } from '../../../src/command/commandInterface.js';
 import { NeonaicCommandContext, neonaicCommandServer } from '../../../src/command/commandServer.js';
+import { neonaicPermissionServer } from '../../../src/command/permissionServer.js';
 import { parseString } from '../../../src/utils/chore.js';
 import { neonaicMath } from '../../../src/utils/math.js';
 import { clearSession, getAllSessionUser, hasSession, newSession as getSession, POKER_MAX, POKER_MIN, POKER_SIZE, TARGET, TwentyFourEnums, TwentyFourSession } from './session.js';
@@ -6,6 +8,8 @@ import { clearSession, getAllSessionUser, hasSession, newSession as getSession, 
 /** 会话超时时间，单位秒 */
 const SESSION_TIMEOUT = 10 * 60;
 
+/** 作弊的别名 */
+const CHEAT_ALIASES = ['win', 'cheat'];
 /** 显示帮助的别名 */
 const HELP_ALIASES = ['help', 'ver', 'version', '帮助'];
 /** 重新发牌的别名 */
@@ -51,25 +55,45 @@ export function onEnable(ctx) {
     const args = v.map((item) => parseString(item));
     const head = (args[0] ?? '').trim().toLowerCase();
     const joined = args.join('').trim();
+    const unavailable_game = !hasSession(user);
     /** 子命令可能被空格拆开，因此原名与拼回后的整串都算命中 */
     const hit = (list) => list.includes(head) || list.includes(joined.toLowerCase());
 
     if (hit(HELP_ALIASES)) return HELP_TEXT;
-    if (hit(SOLVE_ALIASES)) return solveFrom(args.slice(1));
+    if (hit(SOLVE_ALIASES)) {
+      if (!unavailable_game) {
+        // 有游戏时用求解器直接拒绝
+        return `你正处在一局 24 点游戏中，暂时无法使用求解器。使用“/24 stop”放弃游戏。`;
+      }
+      return solveFrom(args.slice(1));
+    };
     if (hit(NEW_ALIASES)) return buildIntro(startSession(user));
 
     // 其余操作都需要一局牌：没有就现场发一局，再把本次输入当作本局的操作（对齐 wordle 的语法糖）
-    const fresh = !hasSession(user);
-    const session = fresh ? startSession(user) : getSession(user, SESSION_TIMEOUT);
+    const session = unavailable_game ? startSession(user) : getSession(user, SESSION_TIMEOUT);
+
+    // 作弊模式，将参数替换成解
+    if (hit(CHEAT_ALIASES) && !unavailable_game) {
+      if (!neonaicPermissionServer.checkPermissionFromContext(
+        ctx,
+        [[neonaicCommandInterface.COMMAND_ENUMS.PERM_ADMIN, neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, 'twtwentyfourpoints.command.cheat']]
+      )) return `你没有权限使用该命令。`;
+      const solutions = neonaicMath.solve24(session.poker, 24);
+      if (solutions.length == 0) {
+        return buildGuess(session, '$cheat', session.declareInsoluble());
+      } else {
+        return buildGuess(session, '$cheat', session.guess(solutions[0]));
+      }
+    };
 
     // 裸命令（没有给任何参数）只报告牌面，不算一次作答
-    if (!joined) return fresh ? buildIntro(session) : buildCurrent(session);
+    if (!joined) return unavailable_game ? buildIntro(session) : buildCurrent(session);
 
     if (hit(INSOLUBLE_ALIASES)) return buildInsoluble(session, session.declareInsoluble());
 
     if (hit(GIVEUP_ALIASES)) {
       // 刚刚才开始的一局没有可放弃的对象，改为给出牌面说明
-      if (fresh) return buildIntro(session);
+      if (unavailable_game) return buildIntro(session);
       clearSession(user);
       return buildGiveUp(session);
     }
