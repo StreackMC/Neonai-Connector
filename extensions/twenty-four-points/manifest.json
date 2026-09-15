@@ -1,0 +1,16 @@
+{
+  "meta": {
+    "version": [1, "0.1.0"],
+    "id": "twentyfourpoints"
+  },
+  "particulars": {
+    "name": "24 Points Game for Neonaic",
+    "author": ["kdxiaoyi"],
+    "description": "用发到的 4 个数字各一次算出 24，并提供 /24 solve 直接求全部解法",
+    "url": "https://github.com/StreackMC/Neonai-Connector/tree/main/extensions/twenty-four-points",
+    "license": "AGPL-3.0 modified"
+  },
+  "entry": "./src/entry.js",
+  "depends": {},
+  "softdepends": {}
+}

@@ -15,6 +15,7 @@
 * [joyous](./joyous) 提供与 [Joyous Plugin](https://github.com/StreackMC/Joyous) 协作能力
 * [qqbot](./qqbot) 提供与 [QQ 官方机器人](https://q.qq.com/qqbot/#/home)协作的能力
 * [wordle](./wordle) 为用户提供 Wordle 小游戏
+* [twenty-four-points](./twenty-four-points) 为用户提供 24 点小游戏，可用 `/24 solve 1 2 3 4` 求出全部解法
 
 ## 开发相关
 
