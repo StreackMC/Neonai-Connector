@@ -133,9 +133,9 @@ const timeouts = new Map();
 /**
  * 获取一个 24 点会话
  * @param {String} user 用户/作答者
- * @param {number} timeout 超时时间，默认半小时，单位秒，当用户没有会话时生效
+ * @param {number} timeout 超时时间，默认 10 分钟，单位秒，当用户没有会话时生效
  */
-export function newSession(user, timeout = 0.5 * 60 * 60) {
+export function newSession(user, timeout = 10 * 60) {
   const u = parseString(neonaicChore.assertNoNull(user, "24 点会话需要一个用户"));
   if (sessions.has(u)) return sessions.get(u);
   const s = new TwentyFourSession(TwentyFourSession_Private_Constructure_Token, u);

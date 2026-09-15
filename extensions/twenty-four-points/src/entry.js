@@ -3,8 +3,8 @@ import { parseString } from '../../../src/utils/chore.js';
 import { neonaicMath } from '../../../src/utils/math.js';
 import { clearSession, getAllSessionUser, hasSession, newSession as getSession, POKER_MAX, POKER_MIN, POKER_SIZE, TARGET, TwentyFourEnums, TwentyFourSession } from './session.js';
 
-/** 会话超时时间，默认半小时，单位秒 */
-const SESSION_TIMEOUT = 0.5 * 60 * 60;
+/** 会话超时时间，单位秒 */
+const SESSION_TIMEOUT = 10 * 60;
 
 /** 显示帮助的别名 */
 const HELP_ALIASES = ['help', 'ver', 'version', '帮助'];
@@ -20,16 +20,15 @@ const GIVEUP_ALIASES = ['stop', 'giveup', 'abandon', 'quit', 'exit', '放弃', '
 /** 帮助文本 */
 const HELP_TEXT = `24 Points Game for Neonaic By @kdxiaoyi
 
-/24 help 显示本信息
-/24 重新发牌
-/24 <算式> 提交算式，例如 /24 (13-9)*7-4
-/24 无解 或 /24 ?   认为这组牌无解
-/24 stop 放弃本局
-/24 solve 1 2 3 4   直接求出这 4 个数字的全部解（不会开局）
+“/24 help” 显示本信息
+“/24” 重新发牌
+“/24 <算式>” 提交算式，例如 /24 (13-9)*7-4
+“/24 无解” 或 “/24 ?”   认为这组牌无解
+“/24 stop” 放弃本局
+“/24 solve 1 2 3 4 [target=24]”   直接求出这 4 个数字的全部解（不会开局）
 
 规则：用发到的 ${POKER_SIZE} 个数字各用一次，通过 + - × ÷ 与括号算出 ${TARGET}。
-数字范围是 ${POKER_MIN}–${POKER_MAX}（对应扑克牌的 A–K），允许重复，且**不保证有解**。
-每局只有一次机会：算式正确即通关，否则本局结束并公布全部解法。
+数字范围是 ${POKER_MIN}–${POKER_MAX}，允许重复，并不保证有解。
 算式无法使用时不计入机会（例如数字没用对、除数为零、用到了幂或根号）。`;
 
 /**
@@ -37,7 +36,7 @@ const HELP_TEXT = `24 Points Game for Neonaic By @kdxiaoyi
  * @apiNote 最极端的一手牌（1 4 8 12）有 98 条解法，全部列出会让消息很长；
  *          需要截断时把它改成一个正整数即可，`/24 solve` 永远列全。
  */
-const MAX_LISTED_IN_GAME = Infinity;
+const MAX_LISTED_IN_GAME = 5;
 
 /**
  * @this {import('../../../src/extension/extLoader.js').NeonaicExtItem}
@@ -78,7 +77,7 @@ export function onEnable(ctx) {
     return buildGuess(session, joined, session.guess(joined));
   }, {
     description: "进行 24 点小游戏",
-    usage: '24 <算式> 或 24 <help|new|无解|stop|solve 1 2 3 4>',
+    usage: '/24 <算式> 或 /24 <help|new|无解|stop|solve 1 2 3 4 [target]>',
     alias: ['tf', 'tfp', 'twentyfour'],
   });
 }
@@ -123,20 +122,18 @@ function renderSolutions(solutions, limit = Infinity) {
 /** 开始新一局时的说明 @param {TwentyFourSession} session */
 function buildIntro(session) {
   return [
-    `🎴 新的 24 点牌局：${pokerLine(session)}`,
-    '',
+    `→ ${pokerLine(session)} ←`,
     `请把这 ${POKER_SIZE} 个数字各用一次，通过 + - × ÷ 与括号算出 ${TARGET}。`,
-    `直接发送算式即可，例如 /24 (13-9)*7-4。如果你认为这组牌无解，发送 /24 无解。`,
-    `每局只有一次机会，算式无法使用时不计入。`,
+    `直接发送算式即可，例如“/24 (13-9)*7-4”。如果你认为这组牌无解，发送“/24 ?”。`,
   ].join('\n');
 }
 
 /** 已有牌局、玩家只敲了裸命令时的回顾 @param {TwentyFourSession} session */
 function buildCurrent(session) {
   return [
-    `🎴 当前牌局：${pokerLine(session)}`,
+    `→ ${pokerLine(session)} ←`,
     `请把这 ${POKER_SIZE} 个数字各用一次，通过 + - × ÷ 与括号算出 ${TARGET}。`,
-    `直接发送算式即可；如果你认为这组牌无解，发送 /24 无解。`,
+    `直接发送算式即可，例如“/24 (13-9)*7-4”。如果你认为这组牌无解，发送“/24 ?”。`,
   ].join('\n');
 }
 
@@ -152,27 +149,29 @@ function buildGuess(session, expr, result) {
   switch (result.status) {
     case TwentyFourEnums.invalid:
       return [
-        `⚠️ 这个算式没能用上：${result.error?.message ?? '未知原因'}`,
-        `本局牌面：${hand}`,
-        `本次输入不计入机会，你仍然只有一次机会。`,
+        `⚠ 这个算式没能用上：${result.error?.message ?? '未知原因'}`,
+        '',
+        `→ ${hand} ←`,
+        `请把这 ${POKER_SIZE} 个数字各用一次，在 10 分钟内通过 + - × ÷ 与括号算出 ${TARGET}。`,
+        `直接发送算式即可，例如“/24 (13-9)*7-4”。如果你认为这组牌无解，发送“/24 ?”。`,
       ].join('\n');
     case TwentyFourEnums.right:
       return [
-        `🎉 答对了！`,
+        `✓ 答对了！`,
         `  ${prettify(expr)} = ${TARGET}`,
-        `本局牌面：${hand}`,
+        `→ ${hand} ←`,
         `本题共有 ${session.solutionCount} 种解法。`,
       ].join('\n');
     case TwentyFourEnums.wrong:
       return [
-        `❌ ${prettify(expr)} = ${result.value}，不是 ${TARGET}。`,
-        `本局牌面：${hand}`,
+        `× ${prettify(expr)} = ${result.value}，不是 ${TARGET}。`,
+        `→ ${hand} ←`,
         session.solutionCount === 0
-          ? `而且这组牌其实是无解的 —— 下次可以试试直接用 /24 无解 判定。`
-          : `全部解法（共 ${session.solutionCount} 条）：\n${renderSolutions(session.solutions, MAX_LISTED_IN_GAME)}`,
+          ? `这些数字是无解的。`
+          : `全部 ${session.solutionCount} 条解法：\n${renderSolutions(session.solutions, MAX_LISTED_IN_GAME)}`,
       ].join('\n');
     default:
-      return `⚠️ 意料之外的结果：${parseString(result.status)}`;
+      return `⚠ 意料之外的结果：${parseString(result.status)}`;
   }
 }
 
@@ -185,10 +184,10 @@ function buildGuess(session, expr, result) {
 function buildInsoluble(session, result) {
   const hand = pokerLine(session);
   if (result.status === TwentyFourEnums.insoluble) {
-    return `✅ 判断正确：${hand} 确实无解 —— 求解器枚举了全部括号结构与运算符组合，没有任何一条能算出 ${TARGET}。`;
+    return `✓ 恭喜，${hand} 确实无解。`;
   }
   return [
-    `❌ ${hand} 其实有 ${session.solutionCount} 种解法，判定错误。`,
+    `× ${hand} 其实有以下 ${session.solutionCount} 种解法：`,
     renderSolutions(session.solutions, MAX_LISTED_IN_GAME),
   ].join('\n');
 }
@@ -197,11 +196,12 @@ function buildInsoluble(session, result) {
 function buildGiveUp(session) {
   const hand = pokerLine(session);
   if (session.solutionCount === 0) {
-    return `🏳️ 已放弃本局。本局牌面：${hand}\n这组牌无解 —— 下次可以试试直接用 /24 无解 判定。`;
+    return `× 已放弃本局。\n→ ${hand} ←\n这些数字是无解的。`;
   }
   return [
-    `🏳️ 已放弃本局。本局牌面：${hand}`,
-    `全部解法（共 ${session.solutionCount} 条）：`,
+    `× 已放弃本局。`,
+    `→ ${hand} ←`,
+    `全部 ${session.solutionCount} 条解法：`,
     renderSolutions(session.solutions, MAX_LISTED_IN_GAME),
   ].join('\n');
 }
@@ -213,21 +213,25 @@ function buildGiveUp(session) {
  */
 function solveFrom(list) {
   const tokens = list.map((item) => parseString(item).trim()).filter((token) => token.length);
-  if (tokens.length !== POKER_SIZE) {
-    return `❓ solve 需要正好 ${POKER_SIZE} 个数字，例如 /24 solve 1 2 3 4（本次收到了 ${tokens.length} 个）`;
+  if (tokens.length === POKER_SIZE) {
+    return solveFrom([...tokens, 24]);
+  } else if (tokens.length === POKER_SIZE + 1) {
+    const numbers = [];
+    for (const token of tokens) {
+      if (!/^\d+$/.test(token)) return `❓ “${token}”不是正整数`;
+      const n = Number(token);
+      if (!Number.isSafeInteger(n)) return `❓ “${token}”太大了。`;
+      if (n < 1) return `❓ “${token}”无法参与求解：每个数字至少为 1。`;
+      numbers.push(n);
+    }
+    const target = numbers.pop();
+    const solutions = neonaicMath.solve24(numbers, target);
+    if (!solutions.length) return `${numbers.join(' ')} 无法通过任何组合得到 ${target} ，因此无解。`;
+    return [
+      `${numbers.join(' ')} 算出 ${target} 的全部解法有 ${solutions.length} 条：`,
+      renderSolutions(solutions),
+    ].join('\n');
+  } else {
+    return `求解器接收到不对的参数数量`;
   }
-  const numbers = [];
-  for (const token of tokens) {
-    if (!/^\d+$/.test(token)) return `❓ “${token}”不是正整数。（solve 只接受普通整数，不解析算式）`;
-    const n = Number(token);
-    if (!Number.isSafeInteger(n)) return `❓ “${token}”太大了。`;
-    if (n < 1) return `❓ “${token}”无法参与求解：每个数字至少为 1。`;
-    numbers.push(n);
-  }
-  const solutions = neonaicMath.solve24(numbers);
-  if (!solutions.length) return `🧮 ${numbers.join(' ')} 无解（求解器枚举了全部括号结构与运算符组合）。`;
-  return [
-    `🧮 ${numbers.join(' ')} 的全部解法（共 ${solutions.length} 条）：`,
-    renderSolutions(solutions),
-  ].join('\n');
 }
