@@ -145,7 +145,7 @@ export function newSession(user, timeout = 10 * 60) {
     if (!sessions.has(u)) return;
     sessions.get(u).usable = false;
     sessions.delete(u);
-    getLogger().tool.info(`${u} 的 24 点会话已过期`);
+    getLogger().ext.info(`${u} 的 24 点会话已过期`);
   }, neonaicMath.assertNoNaNOrElse(neonaicMath.toNumber(timeout), 0.5 * 60 * 60) * 1e3);
   timeouts.set(u, t);
   return s;
@@ -165,7 +165,7 @@ export function clearSession(user) {
     clearTimeout(timeouts.get(u));
     timeouts.delete(u);
   }
-  getLogger().tool.info(`${u} 的 24 点会话已清除`);
+  getLogger().ext.info(`${u} 的 24 点会话已清除`);
 }
 
 /** 获取某个用户是否有会话 */

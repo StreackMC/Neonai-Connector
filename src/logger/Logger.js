@@ -42,21 +42,23 @@ const LOG_TYPES = {
   "Platform:Manager": { console: true, file: true, call: 'platM' },
   "Platform:Profile": { console: true, file: true, call: 'platP' },
   "Command": { console: true, file: true, call: 'cmd' },
-  "ExtensionHost": { console: true, file: true, call: 'ext' },
+  "ExtensionMain": { console: true, file: true, call: 'ext' },
+  "ExtensionHost": { console: true, file: true, call: 'extH' },
 };
 
 /**
  * 日志器对象（`createLogger` / `getLogger` 的返回值）。
  * @typedef {object} Logger
- * @property {LoggerInstance} main
- * @property {LoggerInstance} other
- * @property {LoggerInstance} chatIn
- * @property {LoggerInstance} chatOut
- * @property {LoggerInstance} platM
- * @property {LoggerInstance} platP
- * @property {LoggerInstance} tool
- * @property {LoggerInstance} cmd
- * @property {LoggerInstance} ext
+ * @property {LoggerInstance} main 主程序总线
+ * @property {LoggerInstance} other 其他事务
+ * @property {LoggerInstance} chatIn 接受聊天消息
+ * @property {LoggerInstance} chatOut 发送聊天消息
+ * @property {LoggerInstance} platM Platform 管理器
+ * @property {LoggerInstance} platP Platform 实现
+ * @property {LoggerInstance} tool 工具调用链
+ * @property {LoggerInstance} cmd 命令服务器
+ * @property {LoggerInstance} ext 拓展实现
+ * @property {LoggerInstance} extH 拓展宿主/拓展管理器
  * @property {(...args: any[]) => void} log         无类型默认日志（走 Other）
  * @property {(err?: Error) => void} writeCrashReport
  * @property {(enable?: boolean, |debugMode?: boolean) => void} redirectConsole

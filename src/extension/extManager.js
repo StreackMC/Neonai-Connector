@@ -133,7 +133,7 @@ async function readAllExt(root = EXT_ROOT) {
     for await (const entry of dir) {
       if (!entry.isDirectory()) {
         skipped++;
-        getLogger().ext.debug(`指定内容不是文件夹，已跳过：`, entry.name);
+        getLogger().extH.debug(`指定内容不是文件夹，已跳过：`, entry.name);
         continue;
       }
       checked++;
@@ -146,11 +146,11 @@ async function readAllExt(root = EXT_ROOT) {
         }
         found.set(item.id, item);
       } catch (error) {
-        getLogger().ext.warn(`“${botName()}”无法识别拓展“${entry.name}”，因为：`, error);
+        getLogger().extH.warn(`“${botName()}”无法识别拓展“${entry.name}”，因为：`, error);
       }
     }
   } catch (error) {
-    getLogger().ext.error(`“${botName()}”无法扫描拓展目录“${root}”，因为：`, error);
+    getLogger().extH.error(`“${botName()}”无法扫描拓展目录“${root}”，因为：`, error);
     return EXT_MAP;
   }
 
@@ -160,7 +160,7 @@ async function readAllExt(root = EXT_ROOT) {
   for (const [id, item] of found) {
     EXT_MAP.set(id, previous.get(id) ?? item);
   }
-  getLogger().ext.info(`拓展扫描完成：识别 ${EXT_MAP.size} 个（检查 ${checked} 个目录，跳过 ${skipped} 个非目录项）`);
+  getLogger().extH.info(`拓展扫描完成：识别 ${EXT_MAP.size} 个（检查 ${checked} 个目录，跳过 ${skipped} 个非目录项）`);
   return EXT_MAP;
 }
 
@@ -460,7 +460,7 @@ const EXT_USAGE_HINT =
 async function extensionCommand(action, ...exts) {
   /** @type {NeonaicCommandContext} */
   const ctx = this;
-  getLogger().ext.debug(`[ext] ${ctx?.executor?.[0] ?? neonaicCommandInterface.COMMAND_ENUMS.FROM_CONSOLE} 请求执行：extension ${parseString(action ?? '<无子命令>')} ${parseString(exts)}`);
+  getLogger().extH.debug(`[ext] ${ctx?.executor?.[0] ?? neonaicCommandInterface.COMMAND_ENUMS.FROM_CONSOLE} 请求执行：extension ${parseString(action ?? '<无子命令>')} ${parseString(exts)}`);
 
   // 首次使用时自动扫描，避免用户必须先跑一次 scan
   if (EXT_MAP.size === 0) await readAllExt();

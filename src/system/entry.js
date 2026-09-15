@@ -161,7 +161,7 @@ async function bootstrap() {
     getLogger().redirectConsole(true);
   }
 
-  getLogger().main.debug(`初始化平台管理器`);
+  getLogger().platM.debug(`初始化平台管理器`);
   // 初始化平台管理器（单例）
   new PlatformManager({
     configPath: resolve(ROOT_PATH, 'secret.json'),
@@ -176,22 +176,22 @@ async function bootstrap() {
   neonaicLogger.setConsoleHooks(neonaicCliProcessor.erasePrompt, neonaicCliProcessor.redrawPrompt);
 
   // 自动发现并加载扩展
-  getLogger().main.info(`正在加载可用拓展`);
+  getLogger().extH.info(`正在加载可用拓展`);
   const extResult = await neonaicExtensionManager.loadAll([...(await neonaicExtensionManager.scan()).keys()]);
-  getLogger().ext.info(`启动了${extResult.succeed.length}个拓展，另有${extResult.disabled.length}个拓展已被禁用。`);
+  getLogger().extH.info(`启动了${extResult.succeed.length}个拓展，另有${extResult.disabled.length}个拓展已被禁用。`);
   // 逐个列出加载失败的拓展，否则失败会静默埋在 debug 级 dump 里
   extResult.failed.forEach((item) => {
-    getLogger().ext.error(`拓展“${item.id}”加载失败：${item.error?.message ?? '未知原因'}`);
+    getLogger().extH.error(`拓展“${item.id}”加载失败：${item.error?.message ?? '未知原因'}`);
   });
-  getLogger().ext.debug(extResult);
+  getLogger().extH.debug(extResult);
 
   // 安装权限管理命令（permission/perm）：需在 commandServer 就绪后，避免循环依赖
-  getLogger().main.debug(`初始化惰性管理命令`);
+  getLogger().cmd.debug(`初始化惰性管理命令`);
   neonaicPermissionServer.installPermissionCommands(neonaicCommandServer.registerCommand);
   neonaicConfManager.installConfigCommands(neonaicCommandServer.registerCommand);
 
   // 按配置启动已启用的平台
-  getLogger().main.info(`正在加载 Platform Profile`);
+  getLogger().platM.info(`正在加载 Platform Profile`);
   PlatformManager.instance.loadEnabled();
 
   // 监听 SIGNAL 等
@@ -204,12 +204,14 @@ async function bootstrap() {
   process.on('uncaughtException', (err) => {
     getLogger().main.error(`未捕获异常:`, err);
     getLogger().writeCrashReport(err);
+    getLogger().main.error(`如果问题反复出现，请检查拓展运行，仍未解决请报告给我们→ https://github.com/StreackMC/Neonai-Connector/issues/new/choose`);
     // shutdown('uncaughtException');
   });
   process.on('unhandledRejection', (reason) => {
     const err = reason instanceof Error ? reason : new Error(String(reason));
     getLogger().main.error(`未处理的 Promise 拒绝异常:`, err);
     getLogger().writeCrashReport(err);
+    getLogger().main.error(`如果问题反复出现，请检查拓展运行，仍未解决请报告给我们→ https://github.com/StreackMC/Neonai-Connector/issues/new/choose`);
     // shutdown('unhandledRejection');
   });
 
