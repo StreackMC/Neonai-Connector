@@ -17,5 +17,22 @@
     "accualre": "",
     // 模型镜像站
     "mirror": "https://hf-mirror.com/"
+  },
+  // 看门狗：主程序需按期喂狗，超过 timeoutMs 没喂就判定卡死，强杀并重启
+  "watchdog": {
+    // 启用与否
+    "enabled": true,
+    // 超过这么久没有喂狗即视为卡死，单位毫秒
+    "timeoutMs": 120000,
+    // 主程序喂狗的间隔，单位毫秒，需明显小于 timeoutMs
+    "feedIntervalMs": 10000,
+    // 判定卡死后的宽限时间，单位毫秒；期间恢复喂狗则取消本次重启
+    "graceMs": 5000,
+    // 重启退避：连续重启时先等一段时间再动手（默认 1s 起、每次 ×2、封顶 5 分钟）
+    "backoffInitialMs": 1000,
+    "backoffMultiplier": 2,
+    "backoffMaxMs": 300000,
+    // 稳定运行超过这么久就把退避计数清零，单位毫秒
+    "backoffResetMs": 600000
   }
 }
