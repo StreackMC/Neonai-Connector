@@ -42,6 +42,7 @@ const LOG_TYPES = {
   "Platform:Manager": { console: true, file: true, call: 'platM' },
   "Platform:Profile": { console: true, file: true, call: 'platP' },
   "Command": { console: true, file: true, call: 'cmd' },
+  "Watchdog": { console: true, file: true, call: 'watchdog' },
   "ExtensionMain": { console: true, file: true, call: 'ext' },
   "ExtensionHost": { console: true, file: true, call: 'extH' },
 };
@@ -57,6 +58,7 @@ const LOG_TYPES = {
  * @property {LoggerInstance} platP Platform 实现
  * @property {LoggerInstance} tool 工具调用链
  * @property {LoggerInstance} cmd 命令服务器
+ * @property {LoggerInstance} watchdog 看门狗
  * @property {LoggerInstance} ext 拓展实现
  * @property {LoggerInstance} extH 拓展宿主/拓展管理器
  * @property {(...args: any[]) => void} log         无类型默认日志（走 Other）

@@ -17,6 +17,8 @@ import { platform, release, tmpdir } from 'node:os';
 import { neonaicConfManager } from './confManager.js';
 import { neonaicLogger, getLogger } from '../logger/Logger.js';
 import { neonaicPidManager } from './pidManager.js';
+import { neonaicWatchdog } from './watchdog.js';
+import { neonaicRestartProcess } from './restartProcess.js';
 import { neonaicCommandServer } from '../command/commandServer.js';
 import { neonaicCommandInterface } from '../command/commandInterface.js';
 import { neonaicPermissionServer } from '../command/permissionServer.js';
@@ -47,10 +49,27 @@ const PID_FILE_PATH = resolve(ROOT_PATH, '.neonai.pid');
 
 let shuttingDown = false;
 
-/** 优雅关闭：清理 CLI → 释放所有平台 → 释放 PID 锁 */
+/** 释放所有平台 */
+async function releaseAllPlatforms() {
+  const pm = PlatformManager.instance;
+  if (pm) {
+    await Promise.allSettled(pm.getClosers().map((close) => close()));
+  }
+}
+
+/** 停掉 CLI 并释放全部平台（优雅关闭与进程级重启共用） */
+async function closeAll() {
+  neonaicCliProcessor.stopCLI();
+  await releaseAllPlatforms();
+}
+
+/** 优雅关闭：停看门狗 → 清理 CLI → 释放所有平台 → 释放 PID 锁 */
 async function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
+
+  // 先停看门狗：否则它会把「正在优雅退出」当成卡死，再拉起一个新实例
+  neonaicWatchdog.stop();
 
   // 先关闭 CLI，避免后续日志叠加在 readline prompt 上
   neonaicCliProcessor.stopCLI();
@@ -61,11 +80,7 @@ async function shutdown(signal) {
   const forceTimer = setTimeout(() => process.exit(1), 5000);
   forceTimer.unref();
 
-  // 释放所有平台
-  const pm = PlatformManager.instance;
-  if (pm) {
-    await Promise.allSettled(pm.getClosers().map((close) => close()));
-  }
+  await releaseAllPlatforms();
 
   getLogger().main.info('服务已关闭');
   // 如果在调试使用断点避免停止运行
@@ -132,13 +147,39 @@ neonaicCommandServer.registerCommand('neonaic', 'version', function () {
 
 neonaicCommandServer.registerCommand('neonaic', 'stop', () => {
   shutdown('COMMAND');
-}, { description: '安全关闭服务', permissions: [[neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.commmand.stop"]] });
+}, {
+  description: '安全关闭服务（仅超级管理员）',
+  permissions: [neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN],
+});
+
+/**
+ * 重启服务：拉起一个新实例接管，然后退出当前进程。
+ * @apiNote 这里不 await：让回复先返回给调用方打印，重启在后台继续（真正退出前还会留出一点时间刷日志）。
+ */
+neonaicCommandServer.registerCommand('neonaic', 'restart', function () {
+  neonaicWatchdog.restart('命令 /restart', { manual: true })
+    .then((ok) => { if (!ok) getLogger().cmd.error('重启失败，服务继续运行（详情见看门狗日志）'); })
+    .catch((error) => getLogger().cmd.error('重启时出错，服务继续运行：', error));
+  return '正在重启…新实例接管后本进程会退出。';
+}, {
+  description: '重启服务（仅超级管理员）',
+  permissions: [neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN],
+});
 
 // ---- 启动 ----
 
 /** 启动流程 */
 async function bootstrap() {
   const when_started = new Date();
+
+  // 进程内重启的接棒：新实例由旧实例 spawn，此时旧实例还活着、PID 锁还在它名下，
+  // 直接抢锁会被判成「已有实例在运行」，所以先等它把锁交出来
+  if (neonaicRestartProcess.isRestart()) {
+    const handed = await neonaicPidManager.waitForHandover(PID_FILE_PATH);
+    getLogger().main.info(handed
+      ? '检测到这是一次进程内重启，PID 锁已完成接棒'
+      : '等待旧实例释放 PID 锁超时，仍尝试继续启动');
+  }
 
   // PID锁
   neonaicPidManager.acquirePidLock(PID_FILE_PATH, getLogger());
@@ -155,10 +196,13 @@ async function bootstrap() {
       return result;
     };
     getLogger().main.info('调试模式已启用，$(cmd) 可用。也可使用 await $(cmd) 解决 Promise 问题。');
+    getLogger().watchdog.info('调试模式下不启用看门狗（断点会长时间阻塞事件循环，会被误判成卡死）');
   } else {
     // 正常模式：劫持 console 到日志系统
     globalThis.$ = null;
     getLogger().redirectConsole(true);
+    // 启动看门狗：此后主程序必须按期喂狗，否则会被判定卡死并重启
+    neonaicWatchdog.start({ pidFile: PID_FILE_PATH, onBeforeExit: closeAll });
   }
 
   getLogger().platM.debug(`初始化平台管理器`);

@@ -1,8 +1,9 @@
 # Only Apple Can Do
 *.DS_Store
 
-# PID 锁文件
+# PID 锁文件与看门狗的重启退避状态
 .neonai.pid
+.neonai.watchdog.json
 
 # SECRET
 secret.json
