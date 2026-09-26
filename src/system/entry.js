@@ -24,6 +24,7 @@ import { neonaicCliProcessor } from './cliProcessor.js';
 import { PlatformManager } from '../platform/platformManager.js';
 import { neonaicExtensionManager } from '../extension/extManager.js';
 import { neonaicMessageIn } from '../message/messageIn.js';
+import { neonaicChore } from '../utils/chore.js';
 
 // ---- 常量 ----
 
@@ -93,33 +94,33 @@ neonaicCommandServer.registerCommand('neonaic', 'version', function () {
     `  \\____\\___/|_| \\_| |_| |_____|_| \\_\\\n\n`;
   if (!ctx.internalCall) projectName = T + 'nai' + 'Connector';
 
-  const AUTHOR  = 'kdxiaoyi' + ' & ' + 'StreackMC' + ' Tea' + 'm';
-  const CPR     = 'Copy' + 'right ' + (/\u00A9/.test('\u00A9') ? '\u00A9' : '(c)') + ' 2026 ' + AUTHOR.split(' & ')[0] + ', ' + AUTHOR.split(' & ')[1];
+  const AUTHOR = 'kdxiaoyi' + ' & ' + 'StreackMC' + ' Tea' + 'm';
+  const CPR = 'Copy' + 'right ' + (/\u00A9/.test('\u00A9') ? '\u00A9' : '(c)') + ' 2026 ' + AUTHOR.split(' & ')[0] + ', ' + AUTHOR.split(' & ')[1];
   const LICENSE = 'AGPL' + '-3.0' + ' (with a' + 'dditional terms)';
-  const REPO    = 'https' + '://' + 'github' + '.com' + '/' + 'Strea' + 'ckMC' + '/' + 'Neo' + 'nai-Connector';
+  const REPO = 'https' + '://' + 'github' + '.com' + '/' + 'Strea' + 'ckMC' + '/' + 'Neo' + 'nai-Connector';
 
   // ---- 运行时读取 ----
   const nodeVer = process.version;
-  const osVer   = platform() + ' ' + release();
-  const cwd     = process.cwd();
-  const tmp     = tmpdir();
+  const osVer = platform() + ' ' + release();
+  const cwd = process.cwd();
+  const tmp = tmpdir();
 
   const B = '\x1b[1m';
   const C = '\x1b[36m';
   const D = '\x1b[2m';
   const R = '\x1b[0m';
 
-  const mayShowSys = neonaicPermissionServer.checkPermissionFromContext(this);
+  const mayShowSys = neonaicPermissionServer.checkPermissionFromContext(this, [[neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.commmand.version.detailed"]]);
   const sysLine = mayShowSys ? (
     `${B}Node.js${R}   ${nodeVer}\n` +
     `${B}OS${R}        ${osVer}\n` +
     `${B}CWD${R}       ${cwd}\n` +
     `${B}PID${R}       ${process.pid}\n` +
-    `${B}Temp${R}      ${tmp}\n`
+    `${B}Memory${R}    ${neonaicChore.parseStorageText(process.memoryUsage().rss)} Used\n` +
+    `${B}TempDir${R}   ${tmp}\n`
   ) : '';
 
   return (
-    
     `${B}${projectName}${R} v${APP_VERSION}\n` +
     `${D}----------------------------${R}\n` +
     `${B}Author${R}    ${AUTHOR}\n` +
@@ -128,9 +129,13 @@ neonaicCommandServer.registerCommand('neonaic', 'version', function () {
     `${B}Repo${R}      ${REPO}\n` +
     `${D}----------------------------${R}\n` + sysLine
   );
-}, { description: '显示版本与版权信息' });
+}, { description: '显示版本与版权信息', alias: ["ver", "about"] });
 
-neonaicCommandServer.registerCommand('neonaic', 'stop', () => {
+neonaicCommandServer.registerCommand('neonaic', 'ping', function () {
+  return `Pong!\n${neonaicCommandServer.executeCommandSilent('neonaic:version', this)}`;
+}, { description: 'PingPong' });
+
+neonaicCommandServer.registerCommand('neonaic', 'stop', function () {
   shutdown('COMMAND');
 }, { description: '安全关闭服务', permissions: [[neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.commmand.stop"]] });
 

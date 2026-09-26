@@ -1,8 +1,16 @@
 import { neonaicConfManager } from '../system/confManager.js';
+import { neonaicMath } from './math.js';
 import { NeonaicIllegalArgumentError, NeonaicIllegalStateError, NeonaicNullPointerError } from './NeonaicNewableError.js';
 
 /** 当前是否处于调试模式（与 entry.js / Logger.js 保持同一判定） */
 const DEBUGING = process.argv.some((a) => a === '--debug=true' || a === '--debug');
+
+const STORAGE_UNIT = Object.freeze({
+  /** 1000 进制 */
+  SI: Object.freeze(['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB', 'RB', 'QB']),
+  /** 1024 进制 */
+  IEC: Object.freeze(['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB', 'RiB', 'QiB']),
+});
 
 /**
  * 尝试将输入尽可能地转化为文本
@@ -74,7 +82,7 @@ export function parseString(val, short = !(DEBUGING || neonaicConfManager.getCon
   return String(val);
 }
 
-export const neonaicChore = {
+export const neonaicChore = Object.freeze({
   parseString,
 
   /**
@@ -178,5 +186,60 @@ export const neonaicChore = {
       }
     }
     return r;
+  },
+
+  /** 人类可读存储单位 */
+  STORAGE_UNIT,
+
+  /**
+   * 将字节数字转换为人类可读存储数据
+   * @param {number} byte 字节
+   * @param {object} [option] 配置
+   * @param {number} [option.minFractionDigits=2] 最少小数位数，默认2
+   * @param {number} [option.maxFractionDigits=2] 最多小数位数，默认2
+   * @param {boolean} [option.useIecDef=false] 是否使用 IEC 标准的 1024 进制（XiB系列）；默认为 SI 标准，即 1000 进制。
+   * @returns {String} 返回值为 "100 MB" 这种单位与数字有间隔的形式，可手动使用{@link String.trim()}
+   * @apiNote 超过 9 PB 的输入会产生误差
+   */
+  parseStorageText: (byte, option = {}) => {
+    option = neonaicChore.joinObject(
+      { useIecDef: false, minFractionDigits: 2, maxFractionDigits: 2 },
+      option
+    );
+    byte = Math.abs(
+      Math.floor(
+        neonaicMath.assertNoNaN(
+          neonaicMath.toNumber(byte),
+          '非法传入值'
+        )
+      )
+    );
+    const formatter = new Intl.NumberFormat('zh-CN', {
+      minimumFractionDigits: neonaicMath.assertNoNaNOrElse(
+        neonaicMath.toNumber(option?.minFractionDigits),
+        2
+      ),
+      maximumFractionDigits: neonaicMath.assertNoNaNOrElse(
+        neonaicMath.toNumber(option?.maxFractionDigits),
+        2
+      ),
+    });
+    const units = option.useIecDef ? STORAGE_UNIT.IEC : STORAGE_UNIT.SI;
+    const base = option.useIecDef ? 1024 : 1000;
+
+    let times = 0;
+    let value = byte;
+
+    while (value >= base && times < units.length - 1) {
+      value /= base;
+      times++;
+    }
+
+    // 小于 base 时直接显示 B，保持整数观感
+    if (times === 0) {
+      return `${byte} B`;
+    }
+
+    return `${formatter.format(value)} ${units[times]}`;
   }
-};
+});

@@ -7,7 +7,7 @@ import { NeonaicIllegalArgumentError, NeonaicIOError, NeonaicNetworkError } from
 import { neonaicChore, parseString } from "./chore.js";
 import { NeonaicUriMeta } from './NeonaicUriMeta.js';
 
-export const neonaicNetwork = {
+export const neonaicNetwork = Object.freeze({
   /**
    * 带有超时地请求一个地址
    * @param {String|URL|Request|NeonaicUriMeta} target 请求地址
@@ -120,7 +120,7 @@ export const neonaicNetwork = {
     /(^|\/\/|\.)gongbiquanshu\.[a-z]{2,}(\.[a-z]{2,})?/i,
     /(^|\/\/|\.)qiuwenbaike\.[a-z]{2,}(\.[a-z]{2,})?/i,
   ]),
-};
+});
 
 /** 项目根路径 */
 const ROOT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '../..');

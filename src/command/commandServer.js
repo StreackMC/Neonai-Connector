@@ -21,6 +21,7 @@ import { parseString } from '../utils/chore.js';
 import { neonaicCommandInterface } from './commandInterface.js';
 import { NeonaicNewable } from "../utils/NeonaicNewableClass.js";
 import { NeonaicCommandError, NeonaicIllegalArgumentError, NeonaicIllegalStateError } from "../utils/NeonaicNewableError.js";
+import { neonaicConfManager } from '../system/confManager.js';
 
 // ---- 颜色 ----
 const RED = '\x1b[31m';
@@ -37,6 +38,18 @@ const globalNames = new Map();
 const globalAliases = new Map();
 /** 命名空间限定名（ns:name / ns:alias）-> 命令（穿透覆盖，永不丢失） */
 const fqns = new Map();
+
+/**
+ * 已注册命令的元信息（注册后即冻结语义，请勿修改字段）。
+ * @typedef {Object} CommandMeta
+ * @property {string} namespace 命令所属命名空间，用于限定访问（`ns:name` / `ns:alias`）
+ * @property {string} name 命令原名，命名空间内唯一
+ * @property {string[]} aliases 命令别名列表（不含原名）；别名可与其它命令的原名同槽并覆盖之
+ * @property {function(...*): *|Promise<*>} handler 命令处理器，参数以 `...args` 展开传入，`this` 为 {@link NeonaicCommandContext}
+ * @property {Array<string|string[]>} permissions 权限要求：`"perm"`（须拥有）/ `"!perm"`（须缺失）/ 数组项为 OR 组；各项之间为 AND，全部满足方可执行
+ * @property {string|undefined} description 命令描述，供 `help` 等展示
+ * @property {string|undefined} usage 用法示例，权限或参数错误时提示
+ */
 
 // ---- 参数解析 ----
 
@@ -324,20 +337,39 @@ function hasCommand(cmd) { return resolveCommand(cmd) != null; }
 
 // ---- 内置命令 ----
 
-registerCommand('neonaic', 'help', function () {
+registerCommand('neonaic', 'help', function (...which) {
   /** @type {NeonaicCommandContext} */
   const ctx = this;
-  const names = allCommands.filter((meta) => {
-    // 过滤掉无权限命令
-    if (!meta?.permissions?.length || ctx.internalCall) return true;
-    return checkCommandPerms(meta.name, meta.permissions, ctx.executor) === null;
-  }).map((meta) => {
-    const label = meta.namespace ? `${meta.namespace}:${meta.name}` : meta.name;
-    const aliasTxt = meta.aliases.length ? ` [别名: ${meta.aliases.join(', ')}]` : '';
-    return meta?.description ? `${label}${aliasTxt}: ${meta.description}` : `${label}${aliasTxt}`;
-  }).sort();
-  return names.join('\n') || '暂无注册命令';
-}, { description: '显示可用命令列表' });
+  const lookingupCmd = which.map(parseString).join('');
+  if (!lookingupCmd) {
+    const names = allCommands.filter((meta) => {
+      // 过滤掉无权限命令
+      if (!meta?.permissions?.length || ctx.internalCall) return true;
+      return checkCommandPerms(meta.name, meta.permissions, ctx.executor) === null;
+    }).map((meta) => {
+      const label = meta.namespace ? `${meta.namespace}:${meta.name}` : meta.name;
+      const aliasTxt = meta.aliases.length ? ` [别名: ${meta.aliases.join(', ')}]` : '';
+      return meta?.description ? `${label}${aliasTxt}: ${meta.description}` : `${label}${aliasTxt}`;
+    }).sort();
+    return names.join('\n') || '暂无注册命令';
+  } else {
+    // 有子参数，查找命令
+    const cmdItem = resolveCommand(lookingupCmd);
+    if (!cmdItem) return `“${neonaicConfManager.getBotName()}”无法找到命令“${lookingupCmd}”。`;
+    if (!neonaicPermissionServer.checkPermissionFromContext(ctx, cmdItem.permissions))
+      return `你无权查看“${lookingupCmd}”的详细信息。`;
+    return [
+      `命令“${cmdItem.namespace}:${cmdItem.name}”：`,
+      `${cmdItem.usage ?? cmdItem.name}`,
+      ``,
+      `${cmdItem.description ?? "没有提供描述。"}`,
+      `可用别名：${parseString(cmdItem.aliases)}`,
+    ].join('\n');
+  }
+}, {
+  description: '显示可用命令列表',
+  usage: '/help [cmd]',
+});
 
 function sudoOrRunuser(inherit, who, cmd, ...args) {
   /** @type {NeonaicCommandContext} */

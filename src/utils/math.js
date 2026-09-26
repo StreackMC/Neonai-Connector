@@ -5,7 +5,7 @@ function getNaNException(where) {
   return new NeonaicArithmeticError(where ? `在${parseString(where)}发现意外的 NaN` : '发现意外的 NaN', where ? where : null);
 }
 
-export const neonaicMath = {
+export const neonaicMath = Object.freeze({
   /**
    * 将传入值尽可能地转为数字，遇到多个小数点时只保留第一个
    * @implNote 先强转为文本，再删除非数字部分，最后得到结果
@@ -195,7 +195,7 @@ export const neonaicMath = {
   calc: calcExpression,
 
   solve24: dfs24solution,
-};
+});
 
 /**
  * 递归求解 24 点及类似问题
