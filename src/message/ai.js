@@ -367,7 +367,7 @@ async function askAI(userMessage, options) {
         AIlist: neonaicConfManager.getConfig(neonaicConfManager.CONFIG_PATHS.main).getList('ai.model2Optimize', true),
         caller: conf.caller,
         preprocessWilling: false, // 避免无限递归
-        overridePrompt: `请将用户输入优化为更适合 LLM AI 理解的提示词，可以少量增删词语，但不得改变原意。你可以通过 neonaic_userprompt 这个工具获取用户输入。`,
+        overridePrompt: `请将用户输入优化为更适合 LLM AI 理解的提示词，可以少量增删词语，但不得改变原意。`,
       });
     } catch (e) {
       getLogger().tool.warn("无法进行提示词优化:", e);
