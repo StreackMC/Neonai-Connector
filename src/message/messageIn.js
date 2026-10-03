@@ -65,7 +65,7 @@ async function resolveReply(msg, options) {
   // ---- AI 兜底 ----
   if (!config.AI) return `（${neonaicConfManager.getBotName()}可能在看着你，但并未言语）`;
   try {
-    return stripAnsi(await neonaicAI.askAI(msg, config.AIlist, config.resolveCommandWith?.executor)).trim();
+    return stripAnsi(await neonaicAI.askAI(msg, { AIlist: config.AIlist, caller: config.resolveCommandWith?.executor })).trim();
   } catch (err) {
     getLogger().tool.error(`[msgIn] AI 回复失败: ${err.message}`);
     return `（${neonaicConfManager.getBotName()}静静地看着你，并未言语）`;

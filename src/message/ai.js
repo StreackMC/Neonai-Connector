@@ -22,7 +22,7 @@ import z from 'zod';
 
 import { neonaicConfManager } from '../system/confManager.js';
 import { getLogger } from '../logger/Logger.js';
-import { parseString } from '../utils/chore.js';
+import { neonaicChore, parseString } from '../utils/chore.js';
 import { neonaicCommandServer } from '../command/commandServer.js';
 import { neonaicCommandInterface } from '../command/commandInterface.js';
 import { neonaicPermissionServer } from '../command/permissionServer.js';
@@ -294,23 +294,30 @@ function isAIBanned(caller) {
 }
 
 /**
- * @param {string} userMessage
- * @param {string|string[]} AIlist 允许的 AI Profile 列表，"*" 表示全部
- * @param {string|string[]|null|undefined} [caller] 调用者标识（执行者链），用于封禁检查
- * @returns {Promise<string>} AI 回复文本
- * @throws 调用者被封禁 / 无可用 Profile / 所有 Profile 请求失败
+ * @param {string} userMessage 用户传入消息或输入提示词
+ * @param {object} options 选项
+ * @param {string|string[]} [options.AIlist] 允许的 AI Profile 列表，"*" 表示全部
+ * @param {string|string[]|null|undefined} [options.caller] 调用者标识（执行者链），用于封禁检查
+ * @param {boolean} [options.preprocessWilling] 调用者标识（执行者链），用于封禁检查
+ * @returns {Promise<string>|string} AI 回复文本
+ * @throws 无可用 Profile / 所有 Profile 请求失败
  */
-async function askAI(userMessage, AIlist, caller) {
-  if (isAIBanned(caller)) return `（${neonaicConfManager.getBotName()}静静地看着别处，并未言语）`;
+async function askAI(userMessage, options) {
+  const conf = neonaicChore.joinObject({
+    AIlist: ['*'],
+    caller: [],
+    preprocessWilling: true,
+    }, options);
+  if (isAIBanned(conf.caller)) return `（${neonaicConfManager.getBotName()}静静地看着别处，并未言语）`;
 
-  if (!Array.isArray(AIlist)) AIlist = [AIlist];
-  AIlist = AIlist.map((v) => (typeof v === 'string' ? v.trim() : parseString(v, false).trim()));
+  if (!Array.isArray(conf.AIlist)) conf.AIlist = [conf.AIlist];
+  conf.AIlist = conf.AIlist.map((v) => (typeof v === 'string' ? v.trim() : parseString(v, false).trim()));
 
-  const isAll = AIlist.includes('*');
+  const isAll = conf.AIlist.includes('*');
   const oaiList = neonaicConfManager.getConfig(neonaicConfManager.CONFIG_PATHS.secret).getList('oai').filter((v) => {
     if (v?.available === false) return false;
     if (isAll) return true;
-    return AIlist.includes(v?.name);
+    return conf.AIlist.includes(v?.name);
   });
   if (!oaiList.length) throw new NeonaicIllegalArgumentError('未找到可用的 AI Profile');
 
