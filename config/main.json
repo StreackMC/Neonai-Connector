@@ -17,5 +17,13 @@
     "accualre": "",
     // 模型镜像站
     "mirror": "https://hf-mirror.com/"
-  }
+  },
+  // 控制 AI 回复设置
+  "ai": {
+    // 是否接受优化用户输入
+    // 这可能带来额外开销，也可能会带来额外收益
+    "acceptOptimizingPrompt": true,
+    // 如果要优化用户输入，使用哪些 AI Profile ；设为 "*" 表示全部
+    "model2Optimize": ["*"],
+  },
 }

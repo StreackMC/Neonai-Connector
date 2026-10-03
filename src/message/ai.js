@@ -72,6 +72,30 @@ const _allTools = [];
 const _toolFqn = new Map();
 
 /**
+ * 定义一个 AI 工具。
+ * @param {string} namespace 命名空间（'' 表示全局）
+ * @param {string} name 工具名
+ * @param {object} definition 工具定义
+ * @param {string} [definition.description] 工具描述（会发送给模型）
+ * @param {*} definition.inputSchema 输入 schema（zod schema）
+ * @param {Function} definition.execute 执行函数，接收模型生成的输入
+ * @returns {[string|null, AIToolDef|null]} [fqn, def] 定义成功的工具全名称与定义；如果定义失败则为 null
+ */
+function defineAITool(namespace, name, definition) {
+  if (!namespace || !name || !definition || typeof definition?.execute !== 'function') {
+    return [null, null];
+  }
+  const def = {
+    namespace: parseString(namespace),
+    name: parseString(name),
+    description: definition.description ?? '',
+    inputSchema: definition.inputSchema,
+    execute: definition.execute,
+  };
+  return [`${def.namespace}:${def.name}`, def];
+}
+
+/**
  * 注册一个 AI 工具。
  *
  * 冲突规则（参考命令注册）：同名（含命名空间限定）已存在则不注册。
@@ -83,30 +107,15 @@ const _toolFqn = new Map();
  * @param {*} definition.inputSchema 输入 schema（zod schema）
  * @param {Function} definition.execute 执行函数，接收模型生成的输入
  * @returns {boolean} true 注册成功；false 冲突（已存在同名工具）
+ * @throws {NeonaicIllegalArgumentError} 无效的 AI 工具参数
  */
 function registerAITool(namespace, name, definition) {
-  if (!namespace || !name) {
-    getLogger().tool.warn(`AI 工具注册失败：无效的命名空间或名称 (ns=${namespace}, name=${name})`);
-    return false;
-  }
-  if (!definition || typeof definition.execute !== 'function') {
-    getLogger().tool.warn(`AI 工具注册失败：无效的定义或 execute (${namespace}:${name})`);
-    return false;
-  }
-
-  const fqn = `${namespace}:${name}`;
+  const [fqn, def] = defineAITool(namespace, name, definition);
+  if (!fqn || !def) throw new NeonaicIllegalArgumentError('无效的 AI 工具参数');
   if (_toolFqn.has(fqn)) {
     getLogger().tool.warn(`AI 工具 "${fqn}" 已被注册`);
     return false;
   }
-
-  const def = {
-    namespace, name,
-    description: definition.description ?? '',
-    inputSchema: definition.inputSchema,
-    execute: definition.execute,
-  };
-
   _toolFqn.set(fqn, def);
   _allTools.push(def);
   return true;
@@ -186,13 +195,13 @@ function resolveToolList(toolsConfig) {
 
 /**
  * 将工具定义转换为 Vercel AI 的 tools 对象。
- * @param {string[]} toolList 可用工具的 fqn 列表
+ * @param {(AIToolDef|null)[]} toolList 可用工具的 fqn 列表
  */
 function buildToolSet(toolList) {
   const tools = {};
-  for (const fqn of toolList) {
-    const def = _toolFqn.get(fqn);
+  for (const def of toolList) {
     if (!def) continue;
+    const fqn = `${def.namespace}:${def.name}`;
     // OpenAI 工具名仅允许 [a-zA-Z0-9_-]，将 fqn 的 ':' 替换为 '_' 作为模型可见名
     const modelName = fqn.replace(/:/g, '_');
     tools[modelName] = tool({
@@ -208,10 +217,15 @@ function buildToolSet(toolList) {
  * 调用单个 AI Profile 获取回复。
  * @param {object} provider oai 配置项
  * @param {string} userMessage
+ * @param {(AIToolDef|null|undefined)[]} [overrideAITool] 要叠加的 AI 工具，将临时覆写已有 AI 工具
+ * @param {String|null} overridePrompt 要覆写提示词吗
  * @returns {Promise<string>}
+ * @internalApi
  */
-async function callProvider(provider, userMessage) {
-  const systemPrompt = loadSystemPrompt(provider.prompt);
+async function callProvider(provider, userMessage, overrideAITool = [], overridePrompt = null) {
+  const systemPrompt = (typeof overridePrompt === 'string' && overridePrompt)
+    ? overridePrompt
+    : loadSystemPrompt(provider.prompt);
   const SESSION_ID = `#${NeonaicNewable.getUniqueId()}`;
 
   // 严格遵循用户配置的完整 address，不依赖 SDK 的 baseURL 自动拼接端点。
@@ -228,7 +242,10 @@ async function callProvider(provider, userMessage) {
     : client.chat(provider.model);
 
   // 按 tools 配置过滤可用工具
-  const toolList = resolveToolList(provider.tools);
+  const toolList = resolveToolList(provider.tools).map((v) => {
+    const t = _toolFqn.get(v);
+    return t ? t : null;
+  });
   const tools = buildToolSet(toolList);
 
   const messages = [
@@ -250,7 +267,7 @@ async function callProvider(provider, userMessage) {
     model,
     system: systemPrompt,
     messages,
-    ...(Object.keys(tools).length ? { tools } : {}),
+    ...(Object.keys(tools).length ? { tools: neonaicChore.joinObject(tools, buildToolSet(Array.isArray(overrideAITool) ? overrideAITool : [])) } : {}),
     stopWhen: stepCountIs(maxToolcall),
     temperature: 0.25,
     topP: 0.9,
@@ -298,21 +315,42 @@ function isAIBanned(caller) {
  * @param {object} options 选项
  * @param {string|string[]} [options.AIlist] 允许的 AI Profile 列表，"*" 表示全部
  * @param {string|string[]|null|undefined} [options.caller] 调用者标识（执行者链），用于封禁检查
- * @param {boolean} [options.preprocessWilling] 调用者标识（执行者链），用于封禁检查
+ * @param {boolean} [options.preprocessWilling] 是否接受优化提示词，是否生效取决于用户配置
+ * @param {AIToolDef[]|AIToolDef} [options.overrideAITool] 要叠加的 AI 工具，将临时覆写已有 AI 工具
+ * @param {String} [options.overridePrompt] 存在此字符串将覆写 AI Profile 的提示词
  * @returns {Promise<string>|string} AI 回复文本
  * @throws 无可用 Profile / 所有 Profile 请求失败
  */
 async function askAI(userMessage, options) {
+  // 初始化配置
   const conf = neonaicChore.joinObject({
     AIlist: ['*'],
     caller: [],
     preprocessWilling: true,
-    }, options);
+    overrideAITool: [],
+    overridePrompt: undefined,
+  }, options);
   if (isAIBanned(conf.caller)) return `（${neonaicConfManager.getBotName()}静静地看着别处，并未言语）`;
 
+  // 对 AIlist 做标准化处理：字符串 → 数组，去除空值，trim
   if (!Array.isArray(conf.AIlist)) conf.AIlist = [conf.AIlist];
   conf.AIlist = conf.AIlist.map((v) => (typeof v === 'string' ? v.trim() : parseString(v, false).trim()));
 
+  // 对覆写 tool 处理
+  if (!Array.isArray(conf.overrideAITool)) conf.overrideAITool = [conf.overrideAITool];
+  conf.overrideAITool = conf.overrideAITool.map((/** @type {AIToolDef|null} */v) => {
+    return (v?.namespace && v?.name && typeof v?.execute === 'function')
+      ? {
+        namespace: parseString(v.namespace),
+        name: parseString(v.name),
+        description: (v?.description) ? parseString(v?.description) : "",
+        inputSchema: v?.inputSchema,
+        execute: v.execute
+      }
+      : null;
+  });
+
+  // 搜索可用的 AI Profile
   const isAll = conf.AIlist.includes('*');
   const oaiList = neonaicConfManager.getConfig(neonaicConfManager.CONFIG_PATHS.secret).getList('oai').filter((v) => {
     if (v?.available === false) return false;
@@ -321,10 +359,26 @@ async function askAI(userMessage, options) {
   });
   if (!oaiList.length) throw new NeonaicIllegalArgumentError('未找到可用的 AI Profile');
 
+  // 尝试优化提示词
+  let usrMsgNext = parseString(userMessage);
+  if (neonaicConfManager.getConfig(neonaicConfManager.CONFIG_PATHS.main).getBoolean('ai.acceptOptimizingPrompt', true) && conf.preprocessWilling) {
+    try {
+      usrMsgNext = await neonaicAI.askAI(usrMsgNext, {
+        AIlist: neonaicConfManager.getConfig(neonaicConfManager.CONFIG_PATHS.main).getList('ai.model2Optimize', true),
+        caller: conf.caller,
+        preprocessWilling: false, // 避免无限递归
+        overridePrompt: `请将用户输入优化为更适合 LLM AI 理解的提示词，可以少量增删词语，但不得改变原意。你可以通过 neonaic_userprompt 这个工具获取用户输入。`,
+      });
+    } catch (e) {
+      getLogger().tool.warn("无法进行提示词优化:", e);
+    }
+  }
+
+  // 生成回复
   const errors = new Map();
   for (const provider of oaiList) {
     try {
-      return await callProvider(provider, userMessage);
+      return await callProvider(provider, usrMsgNext, conf.overrideAITool, conf.overridePrompt);
     } catch (err) {
       const msg = err?.message || (err?.statusCode ?? parseString(err));
       getLogger().tool.debug(`× ${provider.name}: ${msg}`);
@@ -531,7 +585,7 @@ async function aiProfile(ctx, ...args) {
       const target = findProvider(profileName);
       if (!target) return `未找到 AI Profile: ${profileName}`;
       try {
-        return await callProvider(target, msg);
+        return await callProvider(target, msg, []);
       } catch (err) {
         return `测试失败: ${err?.message || (err?.statusCode ?? parseString(err))}`;
       }
@@ -575,6 +629,7 @@ function aiPardon(ctx, user) {
 }
 
 export const neonaicAI = {
+  defineAITool,
   registerAITool,
   getAITools,
   resolveToolList,
