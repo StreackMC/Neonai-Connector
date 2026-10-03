@@ -482,33 +482,19 @@ neonaicCommandServer.registerCommand('neonaic', 'ai', async function (sub, ...ar
       return aiBan(ctx, ...args);
     case 'pardon':
       return aiPardon(ctx, ...args);
-    case 'moderate':
-      return aiModerate(ctx, ...args);
     default:
       return `用法: ${cmdAIUsage()}`;
   }
 }, {
   permissions: [[neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.command.ai"]],
   description: "AI 工具与 Profile 管理",
-  usage: "ai <tool|profile|ban|pardon|moderate> ...",
+  usage: "ai <tool|profile|ban|pardon> ...",
   alias: ['askai'],
 });
 
 /** ai 命令用法文本 */
 function cmdAIUsage() {
   return "ai tool list | ai tool test <tool> <json5> | ai profile list | ai profile <enable|disable> <profile> | ai profile test <profile> <msg> | ai ban <user> [time] | ai pardon <user>";
-}
-
-/**
- * ai moderate 子命令。
- * @param {NeonaicCommandContext} ctx
- * @param {string} text
- */
-async function aiModerate(ctx, text) {
-  if (!text || typeof text !== 'string' || !text.trim()) return "请求为空";
-  const result = await isModerate(text);
-  if (!result.available) return "内容审核已禁用";
-  return `得分=${result.score}, 模型=${result.resolver}, 拒绝=${result.refusal}, 安全=${result.safe}, 不安全=${result.unsafe}, 命中规则=${result.category}`;
 }
 
 /**
