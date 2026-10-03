@@ -12,6 +12,7 @@ const { Bot, ReceiverMode } = qqBotBackend;
 import MsgHandler from "./msgHandler.js";
 import { EVENTS, INTENTS } from "./enums.js";
 import { NeonaicIllegalArgumentError } from '../../../src/utils/NeonaicNewableError.js';
+import { getLogger } from '../../../src/logger/Logger.js';
 
 export class PlatformQQBot extends NeonaiPlatform {
   static type = 'qqbot';
@@ -46,6 +47,10 @@ export class PlatformQQBot extends NeonaiPlatform {
     this.#botInstance.on(EVENTS.message.groupAt, (e) => MsgHandler.onGroupMessageIn(e, this));
     this.#botInstance.on(EVENTS.message.private, (e) => MsgHandler.onPrivateMessageIn(e, this));
     await this.#botInstance.start();
+
+    // 启动主动式看门狗
+    this.#watchdog = setInterval(() => this.onWatchdogTick(), 60/* 秒探测一次 */ * 1000);
+
     return { close: () => this.stop() };
   }
 
@@ -54,6 +59,20 @@ export class PlatformQQBot extends NeonaiPlatform {
       this.#botInstance.stop();
       this.#botInstance = null;
     }
+    clearInterval(this.#watchdog);
+  }
+
+  #watchdog = -1;
+  /** 主动式看门狗，qqbot框架没有喂狗接口 */
+  onWatchdogTick() {
+    if (!this.bot) return;
+    this.bot.getSelfInfo().catch((err) => {
+      getLogger().platP.warn(`QQBot[${this.profile}]: 看门狗反馈异常，尝试重启机器人。`, err);
+      this.stop().then(() => setTimeout(() => this.start(), 1000)).catch((err) => {
+        getLogger().platP.error(`QQBot[${this.profile}]: 看门狗重启失败，请检查配置。`, err);
+      }
+      );
+    });
   }
 }
 
