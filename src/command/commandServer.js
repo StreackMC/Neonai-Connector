@@ -17,7 +17,7 @@
 
 import { neonaicPermissionServer } from './permissionServer.js';
 import { getLogger } from '../logger/Logger.js';
-import { parseString } from '../utils/chore.js';
+import { neonaicChore, parseString } from '../utils/chore.js';
 import { neonaicCommandInterface } from './commandInterface.js';
 import { NeonaicNewable } from "../utils/NeonaicNewableClass.js";
 import { NeonaicCommandError, NeonaicIllegalArgumentError, NeonaicIllegalStateError } from "../utils/NeonaicNewableError.js";
@@ -272,17 +272,26 @@ function executeCommandSilent(cmdName, ctx = {}, ...args) {
 export class NeonaicCommandContext extends NeonaicNewable {
   #privateExecutor = false; #internalCall = false; #this = undefined; #executor = []; #timestamp = new Date();
 
-  /** 命令开始执行时的时间 @type {Date} */
+  /** 命令开始执行时的时间，每切换一次上下文自动变更，不可变 @type {Date} */
   get timestamp() { return this.#timestamp; };
+
   /** 命令执行是否处于私密场景（如私聊），非私密场景如群聊中其他成员可见 @type {boolean} */
   get privateExecutor() { return this.#privateExecutor; };
+  /** 命令执行是否处于私密场景（如私聊），非私密场景如群聊中其他成员可见 @type {boolean} */
+  set privateExecutor(value) { this.#privateExecutor = !!value; };
+
   /** 命令调用是否来自内部：来自内部的命令会绕过权限检查 @type {boolean} */
   get internalCall() { return this.#internalCall; };
+  /** 修改命令调用是否来自内部：来自内部的命令会绕过权限检查 @type {boolean} */
+  set internalCall(value) { this.#internalCall = !!value; };
+
   /** 命令执行时上下文，可以透传类对象 @type {Object|undefined} */
   get this() { return this.#this; };
+  /** 改变命令执行时上下文，可以透传类对象 @type {Object|undefined} */
+  set this(value) { this.#this = value; };
+
   /** 执行者：请不要传入'$'开头的，因为被内部使用；同时请勿完全信任本处内容。'$console'表示控制台，'$unknown'表示未知。Index越小的执行者越近 @type {string[]} */
   get executor() { return this.#executor; };
-
   /** 追加执行者 @param {string|string[]} value 执行者列表 */
   set executor(value) {
     if (Array.isArray(value)) {
@@ -299,6 +308,10 @@ export class NeonaicCommandContext extends NeonaicNewable {
     this.#internalCall = !!options.internalCall;
     this.#this = options.this ?? undefined;
     this.executor = options.executor;
+  }
+
+  clone() {
+    return new NeonaicCommandContext(this);
   }
 }
 
@@ -371,7 +384,7 @@ registerCommand('neonaic', 'help', function (...which) {
   usage: '/help [cmd]',
 });
 
-function sudoOrRunuser(inherit, who, cmd, ...args) {
+async function sudoOrRunuser(inherit, who, cmd, ...args) {
   /** @type {NeonaicCommandContext} */
   const ctx = this;
   const targetCmd = typeof cmd === 'string' ? cmd.trim().toLocaleLowerCase() : '';
@@ -384,27 +397,30 @@ function sudoOrRunuser(inherit, who, cmd, ...args) {
   const nextExecutor = inherit
     ? [resolveExecutor(who), ...currentExecutor]
     : [resolveExecutor(who)];
-  return executeCommandSilent(targetCmd, { ...ctx, executor: nextExecutor }, ...args);
+  return await executeCommandSilent(targetCmd, { ...ctx, executor: nextExecutor }, ...args);
 }
 
-registerCommand('neonaic', 'sudo', function (who, cmd, ...args) {
-  return sudoOrRunuser.call(this, true, who, cmd, ...args);
+registerCommand('neonaic', 'sudo', async function (who, cmd, ...args) {
+  return await sudoOrRunuser.call(this, true, who, cmd, ...args);
 }, {
   description: '以某个身份执行命令，会继承当前上下文。',
   usage: "sudo <who> <cmd> [args]",
   permissions: [[neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.command.sudo"]],
 });
 
-registerCommand('neonaic', 'runuser', function (who, cmd, ...args) {
-  return sudoOrRunuser.call(this, false, who, cmd, ...args);
+registerCommand('neonaic', 'runuser', async function (who, cmd, ...args) {
+  return await sudoOrRunuser.call(this, false, who, cmd, ...args);
 }, {
   description: '切换到某个身份并执行命令，会重置上下文。',
   usage: "runuser <who> <cmd> [args]",
   permissions: [[neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.command.sudo"]],
 });
 
-registerCommand('neonaic', 'force', function (cmd, ...args) {
-  return executeCommandSilent(cmd, { ...this, privateExecutor: true }, ...args);
+registerCommand('neonaic', 'force', async function (cmd, ...args) {
+  /** @type {NeonaicCommandContext} */
+  const ctx = this.clone();
+  ctx.privateExecutor = true;
+  return await executeCommandSilent(cmd, ctx, ...args);
 }, {
   description: '强制将上下文视作私密场景执行命令，以绕过隐私检查。',
   usage: "force <cmd> [args]",
