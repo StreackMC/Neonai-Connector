@@ -6,7 +6,7 @@
   "particulars": {
     "name": "Wordle Game for Neonaic",
     "author": ["kdxiaoyi"],
-    "description": "Offer",
+    "description": "Offer wordle game experience for users.",
     "url": "https://github.com/StreackMC/Neonai-Connector/tree/main/extensions/wordle",
     "license": "AGPL-3.0 modified"
   },

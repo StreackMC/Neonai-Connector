@@ -6,7 +6,7 @@
 
 // -- 常量 --
 /** 默认服务器状态接口地址（查询目标） */
-const DEFAULT_ADDRESS = 'http://localhost:8080/api/status';
+const DEFAULT_ADDRESS = 'http://localhost:8080/japi/status';
 /** 默认服务器名称（查询目标） */
 const DEFAULT_SRVNAME = '栈流Streack';
 /** 请求超时（毫秒） */

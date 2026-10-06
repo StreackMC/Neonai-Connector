@@ -116,7 +116,8 @@ export class NeonaicExtItem extends NeonaicNewable {
         this.#instance = await import(this.#entry);
       };
       if (typeof this.#instance.onEnable !== 'function' || typeof this.#instance.onDisable !== 'function') throw new NeonaicExtensionError(`拓展“${this.fullname}”没有提供有效的入口函数，因此“${neonaicConfManager.getBotName()}”无法加载`);
-      await this.#instance.onEnable.apply(this, {
+      // 注意：必须用 call 传上下文对象；apply 会把该对象当作类数组，导致 onEnable 收不到任何参数
+      await this.#instance.onEnable.call(this, {
         manifest: this.#manifest_config,
         pwd: resolve(this.entry_path, '..'),
         ext_item_id: this.INSTANCE_ID,

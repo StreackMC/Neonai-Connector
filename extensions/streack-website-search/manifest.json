@@ -1,0 +1,16 @@
+{
+  "meta": {
+    "version": [1, "0.1.0"],
+    "id": "streackwebsitesearch"
+  },
+  "particulars": {
+    "name": "Streack.top 索引与搜索工具",
+    "author": ["kdxiaoyi"],
+    "description": "为用户和 AI 提供检索 streack.top 站点的能力",
+    "url": "https://github.com/StreackMC/Neonai-Connector/tree/main/extensions/streack-website-search",
+    "license": "AGPL-3.0 modified"
+  },
+  "entry": "./src/init.js",
+  "depends": {},
+  "softdepends": {}
+}
