@@ -374,10 +374,10 @@ registerCommand('neonaic', 'help', function (...which) {
 function sudoOrRunuser(inherit, who, cmd, ...args) {
   /** @type {NeonaicCommandContext} */
   const ctx = this;
-  const targetCmd = typeof cmd === 'string' ? cmd.trim() : '';
+  const targetCmd = typeof cmd === 'string' ? cmd.trim().toLocaleLowerCase() : '';
   if (/* 不检查who是考虑到部分情形下可能有转到匿名上下文的可能 */!targetCmd) throw new NeonaicIllegalArgumentError("参数不完整，应为 [sudo|runuser] <who> <cmd> [...args]");
-  if (/* 嵌套保护 */targetCmd === 'sudo' || targetCmd === 'runuser' || targetCmd === 'neonaic:sudo' || targetCmd === 'neonaic:runuser') {
-    throw new NeonaicIllegalArgumentError("要执行的命令不能是 sudo 或 runuser");
+  if (/* 嵌套保护 */['sudo','runuser','neonaic:sudo','neonaic:runuser'].includes(targetCmd)) {
+    throw new NeonaicIllegalArgumentError("要执行的命令不能是 sudo 或 runuser，且 force 命令应在之前。");
   }
   // 切换到目标用户执行命令
   const currentExecutor = Array.isArray(ctx.executor) ? ctx.executor : (ctx.executor ? [ctx.executor] : []);
@@ -401,6 +401,14 @@ registerCommand('neonaic', 'runuser', function (who, cmd, ...args) {
   description: '切换到某个身份并执行命令，会重置上下文。',
   usage: "runuser <who> <cmd> [args]",
   permissions: [[neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.command.sudo"]],
+});
+
+registerCommand('neonaic', 'force', function (cmd, ...args) {
+  return executeCommandSilent(cmd, { ...this, privateExecutor: true }, ...args);
+}, {
+  description: '强制将上下文视作私密场景执行命令，以绕过隐私检查。',
+  usage: "force <cmd> [args]",
+  permissions: [[neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.command.force"]],
 });
 
 export const neonaicCommandServer = {
