@@ -12,20 +12,10 @@
     }
   },
   "temp": {
-    "USR#4C48AEC137FEAA4B94954DCB4EF36389": {
-      "neonaic.toolcall.ai": {
-        "status": false,
-        "until": 1787069848403
-      }
-    }
   },
   "global": {
-    "neonaic.toolcall.ai": false
+    "neonaic.toolcall.ai": true
   },
   "globalTemp": {
-    "a": {
-      "status": true,
-      "until": 1787048463936
-    }
   }
 }
