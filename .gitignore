@@ -154,3 +154,6 @@ vite.config.ts.timestamp-*
 
 # HuggingFace AI Model
 models/**
+
+# saves
+config/saves
