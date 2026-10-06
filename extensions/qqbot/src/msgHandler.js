@@ -8,6 +8,7 @@ import { neonaicMessageIn } from '../../../src/message/messageIn.js';
 import { neonaicConfManager } from '../../../src/system/confManager.js';
 import { neonaicPlatformManager } from '../../../src/platform/platformManager.js';
 import { fromQQElement } from './emoji.js';
+import { pickAIList } from './aiRoute.js';
 import { neonaicCommandServer } from '../../../src/command/commandServer.js';
 import { neonaicCommandInterface } from '../../../src/command/commandInterface.js';
 import { NeonaicIllegalArgumentError } from '../../../src/utils/NeonaicNewableError.js';
@@ -21,12 +22,17 @@ import { NeonaicIllegalArgumentError } from '../../../src/utils/NeonaicNewableEr
 async function onPrivateMessageIn(event, pp) {
   /** 实例的 Profile 配置 */
   const profile_config = neonaicPlatformManager.getPlatformManager().getProfile(pp.profile);
-  
-  pp.logMsgIn('Private:', `from=USR#${event.user_id} | msg=` + parseString(event.message, false).replace(/\n/g, "\\n"));
-  const reply = await neonaicMessageIn.resolveReply(toMarkdown(event.message, pp), {
-    AI: profile_config.useAI, AIlist: profile_config.allowedAI,
+  const user = `USR#${event.user_id}`;
+  const markdown = toMarkdown(event.message, pp);
+
+  pp.logMsgIn('Private:', `from=${user} | msg=` + parseString(event.message, false).replace(/\n/g, "\\n"));
+  const reply = await neonaicMessageIn.resolveReply(markdown, {
+    AI: profile_config.useAI,
+    AIlist: pickAIList(profile_config.aiRouting, profile_config.allowedAI, {
+      scene: 'private', profile: pp.profile, user, group: '', executor: [user], text: markdown,
+    }),
     resolveCommandWith: {
-      executor: `USR#${event.user_id}`,
+      executor: user,
       privateExecutor: true,
       internalCall: false,
     }
@@ -46,12 +52,18 @@ async function onPrivateMessageIn(event, pp) {
 async function onGroupMessageIn(event, pp) {
   /** 实例的 Profile 配置 */
   const profile_config = neonaicPlatformManager.getPlatformManager().getProfile(pp.profile);
+  const user = `USR#${event.user_id}`;
+  const group = `GRP#${event.group_id}`;
+  const markdown = toMarkdown(event.message, pp);
 
-  pp.logMsgIn('Group:', `where=GRP#${event.group_id} | from=USR#${event.user_id} | msg=` + parseString(event.message, false).replace(/\n/g, "\\n"));
-  const reply = await neonaicMessageIn.resolveReply(toMarkdown(event.message, pp), {
-    AI: profile_config.useAI, AIlist: profile_config.allowedAI,
+  pp.logMsgIn('Group:', `where=${group} | from=${user} | msg=` + parseString(event.message, false).replace(/\n/g, "\\n"));
+  const reply = await neonaicMessageIn.resolveReply(markdown, {
+    AI: profile_config.useAI,
+    AIlist: pickAIList(profile_config.aiRouting, profile_config.allowedAI, {
+      scene: 'group', profile: pp.profile, user, group, executor: [user, group], text: markdown,
+    }),
     resolveCommandWith: {
-      executor: [`USR#${event.user_id}`, `GRP#${event.group_id}`],
+      executor: [user, group],
       privateExecutor: false,
       internalCall: false,
     }

@@ -72,6 +72,17 @@
   - 身份常量 **`BRIDGE_EXECUTOR = '$joyous'` 定义在 `src/protocol/dispatch.js`（拓展内），不在内核枚举里**；它是**权限键的一部分**，改名会让既有授权失效，必须同步迁移。
 - 命令 `joyous:mc`（别名无、任何人可用）、`joyous:bridge`（管理员）；AI 工具 `joyous:worldMeta`、`joyous:serverStatus`（名字保持与重构前一致，提示词里引用的是 `joyous_serverStatus`）。
 
+## AI 调用链与 Profile 选择
+
+- 链路：`平台事件 → 平台拓展（如 qqbot 的 msgHandler）→ neonaicMessageIn.resolveReply(msg, {AI, AIlist, resolveCommandWith}) → neonaicAI.askAI(msg, {AIlist, caller, overridePrompt, overrideAITool}) → callProvider`。
+- **AI Profile = `secret.json` 的 `oai[]` 条目**：`{ name, available, address, token, model, responseAPI, stream, tools, maxToolcall, prompt }`；`prompt` 指向 `config/prompts/<file>.md`（决定人格）。`tools` 支持 `"*"` / `"!tool"` / 白名单；`maxToolcall` 是工具调用最大轮次（下限钳 1）。
+- **`AIlist` 只过滤、不决定顺序**：`askAI` 里是 `getList('oai').filter(...)`，filter 保持源顺序 ⇒ **实际尝试顺序恒等于 `oai` 的声明顺序**。故 `use:["A","B"]` **不能**表达「A 优先、失败退到 B」；要改优先级只能动 `oai` 元素顺序（全局生效），或改 `askAI` 让 AIlist 定序。
+- 内核已内置两层可用性：`available === false` 跳过 + 列表内逐个 try、失败自动换下一个 ⇒ **「换 Profile 兜底」不需要业务层再写探测逻辑**。
+- `resolveReply` 的 `AI` 开关（平台 `useAI`）决定「用不用 AI」；`AIlist` 只决定「用谁」，两者正交。
+- **`PlatformManager` 构造 profile 是 `{ ...raw, _debug }`（`platformManager.js:63`）** ⇒ 平台 Profile 可携带任意自定义键并被原样透传，平台级配置**不需要改内核就能加**（qqbot 的 `aiRouting` 就走这条）。
+  - ⚠️ 但 `_writeProfileEnabled` 会用 `JSON5.stringify` 整体重写 `secret.json`（enable/disable 平台时），会**丢掉手写注释**。
+- **qqbot 的 AI 路由**：`extensions/qqbot/src/aiRoute.js` 的 `pickAIList(routing, fallback, ctx)`，规则来自 `platforms[].aiRouting`（默认 `[]` ⇒ 行为不变）。维度 `scene`/`group`/`user`/`permission`/`match`，when 字段间 AND、字段内 OR，首条命中即用；`use:"*"` = 沿用 `allowedAI`（路由只能收窄，永不越过平台白名单）。
+
 ## 配置文件
 
 - `config/main.json` — 名称/次名、`prefix`、`maxLogFileSize`、`detailedLog`（JSONC）；`config/saves/{permissions,ext}.json` 运行时写入；`config/prompts/<profile>.md` 各 AI Profile 提示词（**gitignore**）。
