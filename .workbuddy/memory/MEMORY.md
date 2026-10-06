@@ -83,11 +83,20 @@
 - `resolveReply` 的 `AI` 开关（平台 `useAI`）决定「用不用 AI」；`AIlist` 只决定「用谁」，两者正交。
 - **`PlatformManager` 构造 profile 是 `{ ...raw, _debug }`（`platformManager.js:63`）** ⇒ 平台 Profile 可携带任意自定义键并被原样透传，平台级配置**不需要改内核就能加**（qqbot 的 `aiRouting` 就走这条）。
   - ⚠️ 但 `_writeProfileEnabled` 会用 `JSON5.stringify` 整体重写 `secret.json`（enable/disable 平台时），会**丢掉手写注释**。
-- **qqbot 的 AI 路由**：`extensions/qqbot/src/aiRoute.js` 的 `pickAIList(routing, fallback, ctx)`，规则来自 `platforms[].aiRouting`（默认 `[]` ⇒ 行为不变）。维度 `scene`/`group`/`user`/`permission`/`match`，when 字段间 AND、字段内 OR，首条命中即用；`use:"*"` = 沿用 `allowedAI`（路由只能收窄，永不越过平台白名单）。
+- **qqbot 的 AI 路由**：`extensions/qqbot/src/aiRoute.js` 的 `pickAIList(routing, fallback, ctx)`，规则来自 `platforms[].aiRouting`（默认 `[]` ⇒ 行为不变）。维度 `scene`/`group`/`user`/`permission`/`match`，when 字段间 AND、字段内 OR，首条命中即用；`use:"*"` = 沿用 `allowedAI`（路由只能收窄，永不越过平台白名单）。`use` 亦支持 `"!x"`（原样透传给 `askAI` 求值）。
+- **用户名录 + 身份投递**（让模型知道「谁在说话」，而不是收到 `USR#<openid>` 这种噪声）：
+  - `src/message/userDirectory.js` 的 `neonaicUserDirectory`：`code → { name, pronoun?, note? }`，存 **`config/saves/identities.json`**。`pronoun` 是**自由文本**（「用『她』称呼」），不是枚举。
+  - **落点判据**：名录是通用概念（内核只认识「字符串 → 可读描述」，不认识任何平台 ID 形态）⇒ **放内核**；「某平台怎么拿到名字」是平台特定 ⇒ 放拓展。
+  - 投递方式：`askAI` 把它注册成**临时 AI 工具** `neonaic:speaker`（走 `overrideAITool`），模型按需调用；**不注入提示词**。`speaker` 选项：不传=按 `caller` 查名录 / 字符串=直接采用 / 对象=`{name,pronoun,note}` / `null`=明确不投递（提示词优化的内层调用就是这样）。
+  - 维护入口：`/neonaic:ai whois <list|get|set|unset|show> ...`；`set`/`unset` 要求私密上下文（与 `permission` 命令一致）。
+  - 平台自动登记：qqbot 每条群消息会用**免费的 `group_name`** 填名录（`persist:false, overwrite:false`，不写盘、不盖人工设置）。**QQ 群/C2C 消息拿不到发送者昵称**（`sender.user_name` 源自 `payload.author.username`，只有频道消息才有），所以昵称只能人工登记或被动机遇式登记。
+  - **未登记的 code 一律丢弃**，绝不把原始代号透给模型。
+- **`askAI` 的 tools 合并坑（已修）**：原写法 `Object.keys(tools).length ? { tools: joinObject(tools, buildToolSet(overrideAITool)) } : {}` —— `provider.tools` 解析为空时整个 `tools` 键被省略，**overrideAITool 被静默丢弃**。必须**先合并再判空**。
 
 ## 配置文件
 
 - `config/main.json` — 名称/次名、`prefix`、`maxLogFileSize`、`detailedLog`（JSONC）；`config/saves/{permissions,ext}.json` 运行时写入；`config/prompts/<profile>.md` 各 AI Profile 提示词（**gitignore**）。
+- **⚠️ `config/saves` 整个目录是 gitignore 的（`.gitignore:159`）**，但 `ext.json` / `permissions.json` 因**在该规则加入前就已被跟踪**，所以仍留在版本控制里；**新增文件（如 `identities.json`）不会入库**。给用户选项时别说成「会被 git 跟踪」——已错过一次。
 - `config/secret.json` — 模板（假 key，**入库**）；`secret.json`（根目录）— 真凭据（**gitignore**）。
 - 拓展自带配置放 `extensions/<name>/config.json`（如 joyous），由 `neonaicConfManager.getConfig()` 读取（路径相对项目根）；该实例**不会**自动重载，改完要 `/neonaic:reload`。
 

@@ -9,6 +9,7 @@ import { neonaicConfManager } from '../../../src/system/confManager.js';
 import { neonaicPlatformManager } from '../../../src/platform/platformManager.js';
 import { fromQQElement } from './emoji.js';
 import { pickAIList } from './aiRoute.js';
+import { neonaicUserDirectory } from '../../../src/message/userDirectory.js';
 import { neonaicCommandServer } from '../../../src/command/commandServer.js';
 import { neonaicCommandInterface } from '../../../src/command/commandInterface.js';
 import { NeonaicIllegalArgumentError } from '../../../src/utils/NeonaicNewableError.js';
@@ -24,6 +25,7 @@ async function onPrivateMessageIn(event, pp) {
   const profile_config = neonaicPlatformManager.getPlatformManager().getProfile(pp.profile);
   const user = `USR#${event.user_id}`;
   const markdown = toMarkdown(event.message, pp);
+  noteKnownNames(event, { user });
 
   pp.logMsgIn('Private:', `from=${user} | msg=` + parseString(event.message, false).replace(/\n/g, "\\n"));
   const reply = await neonaicMessageIn.resolveReply(markdown, {
@@ -55,6 +57,7 @@ async function onGroupMessageIn(event, pp) {
   const user = `USR#${event.user_id}`;
   const group = `GRP#${event.group_id}`;
   const markdown = toMarkdown(event.message, pp);
+  noteKnownNames(event, { user, group });
 
   pp.logMsgIn('Group:', `where=${group} | from=${user} | msg=` + parseString(event.message, false).replace(/\n/g, "\\n"));
   const reply = await neonaicMessageIn.resolveReply(markdown, {
@@ -95,6 +98,35 @@ export async function sendMsg(instance, who, msg) {
   }
   // 无效用户
   throw new NeonaicIllegalArgumentError("无法识别的用户：" + parseString(who));
+}
+
+/**
+ * 把平台免费附带的可读名字登记进用户名录（内存态，不写盘）。
+ *
+ * - **群名**：QQ 群消息自带 `group_name`，每条都有，一定拿得到。
+ * - **发送者昵称**：字段存在（`sender.user_name`，源自 `payload.author.username`），
+ *   但 QQ 官方接口在群/单聊场景下并不下发 `username`，实际通常为 undefined；
+ *   这里顺手登记，将来平台补齐了就自动生效，无需再改代码。
+ *
+ * 之所以传 `persist: false, overwrite: false`：
+ *   不写盘（避免每条消息一次磁盘写入），也不覆盖人工用 `ai whois set` 设置的名字。
+ *
+ * @param {{ group_name?: string, sender?: { user_name?: string } }} event
+ * @param {{ user?: string, group?: string }} targets
+ */
+function noteKnownNames(event, targets) {
+  /** @type {Array<[string, { name: string }]>} */
+  const pending = [];
+  if (targets.group && event?.group_name) pending.push([targets.group, { name: parseString(event.group_name) }]);
+  if (targets.user && event?.sender?.user_name) pending.push([targets.user, { name: parseString(event.sender.user_name) }]);
+
+  for (const [code, info] of pending) {
+    try {
+      neonaicUserDirectory.set(code, info, { persist: false, overwrite: false });
+    } catch (e) {
+      getLogger().platP.debug(`[qqbot] 无法把可读名登记进用户名录（${code}）：${e?.message ?? e}`);
+    }
+  }
 }
 
 /**

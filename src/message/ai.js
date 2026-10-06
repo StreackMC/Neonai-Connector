@@ -31,6 +31,7 @@ import { neonaicFileSystem, neonaicNetwork } from '../utils/io.js';
 import { NeonaicUriMeta } from '../utils/NeonaicUriMeta.js';
 import { neonaicMath } from '../utils/math.js';
 import { NeonaicNewable } from '../utils/NeonaicNewableClass.js';
+import { neonaicUserDirectory } from './userDirectory.js';
 
 /** 封禁用户使用 AI 的权限名 */
 const AI_BAN_PERMISSION = 'neonaic.toolcall.ai';
@@ -300,7 +301,15 @@ async function callProvider(provider, userMessage, overrideAITool = [], override
     const t = _toolFqn.get(v);
     return t ? t : null;
   });
-  const tools = buildToolSet(toolList);
+
+  // 先合并再判断是否为空。
+  // 原写法是在 `provider.tools` 解析结果非空时才把 overrideAITool 一起送出，
+  // 于是「Profile 没有启用任何工具」时，临时叠加的工具会被**静默丢弃**
+  // （例如只有 tools: [] 的 Profile 上，身份工具会凭空消失）。
+  const baseTools = buildToolSet(toolList);
+  const overrideTools = buildToolSet(Array.isArray(overrideAITool) ? overrideAITool : []);
+  const tools = neonaicChore.joinObject(baseTools, overrideTools);
+  const toolNames = Object.keys(tools);
 
   const messages = [
     { role: 'user', content: userMessage },
@@ -313,15 +322,16 @@ async function callProvider(provider, userMessage, overrideAITool = [], override
   // 下限钳制为 1，避免配置为 0/负数导致 stepCountIs 失效。
   const rawMax = Number(provider.maxToolcall);
   const maxToolcall = Math.max(1, Number.isFinite(rawMax) ? rawMax : 5);
+  const extraCount = Object.keys(overrideTools).length;
   getLogger().tool.info(
-    `${SESSION_ID} → ${provider.name}: ${provider.address}#${provider.model} (${endpoint}${provider.stream ? ', stream' : ''}, ${toolList.length} tools, maxToolcall=${maxToolcall})`,
+    `${SESSION_ID} → ${provider.name}: ${provider.address}#${provider.model} (${endpoint}${provider.stream ? ', stream' : ''}, ${toolNames.length} tools${extraCount ? ` 含临时 ${extraCount}` : ''}, maxToolcall=${maxToolcall})`,
   );
 
   const common = {
     model,
     system: systemPrompt,
     messages,
-    ...(Object.keys(tools).length ? { tools: neonaicChore.joinObject(tools, buildToolSet(Array.isArray(overrideAITool) ? overrideAITool : [])) } : {}),
+    ...(toolNames.length ? { tools } : {}),
     stopWhen: stepCountIs(maxToolcall),
     temperature: 0.25,
     topP: 0.9,
@@ -365,10 +375,34 @@ function isAIBanned(caller) {
 }
 
 /**
+ * 把 `speaker` 选项解析成一段可读描述。
+ *
+ * @param {string|object|null|undefined} speaker
+ *   - `undefined` → 用 `caller` 查用户名录（默认行为）
+ *   - `string`    → 直接采用（平台已自行解析好，最灵活）
+ *   - `object`    → 结构化 `{ name, pronoun, note }`；场景部分仍由 `caller` 查名录补齐
+ *   - `null`      → 明确不投递身份（如提示词优化这类非对话轮次）
+ * @param {string|string[]|undefined} caller 执行者链，用于查名录
+ * @returns {string} 可读描述；空串表示无可读身份信息
+ */
+function resolveSpeaker(speaker, caller) {
+  if (speaker === null || speaker === false) return '';
+  if (typeof speaker === 'string') return speaker.trim();
+  if (speaker && typeof speaker === 'object' && !Array.isArray(speaker)) {
+    const entry = neonaicUserDirectory.normalizeEntry(speaker);
+    if (!entry) return '';
+    // caller[0] 就是说话者本人，不要再当作场景渲染一遍
+    return neonaicUserDirectory.composeSentence(entry, Array.isArray(caller) ? caller.slice(1) : []);
+  }
+  return neonaicUserDirectory.describe(caller);
+}
+
+/**
  * @param {string} userMessage 用户传入消息或输入提示词
  * @param {object} options 选项
- * @param {string|string[]} [options.AIlist] 允许的 AI Profile 列表，"*" 表示全部
- * @param {string|string[]|null|undefined} [options.caller] 调用者标识（执行者链），用于封禁检查
+ * @param {string|string[]} [options.AIlist] 允许的 AI Profile 列表：`"*"` 全部、`"!name"` 排除（排除优先）
+ * @param {string|string[]|null|undefined} [options.caller] 调用者标识（执行者链），用于封禁检查与身份解析
+ * @param {string|object|null} [options.speaker] 向模型描述「当前对话者是谁」的方式，见 {@link resolveSpeaker}
  * @param {boolean} [options.preprocessWilling] 是否接受优化提示词，是否生效取决于用户配置
  * @param {AIToolDef[]|AIToolDef} [options.overrideAITool] 要叠加的 AI 工具，将临时覆写已有 AI 工具
  * @param {String} [options.overridePrompt] 存在此字符串将覆写 AI Profile 的提示词
@@ -380,6 +414,7 @@ async function askAI(userMessage, options) {
   const conf = neonaicChore.joinObject({
     AIlist: ['*'],
     caller: [],
+    speaker: undefined,
     preprocessWilling: false,
     overrideAITool: [],
     overridePrompt: undefined,
@@ -403,6 +438,26 @@ async function askAI(userMessage, options) {
       }
       : null;
   });
+
+  // 身份投递：把「当前对话者是谁」注册成一个**临时 AI 工具**，由模型按需调用。
+  //
+  // 为什么走工具而不是拼进提示词：
+  //   1. 不污染 system prompt，不影响提示词缓存（前缀稳定 ⇒ 计费与命中都更友好）；
+  //   2. 复用既有的 overrideAITool 通道，不新增参数管线；
+  //   3. 职责清晰 —— 身份是「可查询的事实」，而不是每轮都必须塞给模型的上下文。
+  // 代价：模型不问就不知道。若某些场景希望「不用说也知道」，调用方改传 `speaker: '…'`
+  // 并自行拼进消息，或后续再加一个显式的注入开关。
+  const speakerText = resolveSpeaker(conf.speaker, conf.caller);
+  if (speakerText) {
+    conf.overrideAITool.push({
+      namespace: 'neonaic',
+      name: 'speaker',
+      description: '查询当前与你对话的人是谁。'
+        + '返回本地名录中登记的可读身份（昵称、称呼偏好等）；名录未登记时会如实说明。',
+      inputSchema: z.object({}),
+      execute: async () => speakerText,
+    });
+  }
 
   // 搜索可用的 AI Profile
   // AIlist 与 tools 共用同一套模式规则：'*' 全选、'!name' 排除（排除优先）、'!*' 全排除。
@@ -434,6 +489,8 @@ async function askAI(userMessage, options) {
       usrMsgNext = await neonaicAI.askAI(usrMsgNext, {
         AIlist: neonaicConfManager.getConfig(neonaicConfManager.CONFIG_PATHS.main).getList('ai.model2Optimize', true),
         caller: conf.caller,
+        // 提示词优化不是对话轮次，明确不投递身份（否则会白挂一个 speaker 工具）
+        speaker: null,
         preprocessWilling: false, // 避免无限递归
         overridePrompt: `请将用户输入优化为更适合 LLM AI 理解的提示词，可以少量增删词语，但不得改变原意。`,
       });
@@ -550,19 +607,87 @@ neonaicCommandServer.registerCommand('neonaic', 'ai', async function (sub, ...ar
       return aiBan(ctx, ...args);
     case 'pardon':
       return aiPardon(ctx, ...args);
+    case 'whois':
+      return aiWhois(ctx, ...args);
     default:
       return `用法: ${cmdAIUsage()}`;
   }
 }, {
   permissions: [[neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.command.ai"]],
   description: "AI 工具与 Profile 管理",
-  usage: "ai <tool|profile|ban|pardon> ...",
+  usage: "ai <tool|profile|ban|pardon|whois> ...",
   alias: ['askai'],
 });
 
 /** ai 命令用法文本 */
 function cmdAIUsage() {
-  return "ai tool list | ai tool test <tool> <json5> | ai profile list | ai profile <enable|disable> <profile> | ai profile test <profile> <msg> | ai ban <user> [time] | ai pardon <user>";
+  return "ai tool list | ai tool test <tool> <json5> | ai profile list | ai profile <enable|disable> <profile> | ai profile test <profile> <msg> | ai ban <user> [time] | ai pardon <user> | ai whois <list|get|set|unset|show> ...";
+}
+
+/**
+ * ai whois 子命令：维护「内部代号 → 可读身份」的用户名录。
+ *
+ * 用途：让模型知道「当前对话者是谁」，而不是收到一串无意义的 openid。
+ * 名录由 `askAI` 在每次调用时按需投递成一个临时 AI 工具（`neonaic:speaker`）。
+ *
+ * 用法：
+ *   whois list                          列出全部登记
+ *   whois get <code>                    查看单条原始记录
+ *   whois set <code> <名字> [称呼偏好]   新增/更新；名字后的剩余参数合并为称呼偏好
+ *   whois unset <code>                  删除
+ *   whois show <code...>                预览模型会看到的描述（第一个是说话者，其余是场景）
+ *
+ * `<code>` 就是执行者链里的标识（与 `config/saves/permissions.json` 的键一致），
+ * 如 `USR#3f2a…`（私聊/群成员）、`GRP#7E6B…`（群）。
+ * @apiNote 条目还支持 `note` 字段（补充说明），仅可手工编辑 `config/saves/identities.json` 添加。
+ *
+ * @param {import('../command/commandServer.js').NeonaicCommandContext} ctx
+ * @param {...string} args
+ */
+function aiWhois(ctx, ...args) {
+  const op = args[0];
+  /** 名录改动与权限设置同属敏感操作，与 `permission` 命令保持一致：要求私密上下文 */
+  const requirePrivate = () => `“${neonaicConfManager.getBotName()}”未能完成操作，因为当前上下文不是私密的。`;
+
+  switch (op) {
+    case 'list': {
+      const rows = neonaicUserDirectory.list();
+      if (!rows.length) {
+        return `用户名录为空。可用 “ai whois set <code> <名字>” 添加，或直接编辑 ${neonaicUserDirectory.FILE}`;
+      }
+      return [`用户名录（${rows.length} 条）：`, ...rows.map((r) => `${r.code} → ${neonaicUserDirectory.renderEntry(r.entry)}`)].join('\n');
+    }
+    case 'get': {
+      const code = args[1];
+      if (!code) return '用法: ai whois get <code>';
+      const entry = neonaicUserDirectory.get(code);
+      return entry ? `${code} → ${JSON.stringify(entry)}` : `用户名录中没有 ${code}`;
+    }
+    case 'set': {
+      if (!ctx.privateExecutor) return requirePrivate();
+      const [code, name] = [args[1], args[2]];
+      if (!code || !name) return '用法: ai whois set <code> <名字> [称呼偏好]';
+      const pronoun = args.slice(3).join(' ').trim();
+      const entry = neonaicUserDirectory.set(code, pronoun ? { name, pronoun } : { name });
+      return `已登记 ${code} → ${neonaicUserDirectory.renderEntry(entry)}（名录共 ${neonaicUserDirectory.size()} 条）`;
+    }
+    case 'unset': {
+      if (!ctx.privateExecutor) return requirePrivate();
+      const code = args[1];
+      if (!code) return '用法: ai whois unset <code>';
+      return neonaicUserDirectory.remove(code)
+        ? `已从用户名录删除 ${code}`
+        : `用户名录中没有 ${code}`;
+    }
+    case 'show': {
+      const codes = args.slice(1);
+      if (!codes.length) return '用法: ai whois show <code...>（第一个是说话者，其余是场景）';
+      const text = neonaicUserDirectory.describe(codes);
+      return text || '（这些代号均未登记，模型将看不到任何身份信息）';
+    }
+    default:
+      return '用法: ai whois <list|get|set|unset|show> ...';
+  }
 }
 
 /**
