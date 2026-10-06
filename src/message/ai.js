@@ -145,50 +145,104 @@ function matchToolPattern(pattern) {
 }
 
 /**
- * 解析 profile.tools 配置，返回该 Profile 可用工具的 fqn 列表。
- *
- * 规则：
- *   - 空 / 未设置 → 不得调用任何工具
- *   - "*" → 全部可用
- *   - "!tool" → 屏蔽（含模糊匹配）
- *   - 其余 → 白名单（含模糊匹配）
- *
- * @param {string|string[]|undefined} toolsConfig
- * @returns {string[]} 可用工具的 fqn 列表
+ * 精确匹配模式：候选名完全相等才算命中。
+ * @param {string[]} candidates
+ * @returns {(pattern: string) => string[]}
  */
-function resolveToolList(toolsConfig) {
-  if (toolsConfig == null) return [];
-  const rules = Array.isArray(toolsConfig) ? toolsConfig : [toolsConfig];
+function exactMatch(candidates) {
+  const set = new Set(candidates);
+  return (pattern) => (set.has(pattern) ? [pattern] : []);
+}
+
+/**
+ * 把「模式列表」求值为一组具体名字。
+ *
+ * 规则（`tools` 与 `AIlist` **共用同一套**，避免两处语义各自漂移）：
+ *   - `"*"`     → 纳入全部候选
+ *   - `"!name"` → 排除（支持模糊匹配）；**排除优先于纳入**
+ *   - `"!*"`    → 排除全部
+ *   - 其余      → 纳入（支持模糊匹配）
+ *
+ * @param {string|string[]|undefined} patterns 模式列表
+ * @param {string[]} candidates 候选全集
+ * @param {object} [options]
+ * @param {(pattern: string) => string[]} [options.match] 单模式匹配函数，默认按候选名精确匹配
+ * @param {boolean} [options.requireInclusion=false] 「没有任何纳入项」是否视为配置错误
+ * @param {string} [options.label='模式列表'] 报错信息里使用的名称
+ * @returns {string[]} 求值结果；顺序保持原有语义（全选时按候选顺序，否则按模式的书写顺序）
+ * @throws {NeonaicIllegalArgumentError} 声明了 requireInclusion 且没有任何纳入项
+ */
+function resolvePatternList(patterns, candidates, options = {}) {
+  const {
+    match = exactMatch(candidates),
+    requireInclusion = false,
+    label = '模式列表',
+  } = options;
+
+  if (patterns == null) return [];
+  const rules = Array.isArray(patterns) ? patterns : [patterns];
   if (!rules.length) return [];
 
-  const allFqns = _allTools.map((t) => `${t.namespace}:${t.name}`);
   let allowAll = false;
+  let hasInclusion = false;
   const allowed = new Set();
   const blocked = new Set();
+  /** 没有匹配到任何候选的模式，用于提示拼写错误 */
+  const unmatched = [];
 
   for (const raw of rules) {
     if (typeof raw !== 'string' || !raw) continue;
     const isNegate = raw.startsWith('!');
     const pattern = isNegate ? raw.slice(1) : raw;
+    if (!pattern) continue;
 
     if (pattern === '*') {
       if (isNegate) blocked.add('*');
-      else allowAll = true;
+      else { allowAll = true; hasInclusion = true; }
       continue;
     }
 
-    const hits = matchToolPattern(pattern);
-    if (isNegate) {
-      for (const h of hits) blocked.add(h);
-    } else {
-      for (const h of hits) allowed.add(h);
+    const hits = match(pattern);
+    if (!hits.length) {
+      unmatched.push(raw);
+      continue;
     }
+    if (!isNegate) hasInclusion = true;
+    for (const h of hits) (isNegate ? blocked : allowed).add(h);
   }
 
-  if (blocked.has('*')) return []; // "!*" 屏蔽全部
+  // 只写排除项时「究竟想选什么」是不明确的（是笔误，还是想表达「除它之外全部」？）。
+  // 与其静默猜一个，不如直接报错 —— 「配置看起来生效了、其实一个都没选」是最难查的那类故障。
+  if (requireInclusion && !hasInclusion) {
+    throw new NeonaicIllegalArgumentError(
+      `${label} 没有任何纳入项：${JSON.stringify(rules)}。`
+      + `请显式写出要纳入的范围，例如 ["*", "!x"]`
+      + (unmatched.length ? `；另外，以下模式未匹配到任何候选（可能拼写有误）：${unmatched.join(', ')}` : '')
+      + '。',
+    );
+  }
 
-  const source = allowAll ? allFqns : [...allowed];
-  return source.filter((f) => !blocked.has(f));
+  if (blocked.has('*')) return []; // "!*" 排除全部
+
+  const source = allowAll ? candidates : [...allowed];
+  return source.filter((c) => !blocked.has(c));
+}
+
+/**
+ * 解析 profile.tools 配置，返回该 Profile 可用工具的 fqn 列表。
+ *
+ * 规则见 {@link resolvePatternList}；空 / 未设置 → 不得调用任何工具。
+ * @apiNote 这里刻意**不启用** requireInclusion：`tools: ["!x"]` 的既有语义是「一个都不给」，
+ *          改成报错属于行为变更，留给显式决策（`AIlist` 走的是严格模式）。
+ *
+ * @param {string|string[]|undefined} toolsConfig
+ * @returns {string[]} 可用工具的 fqn 列表
+ */
+function resolveToolList(toolsConfig) {
+  return resolvePatternList(toolsConfig, _allTools.map((t) => `${t.namespace}:${t.name}`), {
+    match: matchToolPattern,
+    label: 'tools',
+  });
 }
 
 // ---- 调用 ----
@@ -351,13 +405,27 @@ async function askAI(userMessage, options) {
   });
 
   // 搜索可用的 AI Profile
-  const isAll = conf.AIlist.includes('*');
-  const oaiList = neonaicConfManager.getConfig(neonaicConfManager.CONFIG_PATHS.secret).getList('oai').filter((v) => {
-    if (v?.available === false) return false;
-    if (isAll) return true;
-    return conf.AIlist.includes(v?.name);
-  });
-  if (!oaiList.length) throw new NeonaicIllegalArgumentError('未找到可用的 AI Profile');
+  // AIlist 与 tools 共用同一套模式规则：'*' 全选、'!name' 排除（排除优先）、'!*' 全排除。
+  // 刻意启用严格模式：只写排除项会被判为配置错误，而不是静默选出一个空集。
+  const allProfiles = neonaicConfManager.getConfig(neonaicConfManager.CONFIG_PATHS.secret).getList('oai');
+  const allProfileNames = allProfiles
+    .map((p) => p?.name)
+    .filter((n) => typeof n === 'string' && n);
+  const chosen = new Set(resolvePatternList(conf.AIlist, allProfileNames, {
+    requireInclusion: true,
+    label: 'AIlist',
+  }));
+
+  // available: false 是独立的可用性闸门，不受 AIlist 的排除语义影响
+  const oaiList = allProfiles.filter((v) => v?.available !== false && chosen.has(v?.name));
+
+  if (!oaiList.length) {
+    throw new NeonaicIllegalArgumentError(
+      chosen.size === 0
+        ? '未找到可用的 AI Profile（AIlist 把全部 Profile 都排除了）'
+        : '未找到可用的 AI Profile（可能都被 available:false 禁用，或不在 AIlist 内）',
+    );
+  }
 
   // 尝试优化提示词
   let usrMsgNext = parseString(userMessage);

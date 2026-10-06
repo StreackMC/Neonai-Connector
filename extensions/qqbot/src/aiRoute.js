@@ -11,6 +11,8 @@
  * 与平台白名单的关系：
  *   `use: "*"` 的含义是**沿用平台的 `allowedAI`**，而不是「全部 Profile」。
  *   路由因此永远无法越过 `allowedAI` 这道白名单，最坏情况只是把范围收窄。
+ *   `use` 里也可以写排除项 `"!x"`（如 `["*", "!dev"]`），语义与 `tools` / `AIlist` 一致、
+ *   由 `askAI` 统一求值；**只写排除项不写纳入项会被判为配置错误**。
  *
  * ⚠️ 已知限制（不是 bug，是内核语义）：
  *   `AIlist` 只做过滤、**不决定尝试顺序** —— `askAI` 里是 `getList('oai').filter(...)`，
@@ -27,6 +29,9 @@ import { parseString } from '../../../src/utils/chore.js';
 
 /** 规则里代表「沿用平台白名单」的写法 */
 const INHERIT = '*';
+
+/** 排除项前缀；含义与 `tools` / `AIlist` 一致：排除优先于纳入 */
+const NEGATE = '!';
 
 /** 文本正则的默认 flags */
 const DEFAULT_REGEX_FLAGS = 'i';
@@ -117,7 +122,12 @@ function matchesRule(when, ctx) {
 }
 
 /**
- * 展开规则的 `use`：`"*"` 替换为平台白名单，其余原样保留并去重。
+ * 展开规则的 `use`：`"*"` 替换为平台白名单，`"!x"` 原样透传，其余按名保留并去重。
+ *
+ * `"!x"` 是**指令**而不是名字，因此不在这里求值 —— 交给 `askAI` 统一处理，
+ * 保证全项目只有一份「`!` 排除」实现（`ai.js` 的 `resolvePatternList`，`tools` 与 `AIlist` 共用）。
+ * 只写排除项（如 `use: ["!dev"]`）会被 `askAI` 判为配置错误，提示作者补上纳入项。
+ *
  * @param {string|string[]|undefined} use
  * @param {string[]} base 平台白名单
  * @returns {string[]}
@@ -130,6 +140,10 @@ function expandUse(use, base) {
 
   const out = [];
   for (const name of names) {
+    if (name.startsWith(NEGATE)) {
+      if (!out.includes(name)) out.push(name);
+      continue;
+    }
     if (name === INHERIT) {
       for (const b of base) if (!out.includes(b)) out.push(b);
       continue;
@@ -164,5 +178,6 @@ function normalizeList(value) {
 
 export const qqbotAIRoute = Object.freeze({
   INHERIT,
+  NEGATE,
   pickAIList,
 });
