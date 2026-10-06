@@ -13,5 +13,5 @@ process.argv.push('--debug');
 
 import('./main.js').catch((err) => {
   console.error('[FATAL] 启动失败:', err);
-  process.exit(1);
+  debugger;
 });
