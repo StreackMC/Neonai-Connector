@@ -326,7 +326,7 @@ async function askAI(userMessage, options) {
   const conf = neonaicChore.joinObject({
     AIlist: ['*'],
     caller: [],
-    preprocessWilling: true,
+    preprocessWilling: false,
     overrideAITool: [],
     overridePrompt: undefined,
   }, options);
