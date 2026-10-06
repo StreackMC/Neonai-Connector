@@ -568,6 +568,11 @@ async function aiProfile(ctx, ...args) {
       const profileName = args[1];
       const msg = args.slice(2).join(' ');
       if (!profileName || !msg) return '用法: ai profile test <profile> <msg>';
+      if (profileName.trim() == '*') {
+        // 执行全量测试
+        return await askAI(msg, { AIlist: ['*'], caller: ctx.caller, preprocessWilling: false });
+      }
+      // 非全量测试
       const target = findProvider(profileName);
       if (!target) return `未找到 AI Profile: ${profileName}`;
       try {
