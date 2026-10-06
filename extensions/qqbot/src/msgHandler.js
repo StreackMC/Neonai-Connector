@@ -85,31 +85,6 @@ export async function sendMsg(instance, who, msg) {
   throw new NeonaicIllegalArgumentError("无法识别的用户：" + parseString(who));
 }
 
-neonaicCommandServer.registerCommand('qqbot', 'qbsend', async function (profile, who, ...msg) {
-  // 获取实例
-  const instance = neonaicPlatformManager.getPlatformManager().getPlatform(parseString(profile));
-  if (!(instance instanceof PlatformQQBot)) throw new NeonaicIllegalArgumentError("指定的 Platform Profile 无效");
-  // 发送消息
-  const messageContent = msg.map(v => parseString(v, false)).join('');
-  try {
-    const result = await sendMsg(instance, who, messageContent);
-    getLogger().platP.debug(`[qqbot] 向`, who, `@`, profile, `发送消息`, msg, `：`, result);
-    instance.logMsgOut('Command:', `to=${who} | msg=`, messageContent.replace(/\n/g, "\\n"));
-    // SendResult 可能为「消息审核中」状态
-    if (result?.audit_status === 'pending') {
-      return `“${neonaicConfManager.getBotName()}”已向[${who}]发送消息，但消息正在审核中。`;
-    }
-    return `“${neonaicConfManager.getBotName()}”成功向[${who}]发送指定消息。`;
-  } catch (err) {
-    getLogger().platP.debug(`[qqbot] 向`, who, `@`, profile, `发送消息失败：`, err.message);
-    return `“${neonaicConfManager.getBotName()}”无法向[${who}]发送指定消息，因为“${err.message}”。`;
-  }
-}, {
-  permissions: [[neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "qqbot.command.qbsend"]],
-  description: "使用官方QQBOT向指定渠道发送消息，需要对应渠道允许接收机器人消息：群聊需要群主开启推送权限；私聊需要加为好友并开启推送权限。",
-  usage: "qbsend <profile> <who> <...msg>",
-})
-
 /**
  * @param {qqBotBackend.Sendable} raw 原始信息
  * @param {PlatformQQBot} pp 

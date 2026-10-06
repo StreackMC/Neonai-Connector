@@ -74,6 +74,24 @@ export class PlatformQQBot extends NeonaiPlatform {
       );
     });
   }
+
+  sendMsg(who, ...msg) {
+    // 发送消息
+    const messageContent = msg.map(v => parseString(v, false)).join('');
+    try {
+      const result = await sendMsg(this, who, messageContent);
+      getLogger().platP.debug(`[qqbot] 向`, who, `@`, profile, `发送消息`, msg, `：`, result);
+      this.logMsgOut('Command:', `to=${who} | msg=`, messageContent.replace(/\n/g, "\\n"));
+      // SendResult 可能为「消息审核中」状态
+      if (result?.audit_status === 'pending') {
+        return `“${neonaicConfManager.getBotName()}”已向[${who}]发送消息，但消息正在审核中。`;
+      }
+      return `“${neonaicConfManager.getBotName()}”成功向[${who}]发送指定消息。`;
+    } catch (err) {
+      getLogger().platP.debug(`[qqbot] 向`, who, `@`, profile, `发送消息失败：`, err.message);
+      return `“${neonaicConfManager.getBotName()}”无法向[${who}]发送指定消息，因为“${err.message}”。`;
+    }
+  }
 }
 
 neonaicPlatformManager.registerPlatform(PlatformQQBot);
