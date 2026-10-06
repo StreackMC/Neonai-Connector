@@ -69,6 +69,7 @@
 - **`dispatch.js` 是唯一接缝**：认识命令系统但不认识传输。http/uds 都只调 `joyousDispatcher.execute()`。
 - **UDS 必须自己做心跳 + 退避重连**：半开连接不会自己报错；退避**只在握手成功时清零**（防「连上就被踢」变成重连风暴）。作为连接方**绝不删对端的套接字文件**，只在 `ECONNREFUSED` 时提示陈留套接字。
 - **`$joyous` 三层白名单**（复用既有权限系统，无新机制）：① 总闸 `joyous.bridge.execute`（默认不授予）② 命令自身 `permissions` ③ 空权限命令要额外持有 `joyous.command.<ns>:<name>`。授权：`/neonaic:permission set $joyous <perm> true`；查看：`/joyous:bridge`。
+  - 身份常量 **`BRIDGE_EXECUTOR = '$joyous'` 定义在 `src/protocol/dispatch.js`（拓展内），不在内核枚举里**；它是**权限键的一部分**，改名会让既有授权失效，必须同步迁移。
 - 命令 `joyous:mc`（别名无、任何人可用）、`joyous:bridge`（管理员）；AI 工具 `joyous:worldMeta`、`joyous:serverStatus`（名字保持与重构前一致，提示词里引用的是 `joyous_serverStatus`）。
 
 ## 配置文件
@@ -91,6 +92,7 @@
 ## 注意事项
 
 - **⚠️ NeonaicConfig 默认 AUTOSAVE**：任何 `put*`/`set`/`remove` **立即落盘**。测试脚本**绝不要指向真实配置文件**，用临时副本或先 `setWriteMode('inertia')`（已踩过：测试键写进了 `config/saves/ext.json`）。
+- **内核不得出现任何拓展名**（解耦的硬判据）：判断一处改动是否破坏「拓展 ↔ 本体解耦」，看它**会不会留下「本体只在某拓展存在时才有意义」的东西**。据此：拓展专属的**合成执行者身份**（如 `$joyous`）必须定义在拓展内，**不得写进内核 `COMMAND_ENUMS`**；`$` 前缀是内核保留的合成身份命名空间（内核自身只占 `$console` / `$unknown`），权限按执行者字符串存授权，**不需要枚举登记**。反例对照：`NeonaicProtocolError` 这类**通用错误词汇**进内核不算耦合（不点名任何拓展）。守卫：自检里断言 `src/` 全目录 grep 不到拓展名，且 `COMMAND_ENUMS.FROM_JOYOUS === undefined`。
 - NeonaicConfig 写出的是 **JSON5**（键无引号、单引号字符串），读回要 `JSON5.parse`；嵌套路径**不能下探数组**（`a.0.b` 退化成顶层字面键），`isReachable` 可提前发现退化。
 - macOS 大小写不敏感，`import './AI.js'` 这类大小写错误本地不报、**Linux 上必炸**。
 - Git 按用户全局的**权责边界**执行（见 `~/.workbuddy/MEMORY.md`）：身份 `Neonai <neonai+coding@kdxiaoyi.top>`，仅 `git -c` 携带、不写 config；Conventional Commits 中英双语；**必须主动提交自己所做的修改**，只 add 本次任务产出的文件（含 `.workbuddy/memory/`），**不得提交与任务无关的代码，不得 push/pull/fetch/rebase/merge**。

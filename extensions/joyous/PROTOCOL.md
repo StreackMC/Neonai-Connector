@@ -373,8 +373,15 @@ JoyousPlugin                          Neonaic
 
 ## 11. 权限模型（`$joyous` 白名单）
 
-JoyousPlugin 被视为**不受信任的外部身份** `$joyous`（与 `$console` 同级的虚拟执行者，
-枚举定义在 `src/command/commandInterface.js` 的 `COMMAND_ENUMS.FROM_JOYOUS`）。
+JoyousPlugin 被视为**不受信任的外部身份** `$joyous`。
+
+它是**拓展自定义的合成执行者**，常量定义在 `src/protocol/dispatch.js` 的 `BRIDGE_EXECUTOR`，
+**不在内核的 `COMMAND_ENUMS` 里** —— 内核的 `$` 前缀只是「合成身份」的保留命名空间（自身只占
+`$console` / `$unknown`），拓展在其中自取名字；而权限系统按**执行者字符串**存授权，无需任何登记。
+把 `$joyous` 写进内核会让本体因一个可拆卸的拓展而多出死常量，破坏「拓展与本体解耦」。
+
+> ⚠️ `$joyous` 是权限键的一部分（`config/saves/permissions.json` 的 `$joyous` 段）。
+> 改名会让既有授权全部失效，必须同步迁移。
 
 它**不具备** `internalCall` 语义，因此一切权限都必须由权限系统显式授予。
 白名单由三层叠加而成——全部复用内核既有权限机制，没有新增任何权限框架：

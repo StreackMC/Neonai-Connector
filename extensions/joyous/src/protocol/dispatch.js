@@ -22,7 +22,6 @@
  *   /neonaic:permission set $joyous joyous.command.joyous:mc true
  */
 
-import { neonaicCommandInterface } from '../../../../src/command/commandInterface.js';
 import { neonaicCommandServer } from '../../../../src/command/commandServer.js';
 import { neonaicPermissionServer } from '../../../../src/command/permissionServer.js';
 import {
@@ -37,8 +36,19 @@ import {
   MAX_OUTPUT_LENGTH,
 } from './constants.js';
 
-/** Joyous 虚拟执行者标识 */
-export const BRIDGE_EXECUTOR = neonaicCommandInterface.COMMAND_ENUMS.FROM_JOYOUS;
+/**
+ * JoyousPlugin 的合成执行者标识。
+ *
+ * 为什么定义在拓展内、而不是内核的 `COMMAND_ENUMS`：
+ *   这个身份**只对 joyous 有意义**，属于「可拆卸拓展」的一部分。写进内核会让本体凭空多出一个
+ *   只在某拓展存在时才成立的死常量 —— 那正是「拓展与本体解耦」要排除的耦合。
+ *   内核只声明自身需要的合成身份（`$console` / `$unknown`）；`$` 前缀是合成身份的保留命名空间，
+ *   拓展可以在其中定义自己的名字，而权限系统按**执行者字符串**存授权，因此不需要任何枚举登记。
+ *
+ * ⚠️ 这个名字是**权限键的一部分**（`config/saves/permissions.json` 中的 `$joyous`）：
+ *    改名会让既有授权全部失效，必须同步迁移。
+ */
+export const BRIDGE_EXECUTOR = '$joyous';
 
 /** 总闸权限名：未授予时整个桥接不可执行任何命令 */
 export const BRIDGE_GATE_PERMISSION = 'joyous.bridge.execute';
