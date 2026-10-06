@@ -77,6 +77,8 @@
 - 链路：`平台事件 → 平台拓展（如 qqbot 的 msgHandler）→ neonaicMessageIn.resolveReply(msg, {AI, AIlist, resolveCommandWith}) → neonaicAI.askAI(msg, {AIlist, caller, overridePrompt, overrideAITool}) → callProvider`。
 - **AI Profile = `secret.json` 的 `oai[]` 条目**：`{ name, available, address, token, model, responseAPI, stream, tools, maxToolcall, prompt }`；`prompt` 指向 `config/prompts/<file>.md`（决定人格）。`tools` 支持 `"*"` / `"!tool"` / 白名单；`maxToolcall` 是工具调用最大轮次（下限钳 1）。
 - **`AIlist` 只过滤、不决定顺序**：`askAI` 里是 `getList('oai').filter(...)`，filter 保持源顺序 ⇒ **实际尝试顺序恒等于 `oai` 的声明顺序**。故 `use:["A","B"]` **不能**表达「A 优先、失败退到 B」；要改优先级只能动 `oai` 元素顺序（全局生效），或改 `askAI` 让 AIlist 定序。
+- **模式列表语法（`tools` 与 `AIlist` 共用 `resolvePatternList`，一份实现）**：`"*"` 全选 / `"!name"` 排除（**排除优先于纳入**）/ `"!*"` 全排除；`"!name"` 亦支持 tools 的模糊匹配。**两处严格度不同**：`AIlist` **严格**（只写排除项 → 抛错「没有任何纳入项」，并点出未匹配到候选的模式），`tools` **宽松**（`["!x"]` = 一个都不给，历史行为，未改）。
+- `available: false` 是**独立闸门**，不受 `!` 排除语义影响（即使被 AIlist 明确纳入也不会被尝试）。
 - 内核已内置两层可用性：`available === false` 跳过 + 列表内逐个 try、失败自动换下一个 ⇒ **「换 Profile 兜底」不需要业务层再写探测逻辑**。
 - `resolveReply` 的 `AI` 开关（平台 `useAI`）决定「用不用 AI」；`AIlist` 只决定「用谁」，两者正交。
 - **`PlatformManager` 构造 profile 是 `{ ...raw, _debug }`（`platformManager.js:63`）** ⇒ 平台 Profile 可携带任意自定义键并被原样透传，平台级配置**不需要改内核就能加**（qqbot 的 `aiRouting` 就走这条）。
