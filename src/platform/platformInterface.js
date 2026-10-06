@@ -68,5 +68,13 @@ export class NeonaiPlatform extends NeonaicNewable {
     const type_ = (this.constructor.type) ? this.constructor.type : '<UNKNOWN>';
     getLogger().chatOut.info(`<${type_}/${this.profile}>`, ...msg);
   }
-}
 
+  /**
+   * 发送消息
+   * @param {string} user 用户标识
+   * @param {...*} msg 消息，自动转文本
+   */
+  sendMsg(user, ...msg) {
+    throw new NeonaicUnsupportedOperationError(`Platform "${this.type}" 未实现 sendMsg()`);
+  }
+}

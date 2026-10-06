@@ -16,6 +16,7 @@ import { neonaicConfManager } from '../system/confManager.js';
 import { neonaicCommandInterface } from '../command/commandInterface.js';
 import { NeonaicNewable } from '../utils/NeonaicNewableClass.js';
 import { NeonaicIllegalStateError } from '../utils/NeonaicNewableError.js';
+import { parseString } from '../utils/chore.js';
 
 // ---- 颜色 ----
 const CYAN   = '\x1b[36m';
@@ -90,11 +91,19 @@ export class PlatformManager extends NeonaicNewable {
     neonaicCommandServer.registerCommand('neonaic', 'platform', async function (...args) {
       /** @type {import('../command/commandServer.js').NeonaicCommandContext} */
       const ctx = this;
-      const [sub, name] = args;
+      const [sub, name, ...otherPayload] = args;
       if (!ctx.privateExecutor) return `${RED}“${neonaicConfManager.getBotName()}”无法执行“platform”，因为当前上下文不是私密的。`;
       if (!sub) return `${RED}用法: platform ${CYAN}start|stop|enable|disable${R} ${DIM}<name>${R}  或  platform ${CYAN}list${R}`;
 
       switch (sub) {
+        case 'send':
+          if (!name) return `${RED}用法: platform send <name> <user> <msg>${R}`;
+          if (otherPayload.length < 2) return `${RED}用法: platform send <name> <user> <msg>${R}`;
+          const msg = otherPayload.slice(1).map(parseString).join(' ');
+          const p = clazzThis.getPlatform(name);
+          return (p)
+            ? await p.sendMsg(otherPayload[0], msg) || `<${CYAN}${name}${R}> 已尝试向“${otherPayload[0]}”发送消息“${msg}”`
+            : `${RED}未找到平台“${name}”，或其尚未运行。${R}`;
         case 'start':
           if (!name) return `${RED}用法: platform start <name>${R}`;
           await clazzThis.start(name);
@@ -116,7 +125,7 @@ export class PlatformManager extends NeonaicNewable {
         default:
           return (
             `${RED}未知子命令: ${sub}${R}\n` +
-            `${DIM}用法: platform ${CYAN}start|stop|enable|disable${R} ${DIM}<name>  或  platform ${CYAN}list${R}`
+            `${DIM}用法: platform ${CYAN}start|stop|enable|disable${R} ${DIM}<name>  或  platform send <name> <user> <msg>  或  platform ${CYAN}list${R}`
           );
       }
     }, {
