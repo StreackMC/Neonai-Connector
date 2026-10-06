@@ -22,6 +22,12 @@
 const COMMAND_ENUMS = {
   /** 控制台执行的执行者名 @apiNote 请使用 {@link CommandContext.internalCall} 确认本点，以明确语义和避免恶意攻击。 */
   FROM_CONSOLE: '$console',
+  /**
+   * 由 Joyous 桥接（JoyousPlugin 经通信层）发起的执行者名。
+   * @apiNote 这是一个**不受信任**的外部身份：它不具备 `internalCall` 语义，
+   *          一切权限都必须由权限系统显式授予（见 `extensions/joyous/PROTOCOL.md` 的权限模型）。
+   */
+  FROM_JOYOUS: '$joyous',
   /** 未知执行者，这一般表示当前上下文的某一层出现了不正确指定的执行者 */
   FROM_UNKNOW: '$unknown',
   /** 管理员权限 */

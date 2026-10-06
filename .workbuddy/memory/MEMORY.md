@@ -59,10 +59,29 @@
 - **只有 `invalid` 不消耗机会**（数字没用对、语法错误、除数为零、用到幂/根号/模）；结算路径 `clearSession` + `#usable = false`。`joined = args.join('')` 使算式被空格拆开也能解析，但裸命令要单独判，否则走成「没有收到算式」。
 - `MAX_LISTED_IN_GAME`（默认 `Infinity`）控制对局结束时列出的条数，`renderSolutions(solutions, limit)` 支持截断；`/24 solve` 永远列全。
 
+## 拓展：Joyous（`extensions/joyous/`）——HTTP / UDS 双通道桥接
+
+- 与 Java 插件 [StreackMC/Joyous](https://github.com/StreackMC/Joyous) 协作。**协议以 `extensions/joyous/PROTOCOL.md` 为准**，常量以 `src/protocol/constants.js` 为准，两者必须同步。
+- **分层**：`src/entry.js` 组合根（读配置→装配→声明式注册命令/AI 工具→优雅关闭，幂等）｜`src/config.js` 配置读取与归一化｜`src/status.js` 状态业务（只依赖注入的 `query(address)`）｜`src/protocol/` 通信层平铺（`constants` / `codec` / `session` / `http` / `uds` / `dispatch`）｜`config.json` 拓展自带配置。
+- **`protocol/` 下导入内核是 4 层** `../../../../src/...`（比 `src/*.js` 多一层）。
+- **两种模式**：HTTP = Neonaic 同时当客户端（GET StatusAPI）与服务端（POST 命令端点）；UDS = **被动端**，主动 `connect` 对端建立的路径，握手后以 JSON + `\n` 收发。`status.transport` = `auto`(UDS 就绪优先，失败回退 HTTP) / `http` / `uds`。**默认两个通道都关**，行为与重构前一致。
+- **`session.js` 是传输无关的**：只管握手状态机、id 关联、心跳；与传输的接口只有 `write(text)` / `teardown(why)` 两个回调。跨平台一致性靠「同一份代码 + 一个纯函数 `resolveUdsEndpoint(path, pipe, platform)`」保证（Windows 从 `path` 的 basename 去 `.sock` 推导 `\\.\pipe\<name>`）。
+- **`dispatch.js` 是唯一接缝**：认识命令系统但不认识传输。http/uds 都只调 `joyousDispatcher.execute()`。
+- **UDS 必须自己做心跳 + 退避重连**：半开连接不会自己报错；退避**只在握手成功时清零**（防「连上就被踢」变成重连风暴）。作为连接方**绝不删对端的套接字文件**，只在 `ECONNREFUSED` 时提示陈留套接字。
+- **`$joyous` 三层白名单**（复用既有权限系统，无新机制）：① 总闸 `joyous.bridge.execute`（默认不授予）② 命令自身 `permissions` ③ 空权限命令要额外持有 `joyous.command.<ns>:<name>`。授权：`/neonaic:permission set $joyous <perm> true`；查看：`/joyous:bridge`。
+- 命令 `joyous:mc`（别名无、任何人可用）、`joyous:bridge`（管理员）；AI 工具 `joyous:worldMeta`、`joyous:serverStatus`（名字保持与重构前一致，提示词里引用的是 `joyous_serverStatus`）。
+
 ## 配置文件
 
 - `config/main.json` — 名称/次名、`prefix`、`maxLogFileSize`、`detailedLog`（JSONC）；`config/saves/{permissions,ext}.json` 运行时写入；`config/prompts/<profile>.md` 各 AI Profile 提示词（**gitignore**）。
 - `config/secret.json` — 模板（假 key，**入库**）；`secret.json`（根目录）— 真凭据（**gitignore**）。
+- 拓展自带配置放 `extensions/<name>/config.json`（如 joyous），由 `neonaicConfManager.getConfig()` 读取（路径相对项目根）；该实例**不会**自动重载，改完要 `/neonaic:reload`。
+
+## 沙箱自检配方（改动内核或拓展后必用）
+
+真实仓库零污染地跑自检/回归：`rsync -a --exclude node_modules --exclude .git --exclude logs --exclude secret.json --exclude .workbuddy ./ $SB/` → `ln -s <real>/node_modules $SB/node_modules` → 覆写 `$SB/config/saves/permissions.json` → 在沙箱内运行脚本。
+**`src/` 必须复制、绝不能软链**：Node 默认解析真实路径，软链会让 `ROOT_PATH` 自算指回真实根，从而读写真实配置。
+**改完源码必须重新 rsync**；用 JSON5 配置打补丁**不能按「相邻两行」匹配**（中间有注释行），要用锚定小节的正则；`import(x + '?bust=1')` 会造出**新模块实例**，命令处理器仍绑在旧实例闭包上，测不通。
 
 ## 编辑器 / 语言服务
 
@@ -74,11 +93,13 @@
 - **⚠️ NeonaicConfig 默认 AUTOSAVE**：任何 `put*`/`set`/`remove` **立即落盘**。测试脚本**绝不要指向真实配置文件**，用临时副本或先 `setWriteMode('inertia')`（已踩过：测试键写进了 `config/saves/ext.json`）。
 - NeonaicConfig 写出的是 **JSON5**（键无引号、单引号字符串），读回要 `JSON5.parse`；嵌套路径**不能下探数组**（`a.0.b` 退化成顶层字面键），`isReachable` 可提前发现退化。
 - macOS 大小写不敏感，`import './AI.js'` 这类大小写错误本地不报、**Linux 上必炸**。
-- Git 提交按用户全局约定（`NeoNai <neonai+coding@kdxiaoyi.top>`，仅 `git -c` 携带不写 config；Conventional Commits 中英双语；只 add 必要文件）。
+- Git 按用户全局的**权责边界**执行（见 `~/.workbuddy/MEMORY.md`）：身份 `Neonai <neonai+coding@kdxiaoyi.top>`，仅 `git -c` 携带、不写 config；Conventional Commits 中英双语；**必须主动提交自己所做的修改**，只 add 本次任务产出的文件（含 `.workbuddy/memory/`），**不得提交与任务无关的代码，不得 push/pull/fetch/rebase/merge**。
 
 ## 已知待办
 
+- **`commandServer.js` 的 `executeCommandSilent` / `executeCommand` 只拦同步异常**：命令处理器若是 `async`，抛出的异常以 Promise 拒绝逸出，不会被包成 `NeonaicCommandError`，`executeCommand` 的 auto-catch 也拦不到（会产生未处理拒绝）。当前 joyous 的 `dispatch.classify` 兜住了这一类，但**内核侧应单独修**（把返回值 `Promise.resolve().then` 包一层）。全项目 async 命令处理器很多，影响面广。
 - `extLoader.js` 两处：`disable()` 无空守卫（`#instance` 为 null 时 `unload` 必抛，加 `if (!this.#instance) return;`）；`replaceAll('.', '\.')` 里 `'\.'` 就是 `'.'`，转义是空操作，且键名用 `.enabled` 而 `ext.json` 样例写的是 `enable`。
 - `ai.js` 的 `neonaic:webfetch` 是半成品：`uri = new URL(address)` 赋给未声明变量（ESM 恒严格模式必抛，被 catch 吞掉）。
 - `entry.js:112` 的 `checkPermissionFromContext(this)` 只传 1 个参数（签名 `(ctx, permission)`），`systemLine` 永远为空。
 - `NeonaicUriMeta.js:184` 的 `{@link resolveUri}` 悬空（函数已随 `platformUtils.js` 删除）。
+- Joyous **Java 侧尚未实现 UDS**：全仓库无 `ServerSocket` / `DomainSocket` / `SocketChannel` 代码。`PROTOCOL.md` §13 有 Java 侧实现清单，UDS 通道要等对端补齐后才可用。

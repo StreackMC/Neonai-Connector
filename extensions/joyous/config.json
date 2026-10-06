@@ -1,0 +1,74 @@
+{
+  // ─────────────────────────────────────────────────────────────
+  // Joyous 桥接拓展配置（JSON5：允许注释与尾逗号）
+  //
+  // 改动本文件后执行 `/neonaic:reload` 再重启拓展即可生效。
+  // 各字段的语义与协议约定详见同目录下的 PROTOCOL.md 。
+  // ─────────────────────────────────────────────────────────────
+
+  "status": {
+    // 状态查询的传输选择：
+    //   "http" — 始终走 HTTP StatusAPI
+    //   "uds"  — 始终走 UDS（失败即失败，不静默回退）
+    //   "auto" — UDS 就绪时优先走 UDS，否则/失败后回退 HTTP
+    "transport": "auto",
+    // Joyous StatusAPI 地址（HTTP 模式）
+    "address": "http://localhost:8080/japi/status",
+    // 未指定地址时用于展示的服务器名
+    "serverName": "栈流Streack",
+    // 单次查询超时（毫秒）
+    "timeoutMs": 5000,
+    // 玩家列表最多列出几人（最小 1）
+    "maxPlayerListed": 3,
+  },
+
+  "httpServer": {
+    // 是否以 HTTP 服务端身份接收 JoyousPlugin 的「执行命令」请求。
+    // 默认关闭：开启后 Neonaic 会额外监听一个端口。
+    "enabled": false,
+    // 监听地址。非回环地址且未配置 token 时会拒绝启动。
+    "host": "127.0.0.1",
+    "port": 8081,
+    // 命令端点
+    "path": "/neonai/command",
+    // 健康检查端点（GET，返回协议名与版本，便于对端探活）
+    "healthPath": "/neonai/health",
+    // 共享令牌。对端需通过 `X-Neonai-Token: <token>`（或 `Authorization: Bearer <token>`）携带。
+    // 留空表示不校验——仅当监听回环地址时才被允许。
+    "token": "",
+  },
+
+  "uds": {
+    // 是否以被动端身份连接 JoyousPlugin 建立的 UDS 通信路径。
+    "enabled": false,
+    // POSIX 套接字路径；Windows 下用于推导命名管道名
+    "path": "/tmp/neonai-joyous.sock",
+    // Windows 命名管道名（仅 Windows 生效；留空则从 path 的文件名推导）
+    "pipe": "neonai-joyous",
+    // 握手次序："responder"（本端被动，等对端 hello） | "initiator"（本端主动发 hello）
+    "handshake": "responder",
+    // 各阶段超时（毫秒）
+    "connectTimeoutMs": 5000,
+    "handshakeTimeoutMs": 5000,
+    "requestTimeoutMs": 10000,
+    // 心跳间隔（毫秒），0 表示关闭心跳。
+    // UDS 的「半开连接」不会自己报错，建议保持开启。
+    "heartbeatMs": 30000,
+    "reconnect": {
+      "enabled": true,
+      // 首次重连延迟（毫秒）
+      "initialDelayMs": 1000,
+      // 延迟上限（毫秒）
+      "maxDelayMs": 30000,
+      // 退避倍率
+      "factor": 2,
+      // 抖动比例（0 ~ 0.5），用于避免多实例同时重连
+      "jitterRatio": 0.2,
+    },
+  },
+
+  "dispatch": {
+    // 单条命令的兜底超时（毫秒）
+    "commandTimeoutMs": 30000,
+  },
+}

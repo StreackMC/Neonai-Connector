@@ -67,6 +67,21 @@ export class NeonaicIOError extends NeonaicError {
 }
 
 /**
+ * 通信协议错误：分帧、握手、消息结构等违反约定的情形。
+ * @apiNote 构造签名与其它 Neonaic*Error 保持一致；如需携带协议错误码，
+ *          请在抛出前设置 {@link NeonaicProtocolError#code}。
+ */
+export class NeonaicProtocolError extends NeonaicError {
+  /** 协议错误码（如 'bad_frame' / 'unsupported_version'），未指定时为 null @type {string|null} */
+  code = null;
+
+  constructor(reason = "", cause = null) {
+    super(reason, cause);
+    this.name = 'NeonaicProtocolError';
+  }
+}
+
+/**
  * 找不到文件
  */
 export class NeonaicFileNotFoundError extends NeonaicIOError {
