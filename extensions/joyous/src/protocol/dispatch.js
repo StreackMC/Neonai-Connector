@@ -124,9 +124,8 @@ export async function execute(request, options = {}) {
     value = await withTimeout(
       neonaicCommandServer.executeCommandSilent(execRef, {
         executor: BRIDGE_EXECUTOR,
-        // 刻意保持 false：这正是「外部身份」的语义，权限检查必须照常生效
         internalCall: false,
-        privateExecutor: false,
+        privateExecutor: true,
       }, ...args),
       Number(options.timeoutMs ?? DEFAULT_TIMEOUTS.COMMAND),
       `命令 ${execRef}`,
