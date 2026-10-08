@@ -62,7 +62,7 @@ function normalizeUrl(uri) {
 }
 
 /**
-* @typedef {Object} NeonaicUriOptions
+* @typedef {Object} NeonaicTUriOptions
 * @property {boolean} [resolveRealAddress=false] 如果传入域名，尝试解析IP地址（耗时操作，**将使得函数返回 Promise**）
 * @property {boolean} [lookupBindedDomain=false] 如果传入IP地址，尝试反查对应域名（耗时操作，**将使得函数返回 Promise**）
 * @since 0.1.0
@@ -72,8 +72,8 @@ function normalizeUrl(uri) {
  * NeonaiConnector URI 标准传递协议
  *
  * 解析并标准化一个 URI，统一提供协议头、主机、端口、路径、查询、锚点等信息的访问方式。
- * 该类仅负责同步解析，DNS 相关的异步能力（{@link NeonaicUriOptions.resolveRealAddress}、
- * {@link NeonaicUriOptions.lookupBindedDomain}）由 {@link NeonaicUriMeta.resolve} 负责。
+ * 该类仅负责同步解析，DNS 相关的异步能力（{@link NeonaicTUriOptions.resolveRealAddress}、
+ * {@link NeonaicTUriOptions.lookupBindedDomain}）由 {@link NeonaicUriMeta.resolve} 负责。
  *
  * @class NeonaicUriMeta
  * @since 0.1.0
@@ -82,7 +82,7 @@ export class NeonaicUriMeta extends NeonaicNewable {
   /**
    * 解析并返回一个 URL 的信息
    * @param {string|URL} uri 原始 URI
-   * @param {NeonaicUriOptions} options 参数
+   * @param {NeonaicTUriOptions} options 参数
    * @return {NeonaicUriMeta|Promise<NeonaicUriMeta>} 返回是否为 Promise 取决于参数
    * @since 0.1.0
    */
@@ -104,7 +104,7 @@ export class NeonaicUriMeta extends NeonaicNewable {
   }
 
   /**
-   * 该 URI 是否尝试访问内网资源，推荐开启 {@link NeonaicUriOptions.resolveRealAddress} 提高准确性
+   * 该 URI 是否尝试访问内网资源，推荐开启 {@link NeonaicTUriOptions.resolveRealAddress} 提高准确性
    * @type {boolean}
    */
   isAccessingIntranet = false;
@@ -136,7 +136,7 @@ export class NeonaicUriMeta extends NeonaicNewable {
   host = '';
 
   /**
-   * 另一种格式的主机地址，需要开启 {@link NeonaicUriOptions.lookupBindedDomain}，
+   * 另一种格式的主机地址，需要开启 {@link NeonaicTUriOptions.lookupBindedDomain}，
    * 未开启返回 undefined，查询失败返回空字符串
    * @type {string|undefined}
    */

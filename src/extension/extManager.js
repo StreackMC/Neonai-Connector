@@ -13,7 +13,7 @@
  *   `enable()` 会检查该开关，因此 `disable` 之后的拓展无法 `load`。
  *   需要「停掉且以后不再自动加载」时，两步一起做即可（`extension disable x && extension unload x`）。
  *
- * 返回值形状由 {@link NeonaicExtOperateStatusPayload} / {@link NeonaicExtOperateStatus} 定义：
+ * 返回值形状由 {@link NeonaicTExtOperateStatusPayload} / {@link NeonaicTExtOperateStatus} 定义：
  *   - operation：`load` / `unload` / `enabled` / `disabled`
  *   - status：`successfully` / `notfound` / `failed` / `disabled`（`disabled` 只在 operation=load 时出现）
  *   - 批量结果按 succeed / notfound / disabled / failed 四类分桶
@@ -51,20 +51,20 @@ const EXT_SAVE = new NeonaicConfig('./config/saves/ext.json');
 const EXT_MAP = new Map();
 
 /**
- * @typedef {Object} NeonaicExtOperateStatusPayload 单个拓展加载与卸载状态
+ * @typedef {Object} NeonaicTExtOperateStatusPayload 单个拓展加载与卸载状态
  * @property {'load'|'unload'|'enabled'|'disabled'} operation 操作类型
- * @property {'notfound'|'successfully'|'failed'|'disabled'} status 状态，其中"disabled"只能在{@link NeonaicExtOperateStatusPayload.operation}="load"时出现
+ * @property {'notfound'|'successfully'|'failed'|'disabled'} status 状态，其中"disabled"只能在{@link NeonaicTExtOperateStatusPayload.operation}="load"时出现
  * @property {NeonaicExtensionError|null} error 错误信息（若有）
  * @property {String} id 拓展标识符
  */
 
 /**
- * @typedef {Object} NeonaicExtOperateStatus 批量加载与卸载拓展状态
+ * @typedef {Object} NeonaicTExtOperateStatus 批量加载与卸载拓展状态
  * @property {'load'|'unload'|'enabled'|'disabled'} operation 操作类型
- * @property {NeonaicExtOperateStatusPayload[]} succeed 加载与卸载成功的拓展
- * @property {NeonaicExtOperateStatusPayload[]} notfound 未找到的拓展
- * @property {NeonaicExtOperateStatusPayload[]} disabled 找到但被禁用的拓展
- * @property {NeonaicExtOperateStatusPayload[]} failed 加载与卸载失败的拓展
+ * @property {NeonaicTExtOperateStatusPayload[]} succeed 加载与卸载成功的拓展
+ * @property {NeonaicTExtOperateStatusPayload[]} notfound 未找到的拓展
+ * @property {NeonaicTExtOperateStatusPayload[]} disabled 找到但被禁用的拓展
+ * @property {NeonaicTExtOperateStatusPayload[]} failed 加载与卸载失败的拓展
  */
 
 // ---- 内部工具 ----
@@ -95,12 +95,12 @@ const toExtensionError = (error) =>
   error instanceof NeonaicExtensionError ? error : new NeonaicExtensionError(parseString(error), error);
 
 /**
- * 组装单个操作结果，字段严格按 {@link NeonaicExtOperateStatusPayload}。
+ * 组装单个操作结果，字段严格按 {@link NeonaicTExtOperateStatusPayload}。
  * @param {'load'|'unload'|'enabled'|'disabled'} operation 操作类型
  * @param {'notfound'|'successfully'|'failed'|'disabled'} status 状态
  * @param {String} id 拓展标识符
  * @param {NeonaicExtensionError|null} [error=null] 错误信息（若有）
- * @returns {NeonaicExtOperateStatusPayload}
+ * @returns {NeonaicTExtOperateStatusPayload}
  */
 function resultOf(operation, status, id, error = null) {
   return { operation, status, error, id };
@@ -198,9 +198,9 @@ function listExt() {
  * 加载（运行）一个拓展。
  *
  * @apiNote 目标拓展被禁用时不会抛错，而是返回 `status: 'disabled'`
- *          （见 {@link NeonaicExtOperateStatusPayload} 对 status 的说明）。
+ *          （见 {@link NeonaicTExtOperateStatusPayload} 对 status 的说明）。
  * @param {String} id 拓展标识符
- * @returns {Promise<NeonaicExtOperateStatusPayload>}
+ * @returns {Promise<NeonaicTExtOperateStatusPayload>}
  */
 async function loadExt(id) {
   const key = normalizeId(id);
@@ -218,7 +218,7 @@ async function loadExt(id) {
 /**
  * 卸载（停止）一个拓展。
  * @param {String} id 拓展标识符
- * @returns {Promise<NeonaicExtOperateStatusPayload>}
+ * @returns {Promise<NeonaicTExtOperateStatusPayload>}
  * @deprecated 潜在内存泄漏风险，不推荐使用。
  */
 async function unloadExt(id) {
@@ -244,7 +244,7 @@ async function unloadExt(id) {
  * @param {String} id 拓展标识符
  * @param {Object} [options]
  * @param {boolean} [options.load=false] 置真后是否顺带加载
- * @returns {Promise<NeonaicExtOperateStatusPayload>}
+ * @returns {Promise<NeonaicTExtOperateStatusPayload>}
  */
 async function enableExt(id, options = {}) {
   const key = normalizeId(id);
@@ -274,7 +274,7 @@ async function enableExt(id, options = {}) {
  * @param {String} id 拓展标识符
  * @param {Object} [options]
  * @param {boolean} [options.unload=false] 是否顺带卸载正在运行的拓展
- * @returns {Promise<NeonaicExtOperateStatusPayload>}
+ * @returns {Promise<NeonaicTExtOperateStatusPayload>}
  */
 async function disableExt(id, options = {}) {
   const key = normalizeId(id);
@@ -300,8 +300,8 @@ async function disableExt(id, options = {}) {
  * 对一批拓展依次执行同一操作。
  * @param {String[]} list 拓展标识符列表
  * @param {'load'|'unload'|'enabled'|'disabled'} operation 操作类型
- * @param {(id: String) => Promise<NeonaicExtOperateStatusPayload>} single 单项操作
- * @returns {Promise<NeonaicExtOperateStatus>}
+ * @param {(id: String) => Promise<NeonaicTExtOperateStatusPayload>} single 单项操作
+ * @returns {Promise<NeonaicTExtOperateStatus>}
  * @throws {NeonaicIllegalArgumentError} list 不是数组
  */
 async function operateListed(list, operation, single) {
@@ -323,7 +323,7 @@ async function operateListed(list, operation, single) {
 /**
  * 批量加载拓展。
  * @param {String[]} [list=[...EXT_MAP.keys()]] 拓展列表，默认全部
- * @returns {Promise<NeonaicExtOperateStatus>}
+ * @returns {Promise<NeonaicTExtOperateStatus>}
  */
 async function loadListedExt(list = allIds()) {
   return operateListed(list, 'load', loadExt);
@@ -332,7 +332,7 @@ async function loadListedExt(list = allIds()) {
 /**
  * 批量卸载拓展。
  * @param {String[]} [list=[...EXT_MAP.keys()]] 拓展列表，默认全部
- * @returns {Promise<NeonaicExtOperateStatus>}
+ * @returns {Promise<NeonaicTExtOperateStatus>}
  * @deprecated 潜在内存泄漏风险，不推荐使用。
  */
 async function unloadListedExt(list = allIds()) {
@@ -343,7 +343,7 @@ async function unloadListedExt(list = allIds()) {
  * 批量启用拓展。
  * @param {String[]} [list=[...EXT_MAP.keys()]] 拓展列表，默认全部
  * @param {Object} [options] 透传给 {@link enableExt}
- * @returns {Promise<NeonaicExtOperateStatus>}
+ * @returns {Promise<NeonaicTExtOperateStatus>}
  */
 async function enableListedExt(list = allIds(), options = {}) {
   return operateListed(list, 'enabled', (id) => enableExt(id, options));
@@ -353,7 +353,7 @@ async function enableListedExt(list = allIds(), options = {}) {
  * 批量禁用拓展。
  * @param {String[]} [list=[...EXT_MAP.keys()]] 拓展列表，默认全部
  * @param {Object} [options] 透传给 {@link disableExt}
- * @returns {Promise<NeonaicExtOperateStatus>}
+ * @returns {Promise<NeonaicTExtOperateStatus>}
  */
 async function disableListedExt(list = allIds(), options = {}) {
   return operateListed(list, 'disabled', (id) => disableExt(id, options));
@@ -363,7 +363,7 @@ async function disableListedExt(list = allIds(), options = {}) {
 
 /**
  * 把批量操作结果渲染为可读文本。
- * @param {NeonaicExtOperateStatus} status
+ * @param {NeonaicTExtOperateStatus} status
  * @returns {String}
  */
 function renderStatus(status) {

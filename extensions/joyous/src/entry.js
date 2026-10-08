@@ -5,8 +5,8 @@
  *
  * ── 本文件只做四件事（组合根）──
  *   1. 读配置（{@link joyousConfig}）
- *   2. 装配传输通道（{@link NeonaicJoyousHttpClient} / {@link NeonaicJoyousHttpServer}
- *      / {@link NeonaicJoyousUdsLink}）
+ *   2. 装配传输通道（{@link JoyousHttpClient} / {@link JoyousHttpServer}
+ *      / {@link JoyousUdsLink}）
  *   3. 注册对外能力（命令与 AI 工具）—— 命令/AI 工具用**惰性运行期解析**，
  *      所以在通道未启用时会给出可读提示而不是抛错
  *   4. 优雅关闭
@@ -31,18 +31,18 @@ import { neonaicConfManager } from '../../../src/system/confManager.js';
 import { getLogger } from '../../../src/logger/Logger.js';
 
 import { joyousConfig } from './config.js';
-import { NeonaicStatusReader } from './status.js';
+import { JoyousStatusReader } from './status.js';
 import { joyousDispatcher } from './protocol/dispatch.js';
 import { CAPABILITIES, METHODS } from './protocol/constants.js';
-import { NeonaicJoyousHttpClient, NeonaicJoyousHttpServer } from './protocol/http.js';
-import { NeonaicJoyousUdsLink } from './protocol/uds.js';
+import { JoyousHttpClient, JoyousHttpServer } from './protocol/http.js';
+import { JoyousUdsLink } from './protocol/uds.js';
 
 /**
  * 运行期状态。`null` 表示拓展尚未启用（或已被停用）。
  * @type {{
- *   cfg: object, logger: object, httpClient: NeonaicJoyousHttpClient,
- *   httpServer: NeonaicJoyousHttpServer|null, uds: NeonaicJoyousUdsLink|null,
- *   statusReader: NeonaicStatusReader
+ *   cfg: object, logger: object, httpClient: JoyousHttpClient,
+ *   httpServer: JoyousHttpServer|null, uds: JoyousUdsLink|null,
+ *   statusReader: JoyousStatusReader
  * }|null}
  */
 let runtime = null;
@@ -130,7 +130,7 @@ export async function onEnable(ctx) {
     capabilities: [CAPABILITIES.COMMAND_EXECUTE, CAPABILITIES.STATUS_QUERY],
   };
 
-  const httpClient = new NeonaicJoyousHttpClient({ timeoutMs: cfg.status.timeoutMs, log: logger });
+  const httpClient = new JoyousHttpClient({ timeoutMs: cfg.status.timeoutMs, log: logger });
 
   /** @type {NonNullable<typeof runtime>} */
   const rt = {
@@ -144,7 +144,7 @@ export async function onEnable(ctx) {
   // 先挂上运行期，query 里才能看到后续建立的 UDS 链路
   runtime = rt;
 
-  rt.statusReader = new NeonaicStatusReader({
+  rt.statusReader = new JoyousStatusReader({
     query: createStatusQuery(rt),
     serverName: cfg.status.serverName,
     maxPlayerListed: cfg.status.maxPlayerListed,
@@ -156,7 +156,7 @@ export async function onEnable(ctx) {
 
   try {
     if (cfg.httpServer.enabled) {
-      rt.httpServer = new NeonaicJoyousHttpServer({
+      rt.httpServer = new JoyousHttpServer({
         handler: commandHandler,
         host: cfg.httpServer.host,
         port: cfg.httpServer.port,
@@ -173,7 +173,7 @@ export async function onEnable(ctx) {
     }
 
     if (cfg.uds.enabled) {
-      rt.uds = new NeonaicJoyousUdsLink({
+      rt.uds = new JoyousUdsLink({
         path: cfg.uds.path,
         pipe: cfg.uds.pipe,
         mode: cfg.uds.handshake,

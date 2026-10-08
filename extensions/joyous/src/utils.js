@@ -1,3 +1,4 @@
+import { NeonaicNewable } from "../../../src/utils/NeonaicNewableClass.js";
 
 /**
  * 将任意值转为可读字符串：
@@ -49,3 +50,5 @@ export function formatMcTime(tick) {
 
   return [hours, minutes];
 }
+
+export class JoyousNewable extends NeonaicNewable {}

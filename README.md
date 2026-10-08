@@ -4,16 +4,6 @@
 
 基于 Node.js 的服务端项目，负责平台适配、消息中转与 AI 调用。
 
-## 架构
-
-* `src` 存放系统核心代码
-  * `system` 系统底层代码，提供与CLI交互、各服务注册的能力
-  * `platform` 与平台拓展交互，接入平台
-  * `handler` 处理消息传入
-* `extensions` 存放拓展代码
-  * `handler` 拓展消息处理能力
-  * `platform` 拓展平台兼容性
-
 ## 快速开始
 
 ```bash
@@ -23,6 +13,13 @@ node debug.cjs            # 调试模式（$(cmd) 交互，原生 console）
 ```
 
 启动后进入 CLI REPL（`>` 提示符），输入 `help` 查看可用命令。
+
+## 开发
+### 命名约定
+
+* 所有方法集、接口集等都以 neonaic 开头
+* 所有 class 都以 Neonaic 开头
+* 所有 @typedef 都以 NeonaicT 开头
 
 ## License
 

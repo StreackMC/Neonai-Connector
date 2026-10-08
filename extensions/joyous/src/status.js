@@ -9,9 +9,8 @@
  */
 
 import { neonaicConfManager } from '../../../src/system/confManager.js';
-import { NeonaicNewable } from '../../../src/utils/NeonaicNewableClass.js';
 import { NeonaicIllegalArgumentError } from '../../../src/utils/NeonaicNewableError.js';
-import { formatDateTime, formatMcTime, valToString } from './utils.js';
+import { formatDateTime, formatMcTime, JoyousNewable, valToString } from './utils.js';
 
 /**
  * 状态查询结果。
@@ -102,7 +101,7 @@ export function renderStatus(result, name, botName, maxPlayerListed = 3) {
 /**
  * 状态读取器：把「查询传输」与「文本渲染」拼装起来。
  */
-export class NeonaicStatusReader extends NeonaicNewable {
+export class JoyousStatusReader extends JoyousNewable {
   static type = 'joyous.status';
 
   /** @type {StatusQuery} */

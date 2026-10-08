@@ -1,6 +1,7 @@
 import { getLogger } from "../../../src/logger/Logger.js";
 import { neonaicChore, parseString } from "../../../src/utils/chore.js";
 import { neonaicMath } from "../../../src/utils/math.js";
+import { NeonaicNewable } from "../../../src/utils/NeonaicNewableClass.js";
 import { NeonaicIllegalArgumentError, NeonaicIllegalStateError, NeonaicUnsupportedOperationError } from "../../../src/utils/NeonaicNewableError.js";
 import { ALL_FIVE_LETTER_WORDS, FRIENDLY_FIVE_LETTER_WORDS } from "./word_provider.js";
 
@@ -67,7 +68,7 @@ export const WordleEnums = Object.freeze({
   missing_used: 'missing_used',
 });
 
-export class WordleSession {
+export class WordleSession extends NeonaicNewable {
   #usable = true; #user = "";
   /** 本局难度 @type {String} */
   #difficulty = WordleDifficulty.normal;

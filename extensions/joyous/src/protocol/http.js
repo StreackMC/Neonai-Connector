@@ -17,7 +17,6 @@
  */
 
 import { createServer } from 'node:http';
-import { NeonaicNewable } from '../../../../src/utils/NeonaicNewableClass.js';
 import {
   NeonaicIllegalArgumentError,
   NeonaicIllegalStateError,
@@ -30,6 +29,7 @@ import {
   PROTOCOL_NAME,
   PROTOCOL_VERSION,
 } from './constants.js';
+import { JoyousNewable } from '../utils.js';
 
 /** 单次请求体上限（256 KiB），避免被撑爆内存 */
 export const MAX_BODY_BYTES = 256 * 1024;
@@ -54,7 +54,7 @@ const NULL_LOG = Object.freeze({ debug() { }, info() { }, warn() { }, error() { 
  * @apiNote 刻意**不抛错**：网络失败在本场景下是常态（服没开），
  *          以判别式返回值表达比到处 try/catch 更好用。
  */
-export class NeonaicJoyousHttpClient extends NeonaicNewable {
+export class JoyousHttpClient extends JoyousNewable {
   static type = 'joyous.http.client';
 
   /** @type {number} */
@@ -137,7 +137,7 @@ export class NeonaicJoyousHttpClient extends NeonaicNewable {
 /**
  * 接收 JoyousPlugin 命令请求的 HTTP 服务端。
  */
-export class NeonaicJoyousHttpServer extends NeonaicNewable {
+export class JoyousHttpServer extends JoyousNewable {
   static type = 'joyous.http.server';
 
   /** @type {import('node:http').Server|null} */

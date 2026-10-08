@@ -9,7 +9,7 @@ import { NeonaicExtensionError, NeonaicFileNotFoundError, NeonaicIllegalArgument
 import { neonaicFileSystem } from '../utils/io.js';
 
 /**
- * @typedef {Object} NeonaicExtContext Neonaic 拓展上下文，用于告诉拓展当前环境信息
+ * @typedef {Object} NeonaicTExtContext Neonaic 拓展上下文，用于告诉拓展当前环境信息
  * @property {NeonaicConfig} manifest 拓展描述文件
  * @property {string} pwd 拓展所在的目录
  * @property {number} ext_item_id 拓展被识别后所分配的 ID

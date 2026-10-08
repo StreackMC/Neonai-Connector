@@ -13,13 +13,13 @@
  * 跨平台行为一致性由「同一份代码」保证，而不是靠两个平台各自对齐。
  */
 
-import { NeonaicNewable } from '../../../../src/utils/NeonaicNewableClass.js';
 import {
   NeonaicIllegalArgumentError,
   NeonaicIllegalStateError,
   NeonaicProtocolError,
 } from '../../../../src/utils/NeonaicNewableError.js';
-import { NeonaicLineFrameCodec } from './codec.js';
+import { JoyousNewable } from '../utils.js';
+import { JoyousLineFrameCodec } from './codec.js';
 import {
   CHANNEL_ROLES,
   CHANNEL_STATES,
@@ -54,7 +54,7 @@ const NULL_LOG = Object.freeze({
   debug() { }, info() { }, warn() { }, error() { },
 });
 
-export class NeonaicBridgeSession extends NeonaicNewable {
+export class JoyousBridgeSession extends JoyousNewable {
   static type = '<BRIDGE>';
 
   /** @type {(text: string) => void} */
@@ -63,7 +63,7 @@ export class NeonaicBridgeSession extends NeonaicNewable {
   #teardown;
   /** @type {ReturnType<typeof Object.freeze>} */
   #log;
-  /** @type {NeonaicLineFrameCodec} */
+  /** @type {JoyousLineFrameCodec} */
   #codec;
   /** @type {string} 握手次序 */
   #mode;
@@ -127,7 +127,7 @@ export class NeonaicBridgeSession extends NeonaicNewable {
     };
     this.#timeouts = { ...DEFAULT_TIMEOUTS, ...(timeouts ?? {}) };
     this.#log = log ?? NULL_LOG;
-    this.#codec = new NeonaicLineFrameCodec(maxFrameBytes);
+    this.#codec = new JoyousLineFrameCodec(maxFrameBytes);
     this.#sessionId = `na-${this.INSTANCE_ID.toString(36)}`;
   }
 
@@ -548,7 +548,7 @@ export class NeonaicBridgeSession extends NeonaicNewable {
 
     let text;
     try {
-      text = NeonaicLineFrameCodec.encode(frame);
+      text = JoyousLineFrameCodec.encode(frame);
     } catch (e) {
       this.#log.error?.(`[joyous/bridge] 待发送的帧无法编码：${e?.message ?? e}`);
       this.#emit('error', e);

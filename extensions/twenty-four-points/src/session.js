@@ -1,6 +1,7 @@
 import { getLogger } from "../../../src/logger/Logger.js";
 import { neonaicChore, parseString } from "../../../src/utils/chore.js";
 import { neonaicMath } from "../../../src/utils/math.js";
+import { NeonaicNewable } from "../../../src/utils/NeonaicNewableClass.js";
 import { NeonaicIllegalArgumentError, NeonaicIllegalStateError, NeonaicUnsupportedOperationError } from "../../../src/utils/NeonaicNewableError.js";
 
 /** 发牌的最小数字，对应扑克牌 A */
@@ -31,7 +32,7 @@ export const TwentyFourEnums = Object.freeze({
   invalid: 'invalid',
 });
 
-export class TwentyFourSession {
+export class TwentyFourSession extends NeonaicNewable {
   #usable = true; #user = "";
   /** 本局的牌面 @type {number[]} */
   #poker = [];

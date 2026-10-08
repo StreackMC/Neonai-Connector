@@ -10,7 +10,7 @@
  *   POSIX ：`/tmp/neonai-joyous.sock`          → Node 视作文件系统套接字
  *   Windows：`\\.\pipe\neonai-joyous`          → Node/libuv 视作命名管道
  * 除此之外的上层代码（握手、分帧、请求响应、重连、心跳）完全共用同一实现 ——
- * 见 {@link NeonaicBridgeSession}。平台差异只剩一个纯函数 {@link resolveUdsEndpoint}，
+ * 见 {@link JoyousBridgeSession}。平台差异只剩一个纯函数 {@link resolveUdsEndpoint}，
  * 因此可以离线单测两个平台的行为，不需要真的在 Windows 上跑。
  *
  * ── 为什么必须自己做重连与心跳 ──
@@ -22,17 +22,17 @@
 
 import { basename } from 'node:path';
 import { connect } from 'node:net';
-import { NeonaicNewable } from '../../../../src/utils/NeonaicNewableClass.js';
 import {
   NeonaicIllegalArgumentError,
   NeonaicIllegalStateError,
 } from '../../../../src/utils/NeonaicNewableError.js';
-import { NeonaicBridgeSession } from './session.js';
+import { JoyousBridgeSession } from './session.js';
 import {
   CHANNEL_STATES,
   DEFAULT_TIMEOUTS,
   HANDSHAKE_MODES,
 } from './constants.js';
+import { JoyousNewable } from '../utils.js';
 
 /** POSIX 下的默认套接字路径 */
 export const DEFAULT_UDS_PATH = '/tmp/neonai-joyous.sock';
@@ -121,7 +121,7 @@ export function describeConnectError(error, endpoint, platform = process.platfor
 /**
  * 维护「与 JoyousPlugin 的 UDS 长连接」：拨号 → 握手 → 收发 → 掉线 → 退避重连。
  */
-export class NeonaicJoyousUdsLink extends NeonaicNewable {
+export class JoyousUdsLink extends JoyousNewable {
   static type = 'joyous.uds';
 
   /** @type {string} 解析后的实际端点 */
@@ -136,7 +136,7 @@ export class NeonaicJoyousUdsLink extends NeonaicNewable {
   #methods = new Map();
   /** @type {import('node:net').Socket|null} */
   #socket = null;
-  /** @type {NeonaicBridgeSession|null} */
+  /** @type {JoyousBridgeSession|null} */
   #session = null;
   /** @type {Map<string, Set<Function>>} */
   #listeners = new Map();
@@ -210,7 +210,7 @@ export class NeonaicJoyousUdsLink extends NeonaicNewable {
   /** 是否已握手完成、可收发业务帧 @returns {boolean} */
   get ready() { return this.#state === CHANNEL_STATES.READY; }
 
-  /** 当前会话（未连接时为 null） @returns {NeonaicBridgeSession|null} */
+  /** 当前会话（未连接时为 null） @returns {JoyousBridgeSession|null} */
   get session() { return this.#session; }
 
   /** 对端信息 @returns {object|null} */
@@ -349,7 +349,7 @@ export class NeonaicJoyousUdsLink extends NeonaicNewable {
     // 直接按 UTF-8 解码，StringDecoder 会正确处理跨 chunk 的多字节字符
     socket.setEncoding('utf8');
 
-    const session = new NeonaicBridgeSession({
+    const session = new JoyousBridgeSession({
       write: (text) => {
         if (!socket.destroyed) socket.write(text);
       },
@@ -386,7 +386,7 @@ export class NeonaicJoyousUdsLink extends NeonaicNewable {
 
   /**
    * 把会话事件冒泡到链路事件，并处理退避计数。
-   * @param {NeonaicBridgeSession} session
+   * @param {JoyousBridgeSession} session
    */
   #bindSession(session) {
     session.on('ready', (peer) => {

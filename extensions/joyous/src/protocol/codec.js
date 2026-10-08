@@ -17,6 +17,7 @@ import {
   NeonaicIllegalArgumentError,
   NeonaicProtocolError,
 } from '../../../../src/utils/NeonaicNewableError.js';
+import { JoyousNewable } from '../utils.js';
 import {
   ERROR_CODES,
   FRAME_DELIMITER,
@@ -39,7 +40,7 @@ import {
 /** 展示坏帧时的最大保留长度 */
 const BAD_FRAME_PREVIEW = 200;
 
-export class NeonaicLineFrameCodec {
+export class JoyousLineFrameCodec extends JoyousNewable {
   /** 尚未凑成完整帧的残余文本（不含分隔符） @type {string} */
   #rest = '';
 
