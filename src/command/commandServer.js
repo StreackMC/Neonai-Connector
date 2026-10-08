@@ -301,7 +301,7 @@ export class NeonaicCommandContext extends NeonaicNewable {
     }
   };
 
-  /** @param {NeonaicCommandContext} options */
+  /** @param {NeonaicCommandContext|{privateExecutor?: boolean, internalCall?: boolean, this?: Object, executor?: string|string[]}} options */
   constructor(options) {
     super();
     this.#privateExecutor = !!options.privateExecutor;
@@ -310,6 +310,7 @@ export class NeonaicCommandContext extends NeonaicNewable {
     this.executor = options.executor;
   }
 
+  /** 语法糖：创建一个新的上下文实例 */
   clone() {
     return new NeonaicCommandContext(this);
   }
