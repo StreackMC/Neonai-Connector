@@ -18,7 +18,8 @@ node debug.cjs            # 调试模式（$(cmd) 交互，原生 console）
 ### 命名约定
 
 * 所有方法集、接口集等都以 neonaic 开头
-* 所有 class 都以 Neonaic 开头
+* 所有继承了 NeonaicNewable 的 class 都以 Neonaic 开头
+  * 以下类没有继承但也如此命名：事件相关、错误相关。
 * 所有 @typedef 都以 NeonaicT 开头
 
 ## License
