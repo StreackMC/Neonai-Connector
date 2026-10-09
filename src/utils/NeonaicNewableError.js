@@ -37,6 +37,16 @@ export class NeonaicCommandError extends NeonaicError {
 }
 
 /**
+ * 操作被中断
+ */
+export class NeonaicInterruptError extends NeonaicError {
+  constructor(reason = "", cause = null) {
+    super(reason, cause);
+    this.name = 'NeonaicInterruptError';
+  }
+}
+
+/**
  * 拓展相关错误
  */
 export class NeonaicExtensionError extends NeonaicError {

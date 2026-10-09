@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { lstatSync, realpathSync } from 'node:fs';
 import { lstat, realpath } from 'node:fs/promises';
 
-import { NeonaicIllegalArgumentError, NeonaicIOError, NeonaicNetworkError } from "./NeonaicNewableError.js";
+import { NeonaicIllegalArgumentError, NeonaicInterruptError, NeonaicIOError, NeonaicNetworkError } from "./NeonaicNewableError.js";
 import { neonaicChore, parseString } from "./chore.js";
 import { NeonaicUriMeta } from './NeonaicUriMeta.js';
 
@@ -17,6 +17,8 @@ export const neonaicNetwork = Object.freeze({
    * @param {(String|RegExp)[]|(String|RegExp)} [filter.list=['$Internal_list']] 名单，支持文本匹配和正则过滤。不是 String/RegExp 的值会被忽略。如果没有指定本参数（不包括手动设为 null/undefined 等情况）则使用内置过滤器：{@link neonaicNetwork.DEFAULT_BLOCKED_URI_FILTER}。
    * @param {boolean} [filter.allow_lan=true] 如果设为 false 将不允许请求本地地址。安全原因不接受 falsy。
    * @returns {Promise<Response>}
+   * @throws {NeonaicInterruptError} 请求超时
+   * @throws {NeonaicNetworkError} 请求失败
    */
   fetch: async function (target, timeout = 10 * 1e3, filter) {
     filter = neonaicChore.joinObject({ allow_lan: true, mode: 'blacklist', list: neonaicNetwork.DEFAULT_BLOCKED_URI_FILTER }, filter);
@@ -90,7 +92,7 @@ export const neonaicNetwork = Object.freeze({
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') {
         // 被超时中断
-        throw new NeonaicNetworkError("Timeout for fetch", e);
+        throw new NeonaicInterruptError("Timeout for fetch", e);
       } else {
         throw new NeonaicNetworkError('Failed to fetch: ' + parseString(e), e);
       }
