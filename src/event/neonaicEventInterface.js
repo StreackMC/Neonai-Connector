@@ -58,8 +58,8 @@ export class NeonaicEvent extends CustomEvent {
   /**
    * 构造一个事件
    * @param {String} type 事件名
-   * @param {T} details 事件承载的业务数据
-   * @param {NeonaicTEventOptions} options 事件选项
+   * @param {T} [details] 事件承载的业务数据
+   * @param {NeonaicTEventOptions} [options] 事件选项
    */
   constructor(type, details, options = {}) {
     if (typeof details !== 'object') throw new NeonaicIllegalArgumentError("details must be a non-null object");
@@ -84,6 +84,7 @@ export class NeonaicEvent extends CustomEvent {
  * @property {string|*} message 消息内容；消息内容不会自动转文本
  * @property {string[]} user 消息来自哪个场景上下文；可以参考 {@link import('../command/commandServer.js').NeonaicCommandContext.executor()}
  * @property {NeonaiPlatform|null} pm 平台连接器实例
+ * @property {(msg: string) => (Promise<void>|void)} [reply] 回复消息接口；存在时用于表述「被动等待回复」而非「主动请求回复」。
  */
 
 /**
@@ -99,16 +100,18 @@ export class NeonaicMessageEvent extends NeonaicEvent {
    * @param {NeonaiPlatform|null} p 平台连接器实例
    * @param {string|string[]} user 消息来自哪个场景上下文；可以参考 {@link import('../command/commandServer.js').NeonaicCommandContext.executor()}
    * @param {string|*} message 消息内容；消息内容不会自动转文本，但不能是 undefined
-   * @param {NeonaicTEventOptions} options 事件选项
+   * @param {(msg: string) => (Promise<void>|void)} [replyFunc] 回复消息接口；存在时用于表述「被动等待回复」而非「主动请求回复」。
+   * @param {NeonaicTEventOptions} [options] 事件选项
    * @throws {NeonaicIllegalArgumentError} 参数不合法
    */
-  constructor(p, user, message, options = {}) {
+  constructor(p, user, message, replyFunc = null, options = {}) {
     if (!(p instanceof NeonaiPlatform) && !(p === null)) throw new NeonaicIllegalArgumentError("pm must be an instance of NeonaiPlatform");
     if (typeof message === 'undefined') throw new NeonaicIllegalArgumentError("message must be defined");
     super(NeonaicMessageEvent.EVENT_TYPE, {
       message: message,
       user: Array.isArray(user) ? user.map(parseString) : [parseString(user)],
       pm: p,
+      reply: (typeof options?.reply === 'function') ? options.reply : undefined,
     }, options);
   }
 }
@@ -134,7 +137,7 @@ export class NeonaicCommandEvent extends NeonaicEvent {
   /**
    * 构造一个事件
    * @param {NeonaicTCommandEventPayload} payload 消息内容；消息内容不会自动转文本，但不能是 undefined
-   * @param {NeonaicTEventOptions} options 事件选项
+   * @param {NeonaicTEventOptions} [options] 事件选项
    * @throws {NeonaicIllegalArgumentError} 参数不合法
    */
   constructor(payload, options = {}) {
