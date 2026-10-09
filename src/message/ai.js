@@ -407,7 +407,8 @@ function resolveSpeaker(speaker, caller) {
  * @param {AIToolDef[]|AIToolDef} [options.overrideAITool] 要叠加的 AI 工具，将临时覆写已有 AI 工具
  * @param {String} [options.overridePrompt] 存在此字符串将覆写 AI Profile 的提示词
  * @returns {Promise<string>|string} AI 回复文本
- * @throws 无可用 Profile / 所有 Profile 请求失败
+ * @throws {NeonaicIllegalStateError} 无权访问
+ * @throws {NeonaicIllegalArgumentError} 无可用 Profile / 所有 Profile 请求失败
  */
 async function askAI(userMessage, options) {
   // 初始化配置
@@ -419,7 +420,7 @@ async function askAI(userMessage, options) {
     overrideAITool: [],
     overridePrompt: undefined,
   }, options);
-  if (isAIBanned(conf.caller)) return `（${neonaicConfManager.getBotName()}静静地看着别处，并未言语）`;
+  if (isAIBanned(conf.caller)) throw new NeonaicIllegalStateError('对“智能回复”的访问被拒绝');
 
   // 对 AIlist 做标准化处理：字符串 → 数组，去除空值，trim
   if (!Array.isArray(conf.AIlist)) conf.AIlist = [conf.AIlist];
