@@ -592,6 +592,24 @@ registerAITool('neonaic', 'stringlength', {
   execute: async ({ text }) => parseString(text).length,
 });
 
+neonaicAI.registerAITool('neonaic', 'calc', {
+  description: '计算指定的算式',
+  inputSchema: z.object({
+    expression: z.string().describe('一个算式，例如 "1+2*3-4"。可以使用+-*/^%()√∛这些运算符。^n√表示 n 次方根。'),
+  }).describe('要计算的算式'),
+  execute: ({ expression }) => {
+    try {
+      return neonaicMath.calc(expression, {
+        mod: true,
+        power: true,
+        root: true,
+      });
+    } catch (error) {
+      return "无法计算。可能存在算数错误，例如 0 作分母、对负数开偶次方根……";
+    }
+  },
+});
+
 // ---- ai 命令 ----
 
 neonaicCommandServer.registerCommand('neonaic', 'ai', async function (sub, ...args) {
