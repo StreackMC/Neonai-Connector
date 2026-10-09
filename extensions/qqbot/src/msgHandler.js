@@ -13,6 +13,8 @@ import { neonaicUserDirectory } from '../../../src/message/userDirectory.js';
 import { neonaicCommandServer } from '../../../src/command/commandServer.js';
 import { neonaicCommandInterface } from '../../../src/command/commandInterface.js';
 import { NeonaicIllegalArgumentError } from '../../../src/utils/NeonaicNewableError.js';
+import { neonaicEventBus } from '../../../src/event/neonaicEventBus.js';
+import { NeonaicMessageEvent } from '../../../src/event/neonaicEventInterface.js';
 
 /**
  * 好友列表私聊
@@ -60,6 +62,30 @@ async function onGroupMessageIn(event, pp) {
   noteKnownNames(event, { user, group });
 
   pp.logMsgIn('Group:', `where=${group} | from=${user} | msg=` + parseString(event.message, false).replace(/\n/g, "\\n"));
+  neonaicEventBus.dispatchEvent(new NeonaicMessageEvent(pp, [user, group], markdown, async (msg) => {
+    pp.sendMsg(group, msg).then(() => {
+      pp.logMsgOut('Group:', `where=${group} | to=${user} | msg=`, msg.replace(/\n/g, "\\n"));
+    }).catch((e) => {
+      pp.log('error', 'Failed to send message to group:', `where=${group} | to=${user} | error=`, e, ` | msg=`, msg.replace(/\n/g, "\\n"));
+    });
+  }));
+}
+
+/**
+ * 群聊消息
+ * 
+ * @param {qqBotBackend.GroupMessageEvent} event 
+ * @param {PlatformQQBot} pp 
+ */
+async function onGroupAtMessageIn(event, pp) {
+  /** 实例的 Profile 配置 */
+  const profile_config = neonaicPlatformManager.getPlatformManager().getProfile(pp.profile);
+  const user = `qUSR#${event.user_id}@${pp.selfInfo.id}`;
+  const group = `qGRP#${event.group_id}@${pp.selfInfo.id}`;
+  const markdown = toMarkdown(event.message, pp);
+  noteKnownNames(event, { user, group });
+
+  pp.logMsgIn('GroupAt:', `where=${group} | from=${user} | msg=` + parseString(event.message, false).replace(/\n/g, "\\n"));
   const reply = await neonaicMessageIn.resolveReply(markdown, {
     AI: profile_config.useAI,
     AIlist: pickAIList(profile_config.aiRouting, profile_config.allowedAI, {
@@ -72,7 +98,7 @@ async function onGroupMessageIn(event, pp) {
     }
   });
   if (reply) {
-    pp.logMsgOut('Group:', `where=${group} | to=${user} | msg=`, reply.replace(/\n/g, "\\n"));
+    pp.logMsgOut('GroupAt:', `where=${group} | to=${user} | msg=`, reply.replace(/\n/g, "\\n"));
     event.reply("\n" + reply);
   }
 }
@@ -177,5 +203,6 @@ function toMarkdown(raw, pp) {
 
 export default {
   onPrivateMessageIn,
+  onGroupAtMessageIn,
   onGroupMessageIn,
-}
+};
