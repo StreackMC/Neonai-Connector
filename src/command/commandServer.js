@@ -30,18 +30,9 @@ const DIM = '\x1b[2m';
 const BOLD = '\x1b[1m';
 const R = '\x1b[0m';
 
-/** 所有命令（去重，按注册顺序） */
-const allCommands = [];
-/** 全局原名 -> 命令（可被新命令别名覆盖） */
-const globalNames = new Map();
-/** 全局别名 -> 命令 */
-const globalAliases = new Map();
-/** 命名空间限定名（ns:name / ns:alias）-> 命令（穿透覆盖，永不丢失） */
-const fqns = new Map();
-
 /**
- * 已注册命令的元信息（注册后即冻结语义，请勿修改字段）。
- * @typedef {Object} CommandMeta
+ * 已注册命令的元信息
+ * @typedef {Object} NeonaicTCommandMeta
  * @property {string} namespace 命令所属命名空间，用于限定访问（`ns:name` / `ns:alias`）
  * @property {string} name 命令原名，命名空间内唯一
  * @property {string[]} aliases 命令别名列表（不含原名）；别名可与其它命令的原名同槽并覆盖之
@@ -50,6 +41,18 @@ const fqns = new Map();
  * @property {string|undefined} description 命令描述，供 `help` 等展示
  * @property {string|undefined} usage 用法示例，权限或参数错误时提示
  */
+
+/**
+ * 所有命令（去重，按注册顺序）
+ * @type {Readonly<NeonaicTCommandMeta>[]}
+ */
+const allCommands = [];
+/** 全局原名 -> 命令（可被新命令别名覆盖） */
+const globalNames = new Map();
+/** 全局别名 -> 命令 */
+const globalAliases = new Map();
+/** 命名空间限定名（ns:name / ns:alias）-> 命令（穿透覆盖，永不丢失） */
+const fqns = new Map();
 
 // ---- 参数解析 ----
 
@@ -97,7 +100,7 @@ function parseArgs(input) {
  * @param {string} name 命令原名
  * @param {(...args) => any} handler 参数以 ...args 展开传入，this 为命令上下文
  * @param {import('./commandInterface.js').CommandRegisterOptions} opts 命令附加信息
- * @returns {null|CommandMeta[]} 成功返回 null；冲突返回冲突命令列表
+ * @returns {null|NeonaicTCommandMeta[]} 成功返回 null；冲突返回冲突命令列表
  * @throws 命名空间、命名或处理器无效
  */
 function registerCommand(namespace, name, /** @this {NeonaicCommandContext} */handler, opts = {}) {
@@ -155,37 +158,7 @@ function registerCommand(namespace, name, /** @this {NeonaicCommandContext} */ha
     fqns.set(`${namespace}:${name}`, cmd);
     for (const a of aliases) fqns.set(`${namespace}:${a}`, cmd);
   }
-  allCommands.push(cmd);
-  return null;
-}
-
-// ---- 权限校验 ----
-
-/**
- * @param {string} cmdName
- * @param {string[] | (string|string[])[]} requiredPerms
- * @param {string|string[]|undefined} executor
- * @returns {string|null} 校验失败原因，成功返回 null
- */
-function checkCommandPerms(cmdName, requiredPerms, executor) {
-  if (!requiredPerms.length) return null;
-
-  for (const item of requiredPerms) {
-    if (Array.isArray(item)) {
-      // OR 组：至少满足一项
-      let anyPass = false;
-      for (const perm of item) {
-        if (neonaicPermissionServer.checkSinglePermission(executor, perm)) { anyPass = true; break; }
-      }
-      if (!anyPass) return `缺少权限: 须满足 [${item.join(', ')}] 其中之一`;
-    } else {
-      // AND 项：必须满足
-      if (!neonaicPermissionServer.checkSinglePermission(executor, item)) {
-        const label = item.startsWith('!') ? `${item}（须缺失）` : item;
-        return `缺少权限: ${label}`;
-      }
-    }
-  }
+  allCommands.push(Object.freeze(cmd));
   return null;
 }
 
@@ -202,7 +175,7 @@ function buildError(cmdName, reason, usage) {
 /**
  * 解析命令引用（支持别名与命名空间）。
  * @param {string} ref 命令引用，如 'name' / 'alias' / 'ns:name' / 'ns:alias'
- * @returns {CommandMeta|null}
+ * @returns {NeonaicTCommandMeta|null}
  */
 function resolveCommand(ref) {
   if (typeof ref !== 'string' || !ref) return null;
@@ -239,7 +212,9 @@ function executeCommand(cmdName, ctx, ...args) {
  * @param {NeonaicCommandContext} [ctx] 上下文，无法设置 timestamp 属性
  * @param {...*} args 命令参数
  * @returns {*|Promise<*>}
- * @throws {Error}
+ * @throws {NeonaicIllegalArgumentError} 找不到命令
+ * @throws {NeonaicIllegalStateError} 命令权限有误
+ * @throws {NeonaicCommandError} 命令执行错误
  */
 function executeCommandSilent(cmdName, ctx = {}, ...args) {
   if (typeof cmdName !== 'string' || !cmdName) return;
@@ -255,7 +230,7 @@ function executeCommandSilent(cmdName, ctx = {}, ...args) {
 
   // 权限检查：CLI / 内部调用跳过
   if (!context.internalCall && context.executor) {
-    const permErr = checkCommandPerms(cmdName, meta.permissions, context.executor);
+    const permErr = neonaicPermissionServer.checkPermissionFromContext(context, meta.permissions);
     if (permErr) {
       throw new NeonaicIllegalStateError(buildError(cmdName, permErr));
     }
@@ -290,7 +265,7 @@ export class NeonaicCommandContext extends NeonaicNewable {
   /** 改变命令执行时上下文，可以透传类对象 @type {Object|undefined} */
   set this(value) { this.#this = value; };
 
-  /** 执行者：请不要传入'$'开头的，因为被内部使用；同时请勿完全信任本处内容。'$console'表示控制台，'$unknown'表示未知。Index越小的执行者越近 @type {string[]} */
+  /** 执行者：请不要传入'$'开头的，除非是内部使用；同时请勿完全信任本处内容。'$console'表示控制台，'$unknown'表示未知。Index越小的执行者越近 @type {string[]} */
   get executor() { return this.#executor; };
   /** 追加执行者 @param {string|string[]} value 执行者列表 */
   set executor(value) {
@@ -304,10 +279,10 @@ export class NeonaicCommandContext extends NeonaicNewable {
   /** @param {NeonaicCommandContext|{privateExecutor?: boolean, internalCall?: boolean, this?: Object, executor?: string|string[]}} options */
   constructor(options) {
     super();
-    this.#privateExecutor = !!options.privateExecutor;
-    this.#internalCall = !!options.internalCall;
-    this.#this = options.this ?? undefined;
-    this.executor = options.executor;
+    this.#privateExecutor = !!options?.privateExecutor;
+    this.#internalCall = !!options?.internalCall;
+    this.#this = options?.this ?? undefined;
+    this.executor = options?.executor;
   }
 
   /** 语法糖：创建一个新的上下文实例 */
@@ -343,8 +318,11 @@ function inferNext(input) {
 
 // ---- 工具 ----
 
-/** 获取所有已注册命令（按注册顺序） */
-function getCommands() { return allCommands; }
+/**
+ * 获取所有已注册命令（按注册顺序）
+ * @returns {Readonly<NeonaicTCommandMeta>[]} 副本
+ */
+function getCommands() { return allCommands.slice(0); }
 
 /** 获取是否存在可解析的目标命令（含别名与命名空间） */
 function hasCommand(cmd) { return resolveCommand(cmd) != null; }
@@ -359,7 +337,7 @@ registerCommand('neonaic', 'help', function (...which) {
     const names = allCommands.filter((meta) => {
       // 过滤掉无权限命令
       if (!meta?.permissions?.length || ctx.internalCall) return true;
-      return checkCommandPerms(meta.name, meta.permissions, ctx.executor) === null;
+      return neonaicPermissionServer.checkPermissionFromContext(ctx, meta.permissions);
     }).map((meta) => {
       const label = meta.namespace ? `${meta.namespace}:${meta.name}` : meta.name;
       const aliasTxt = meta.aliases.length ? ` [别名: ${meta.aliases.join(', ')}]` : '';
@@ -431,7 +409,6 @@ registerCommand('neonaic', 'force', async function (cmd, ...args) {
 export const neonaicCommandServer = {
   parseArgs,
   registerCommand,
-  checkCommandPerms,
   resolveCommand,
   executeCommand,
   executeCommandSilent,
