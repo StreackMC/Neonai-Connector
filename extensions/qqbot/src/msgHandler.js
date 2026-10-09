@@ -23,7 +23,7 @@ import { NeonaicIllegalArgumentError } from '../../../src/utils/NeonaicNewableEr
 async function onPrivateMessageIn(event, pp) {
   /** 实例的 Profile 配置 */
   const profile_config = neonaicPlatformManager.getPlatformManager().getProfile(pp.profile);
-  const user = `qUSR#${event.user_id}@${pp.profile}`;
+  const user = `qUSR#${event.user_id}@${pp.selfInfo.id}`;
   const markdown = toMarkdown(event.message, pp);
   noteKnownNames(event, { user });
 
@@ -54,8 +54,8 @@ async function onPrivateMessageIn(event, pp) {
 async function onGroupMessageIn(event, pp) {
   /** 实例的 Profile 配置 */
   const profile_config = neonaicPlatformManager.getPlatformManager().getProfile(pp.profile);
-  const user = `qUSR#${event.user_id}@${pp.profile}`;
-  const group = `qGRP#${event.group_id}@${pp.profile}`;
+  const user = `qUSR#${event.user_id}@${pp.selfInfo.id}`;
+  const group = `qGRP#${event.group_id}@${pp.selfInfo.id}`;
   const markdown = toMarkdown(event.message, pp);
   noteKnownNames(event, { user, group });
 

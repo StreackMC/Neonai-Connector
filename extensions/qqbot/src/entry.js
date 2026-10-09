@@ -11,7 +11,7 @@ import qqBotBackend from 'qq-official-bot';
 const { Bot, ReceiverMode } = qqBotBackend;
 import MsgHandler, { sendMsg } from "./msgHandler.js";
 import { EVENTS, INTENTS } from "./enums.js";
-import { NeonaicIllegalArgumentError } from '../../../src/utils/NeonaicNewableError.js';
+import { NeonaicIllegalArgumentError, NeonaicIOError } from '../../../src/utils/NeonaicNewableError.js';
 import { getLogger } from '../../../src/logger/Logger.js';
 import { parseString } from '../../../src/utils/chore.js';
 import { neonaicConfManager } from '../../../src/system/confManager.js';
@@ -19,6 +19,7 @@ import { neonaicConfManager } from '../../../src/system/confManager.js';
 export class PlatformQQBot extends NeonaiPlatform {
   static type = 'qqbot';
   #botInstance = null;
+  #selfInfo = null;
 
   constructor(profile) {
     super(profile);
@@ -27,6 +28,9 @@ export class PlatformQQBot extends NeonaiPlatform {
 
   /** 获取机器人对象，不支持 setter @return {qqBotBackend.Bot|null} */
   get bot() { return this.#botInstance; }
+
+  /** 获取机器人信息，不支持 setter @return {qqBotBackend.Bot.Info|null} */
+  get selfInfo() { return this.#selfInfo; }
 
   async start() {
     const cfg = PlatformManager.instance.getProfile(this.profile);
@@ -46,9 +50,15 @@ export class PlatformQQBot extends NeonaiPlatform {
       ],
       mode: ReceiverMode.WEBSOCKET,
     });
-    this.#botInstance.on(EVENTS.message.groupAt, (e) => MsgHandler.onGroupMessageIn(e, this));
-    this.#botInstance.on(EVENTS.message.private, (e) => MsgHandler.onPrivateMessageIn(e, this));
-    await this.#botInstance.start();
+    if (this.bot === null) throw new NeonaicIOError(`无法创建 QQBot 实例，请检查配置`, this);
+
+    // 注册消息事件
+    this.bot.on(EVENTS.message.groupAt, (e) => MsgHandler.onGroupMessageIn(e, this));
+    this.bot.on(EVENTS.message.private, (e) => MsgHandler.onPrivateMessageIn(e, this));
+    await this.bot.start();
+
+    // 获取机器人自身信息
+    this.#selfInfo = await this.bot.getSelfInfo();
 
     // 启动主动式看门狗
     this.#watchdog = setInterval(() => this.onWatchdogTick(), 60/* 秒探测一次 */ * 1000);
