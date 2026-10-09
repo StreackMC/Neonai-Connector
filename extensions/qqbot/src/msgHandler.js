@@ -23,7 +23,7 @@ import { NeonaicIllegalArgumentError } from '../../../src/utils/NeonaicNewableEr
 async function onPrivateMessageIn(event, pp) {
   /** 实例的 Profile 配置 */
   const profile_config = neonaicPlatformManager.getPlatformManager().getProfile(pp.profile);
-  const user = `USR#${event.user_id}`;
+  const user = `qUSR#${event.user_id}@${pp.profile}`;
   const markdown = toMarkdown(event.message, pp);
   noteKnownNames(event, { user });
 
@@ -40,7 +40,7 @@ async function onPrivateMessageIn(event, pp) {
     }
   });
   if (reply) {
-    pp.logMsgOut('Private:', `to=USR#${event.user_id} | msg=`, reply.replace(/\n/g, "\\n"));
+    pp.logMsgOut('Private:', `to=${user} | msg=`, reply.replace(/\n/g, "\\n"));
     event.reply(reply);
   }
 }
@@ -54,8 +54,8 @@ async function onPrivateMessageIn(event, pp) {
 async function onGroupMessageIn(event, pp) {
   /** 实例的 Profile 配置 */
   const profile_config = neonaicPlatformManager.getPlatformManager().getProfile(pp.profile);
-  const user = `USR#${event.user_id}`;
-  const group = `GRP#${event.group_id}`;
+  const user = `qUSR#${event.user_id}@${pp.profile}`;
+  const group = `qGRP#${event.group_id}@${pp.profile}`;
   const markdown = toMarkdown(event.message, pp);
   noteKnownNames(event, { user, group });
 
@@ -72,7 +72,7 @@ async function onGroupMessageIn(event, pp) {
     }
   });
   if (reply) {
-    pp.logMsgOut('Group:', `where=GRP#${event.group_id} | to=USR#${event.user_id} | msg=`, reply.replace(/\n/g, "\\n"));
+    pp.logMsgOut('Group:', `where=${group} | to=${user} | msg=`, reply.replace(/\n/g, "\\n"));
     event.reply("\n" + reply);
   }
 }
@@ -89,12 +89,12 @@ export async function sendMsg(instance, who, msg) {
   if (!(instance instanceof PlatformQQBot)) throw new NeonaicIllegalArgumentError("指定的 Platform 无效");
   if (!instance.bot) throw new NeonaicIllegalArgumentError("QQBot 实例尚未启动");
   who = parseString(who).trim();
-  if (who.startsWith('USR#')) {
+  if (who.startsWith('qUSR#')) {
     // 私聊
-    return await instance.bot.sendPrivateMessage(who.slice(4), msg);
-  } else if (who.startsWith('GRP#')) {
+    return await instance.bot.sendPrivateMessage(who.slice(4).replace(/@.*$/, ''), msg);
+  } else if (who.startsWith('qGRP#')) {
     // 群聊
-    return await instance.bot.sendGroupMessage(who.slice(4), msg);
+    return await instance.bot.sendGroupMessage(who.slice(4).replace(/@.*$/, ''), msg);
   }
   // 无效用户
   throw new NeonaicIllegalArgumentError("无法识别的用户：" + parseString(who));
