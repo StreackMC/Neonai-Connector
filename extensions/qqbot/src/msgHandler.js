@@ -110,7 +110,7 @@ async function onGroupMessageIn(event, pp) {
     preventedByEvent: false,
     resolveCommand: true,
   });
-  if (commandResult.status === 'SUCCESS') {
+  if (['SUCCESS', 'CMD_FAILED'].includes(commandResult.status)) {
     event.reply([
       segment.reply(event.message_id),
       segment.text(commandResult.text),
