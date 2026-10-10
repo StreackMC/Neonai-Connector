@@ -668,7 +668,7 @@ function cmdAIUsage() {
 function aiWhois(ctx, ...args) {
   const op = args[0];
   /** 名录改动与权限设置同属敏感操作，与 `permission` 命令保持一致：要求私密上下文 */
-  const requirePrivate = () => `“${neonaicConfManager.getBotName()}”未能完成操作，因为当前上下文不是私密的。`;
+  if (!ctx.privateExecutor) return `“${neonaicConfManager.getBotName()}”未能完成操作，因为当前上下文不是私密的。`;
 
   switch (op) {
     case 'list': {
@@ -685,7 +685,6 @@ function aiWhois(ctx, ...args) {
       return entry ? `${code} → ${JSON.stringify(entry)}` : `用户名录中没有 ${code}`;
     }
     case 'set': {
-      if (!ctx.privateExecutor) return requirePrivate();
       const [code, name] = [args[1], args[2]];
       if (!code || !name) return '用法: ai whois set <code> <名字> [称呼偏好]';
       const pronoun = args.slice(3).join(' ').trim();
@@ -693,7 +692,6 @@ function aiWhois(ctx, ...args) {
       return `已登记 ${code} → ${neonaicUserDirectory.renderEntry(entry)}（名录共 ${neonaicUserDirectory.size()} 条）`;
     }
     case 'unset': {
-      if (!ctx.privateExecutor) return requirePrivate();
       const code = args[1];
       if (!code) return '用法: ai whois unset <code>';
       return neonaicUserDirectory.remove(code)
