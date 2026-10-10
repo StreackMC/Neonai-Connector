@@ -75,7 +75,7 @@ async function onGroupMessageIn(event, pp) {
     internalCall: false,
   };
   /** @type {object[]} 在 qq-official-bot 修复 #123 之前，此处没有类型声明 */
-  const mentioned = Array.isArray(event.mentioned) ? event.mentioned : [];
+  const mentioned = Array.isArray(event.mentions) ? event.mentions : [];
   noteKnownNames(event, { user, group });
   pp.logMsgIn('Group:', `where=${group} | from=${user} | msg=` + parseString(event.message, false).replace(/\n/g, "\\n"));
 
@@ -167,7 +167,7 @@ async function onGroupAtMessageIn(event, pp) {
     internalCall: false,
   };
   /** @type {object[]} 在 qq-official-bot 修复 #123 之前，此处没有类型声明 */
-  const mentioned = Array.isArray(event.mentioned) ? event.mentioned : [];
+  const mentioned = Array.isArray(event.mentions) ? event.mentions : [];
   noteKnownNames(event, { user, group });
   pp.logMsgIn('GroupAt:', `where=${group} | from=${user} | msg=` + parseString(event.message, false).replace(/\n/g, "\\n"));
 
