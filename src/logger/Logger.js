@@ -133,7 +133,7 @@ function setConsoleHooks(before, after) {
   _afterWrite = after ?? null;
 }
 
-function toText(args) { return args.map(parseString).join(' '); }
+function toText(args) { return args.map((v) => parseString(v, !(DEBUGING || neonaicConfManager.getConfig(neonaicConfManager.CONFIG_PATHS.main).getBoolean('detailedLog', false)))).join(' '); }
 
 /**
  * 创建日志器。
