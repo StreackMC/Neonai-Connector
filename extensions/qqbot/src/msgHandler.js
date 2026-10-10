@@ -68,7 +68,7 @@ async function onGroupMessageIn(event, pp) {
   const group = `qGRP#${event.group_id}@${pp.selfInfo.id}`;
   const markdown = toMarkdown(event.message, pp);
   /** @type {object[]} 在 qq-official-bot 修复 #123 之前，此处没有类型声明 */
-  const mentioned = event.mentions;
+  const mentioned = Array.isArray(event.mentioned) ? event.mentioned : [];
   noteKnownNames(event, { user, group });
   pp.logMsgIn('Group:', `where=${group} | from=${user} | msg=` + parseString(event.message, false).replace(/\n/g, "\\n"));
 
@@ -99,27 +99,29 @@ async function onGroupMessageIn(event, pp) {
   }
 
   // 处理没有 @ 机器人的情形，先检查命令
-  const commandResult = await neonaicMessageIn.resolveReply(markdown, {
-    AI: false,
-    resolveCommandWith: {
-      executor: [user, group],
-      privateExecutor: false,
-      internalCall: false,
-    },
-    dispatchEvent: false,
-    preventedByEvent: false,
-    resolveCommand: true,
-  });
-  if (['SUCCESS', 'CMD_FAILED'].includes(commandResult.status)) {
-    event.reply([
-      segment.reply(event.message_id),
-      segment.text(commandResult.text),
-    ]).then(() => {
-      pp.logMsgOut('GroupAt:', `where=${group} | to=${user} | reply=`, parseString(commandResult.text, false).replace(/\n/g, "\\n"));
-    }).catch((e) => {
-      pp.log('error', 'Failed to reply group message:', `where=${group} | to=${user} | error=`, e, ` | reply=`, parseString(commandResult.text, false).replace(/\n/g, "\\n"));
+  if (/* 不能 @ 人 */mentioned.length === /* @本机器人 已经在上文处理了，所以可以直接判空 */0) {
+    const commandResult = await neonaicMessageIn.resolveReply(markdown, {
+      AI: false,
+      resolveCommandWith: {
+        executor: [user, group],
+        privateExecutor: false,
+        internalCall: false,
+      },
+      dispatchEvent: false,
+      preventedByEvent: false,
+      resolveCommand: true,
     });
-    return;
+    if (['SUCCESS', 'CMD_FAILED'].includes(commandResult.status)) {
+      event.reply([
+        segment.reply(event.message_id),
+        segment.text(commandResult.text),
+      ]).then(() => {
+        pp.logMsgOut('GroupAt:', `where=${group} | to=${user} | reply=`, parseString(commandResult.text, false).replace(/\n/g, "\\n"));
+      }).catch((e) => {
+        pp.log('error', 'Failed to reply group message:', `where=${group} | to=${user} | error=`, e, ` | reply=`, parseString(commandResult.text, false).replace(/\n/g, "\\n"));
+      });
+      return;
+    }
   }
 
   // 再使用被动回复
@@ -147,6 +149,8 @@ async function onGroupAtMessageIn(event, pp) {
   const user = `qUSR#${event.user_id}@${pp.selfInfo.id}`;
   const group = `qGRP#${event.group_id}@${pp.selfInfo.id}`;
   const markdown = toMarkdown(event.message, pp);
+  /** @type {object[]} 在 qq-official-bot 修复 #123 之前，此处没有类型声明 */
+  const mentioned = Array.isArray(event.mentioned) ? event.mentioned : [];
   noteKnownNames(event, { user, group });
   pp.logMsgIn('GroupAt:', `where=${group} | from=${user} | msg=` + parseString(event.message, false).replace(/\n/g, "\\n"));
 
