@@ -121,7 +121,7 @@ async function resolveReply(msg, options) {
       /* 开始执行命令 */
       const ctx = new NeonaicCommandContext(config.resolveCommandWith || {});
       if (neonaicPermissionServer.checkPermissionFromContext(ctx, neonaicCommandServer.resolveCommand(cmdName).permissions) === false) {
-        getLogger().cmd.debug(`[msgIn] 无法以“`, ctx, `”执行命令“${cmdName}”: 权限不足`);
+        getLogger().cmd.debug(`[msgIn] 无法以“`, ctx.executor, `”执行命令“${cmdName}”: 权限不足`);
         return {
           text: REPLY_FALLBACK.PERMISSION_OF_CMD_DENIED(cmdName),
           failed: true,
@@ -136,7 +136,7 @@ async function resolveReply(msg, options) {
           status: 'SUCCESS'
         };
       } catch (err) {
-        getLogger().cmd.warn(`[msgIn] 无法以“`, ctx, `”执行命令“${cmdName}”: ${err.message}`);
+        getLogger().cmd.warn(`[msgIn] 无法以“`, ctx.executor, `”执行命令“${cmdName}”: ${err.message}`);
         return {
           text: REPLY_FALLBACK.CMD_FAILED(err, cmdName),
           failed: true,
