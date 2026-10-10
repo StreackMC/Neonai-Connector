@@ -15,6 +15,7 @@ import { neonaicCommandInterface } from '../../../src/command/commandInterface.j
 import { NeonaicIllegalArgumentError } from '../../../src/utils/NeonaicNewableError.js';
 import { neonaicEventBus } from '../../../src/event/neonaicEventBus.js';
 import { NeonaicMessageEvent } from '../../../src/event/neonaicEventInterface.js';
+import { neonaicPermissionServer } from '../../../src/command/permissionServer.js';
 
 /**
  * 好友列表私聊
@@ -27,6 +28,11 @@ async function onPrivateMessageIn(event, pp) {
   const profile_config = neonaicPlatformManager.getPlatformManager().getProfile(pp.profile);
   const user = `qUSR#${event.user_id}@${pp.selfInfo.id}`;
   const markdown = toMarkdown(event.message, pp);
+  const ctx = {
+    executor: [user, group],
+    privateExecutor: false,
+    internalCall: false,
+  };
   noteKnownNames(event, { user });
 
   pp.logMsgIn('Private:', `from=${user} | msg=` + parseString(event.message, false).replace(/\n/g, "\\n"));
@@ -35,11 +41,7 @@ async function onPrivateMessageIn(event, pp) {
     AIlist: pickAIList(profile_config.aiRouting, profile_config.allowedAI, {
       scene: 'private', profile: pp.profile, user, group: '', executor: [user], text: markdown,
     }),
-    resolveCommandWith: {
-      executor: user,
-      privateExecutor: true,
-      internalCall: false,
-    }
+    resolveCommandWith: ctx,
   });
   if (reply.text) {
     event.reply([
@@ -67,6 +69,11 @@ async function onGroupMessageIn(event, pp) {
   const user = `qUSR#${event.user_id}@${pp.selfInfo.id}`;
   const group = `qGRP#${event.group_id}@${pp.selfInfo.id}`;
   const markdown = toMarkdown(event.message, pp);
+  const ctx = {
+    executor: [user, group],
+    privateExecutor: false,
+    internalCall: false,
+  };
   /** @type {object[]} 在 qq-official-bot 修复 #123 之前，此处没有类型声明 */
   const mentioned = Array.isArray(event.mentioned) ? event.mentioned : [];
   noteKnownNames(event, { user, group });
@@ -79,11 +86,7 @@ async function onGroupMessageIn(event, pp) {
       AIlist: pickAIList(profile_config.aiRouting, profile_config.allowedAI, {
         scene: 'group', profile: pp.profile, user, group, executor: [user, group], text: markdown,
       }),
-      resolveCommandWith: {
-        executor: [user, group],
-        privateExecutor: false,
-        internalCall: false,
-      }
+      resolveCommandWith: ctx,
     });
     if (reply.text) {
       event.reply([
@@ -100,27 +103,36 @@ async function onGroupMessageIn(event, pp) {
 
   // 处理没有 @ 机器人的情形，先检查命令
   if (/* 不能 @ 人 */mentioned.length === /* @本机器人 已经在上文处理了，所以可以直接判空 */0) {
-    const commandResult = await neonaicMessageIn.resolveReply(markdown, {
-      AI: false,
-      resolveCommandWith: {
-        executor: [user, group],
-        privateExecutor: false,
-        internalCall: false,
-      },
-      dispatchEvent: false,
-      preventedByEvent: false,
-      resolveCommand: true,
-    });
-    if (['SUCCESS', 'CMD_FAILED'].includes(commandResult.status)) {
-      event.reply([
-        segment.reply(event.message_id),
-        segment.text(commandResult.text),
-      ]).then(() => {
-        pp.logMsgOut('GroupAt:', `where=${group} | to=${user} | reply=`, parseString(commandResult.text, false).replace(/\n/g, "\\n"));
-      }).catch((e) => {
-        pp.log('error', 'Failed to reply group message:', `where=${group} | to=${user} | error=`, e, ` | reply=`, parseString(commandResult.text, false).replace(/\n/g, "\\n"));
-      });
-      return;
+    const prefixes = neonaicConfManager.getConfig(neonaicConfManager.CONFIG_PATHS.main).getList('prefix');
+    const parsed = neonaicCommandServer.resolveCommandArgs(markdown, prefixes, true);
+    const [cmdName, cmdArgs] = parsed || ["", []];
+    const cmd = neonaicCommandServer.resolveCommand(cmdName);
+    if (
+      /* 有这个命令 */cmd
+      && /* 有这个权限 */neonaicPermissionServer.checkPermissionFromContext(ctx, cmd.permissions, cmd.permissionDefault)
+    ) {
+      try {
+        const quickCommandResult = await neonaicCommandServer.executeCommandSilent(cmdName, ctx, ...cmdArgs);
+        event.reply([
+          segment.reply(event.message_id),
+          segment.text(parseString(quickCommandResult)),
+        ]).then(() => {
+          pp.logMsgOut('GroupAt:', `where=${group} | to=${user} | reply=`, parseString(quickCommandResult).replace(/\n/g, "\\n"));
+        }).catch((e) => {
+          pp.log('error', 'Failed to reply group message:', `where=${group} | to=${user} | error=`, e, ` | reply=`, parseString(quickCommandResult).replace(/\n/g, "\\n"));
+        });
+      } catch (error_in_executing_cmd) {
+        event.reply([
+          segment.reply(event.message_id),
+          segment.text(neonaicMessageIn.REPLY_FALLBACK.CMD_FAILED(error_in_executing_cmd, cmdName)),
+        ]).then(() => {
+          pp.log('warn', 'Failed to reply group message:', `where=${group} | to=${user} | error=`, error_in_executing_cmd, ` | reply=<null>Executing Command</null>`);
+        }).catch((error_in_sending_cmd_err) => {
+          pp.log('error', 'Failed to reply group message:', `where=${group} | to=${user} | error=`, error_in_sending_cmd_err, ` | reply=<null>Executing Command</null>`);
+        });
+      } finally {
+        return;
+      }
     }
   }
 
@@ -149,6 +161,11 @@ async function onGroupAtMessageIn(event, pp) {
   const user = `qUSR#${event.user_id}@${pp.selfInfo.id}`;
   const group = `qGRP#${event.group_id}@${pp.selfInfo.id}`;
   const markdown = toMarkdown(event.message, pp);
+  const ctx = {
+    executor: [user, group],
+    privateExecutor: false,
+    internalCall: false,
+  };
   /** @type {object[]} 在 qq-official-bot 修复 #123 之前，此处没有类型声明 */
   const mentioned = Array.isArray(event.mentioned) ? event.mentioned : [];
   noteKnownNames(event, { user, group });
@@ -159,11 +176,7 @@ async function onGroupAtMessageIn(event, pp) {
     AIlist: pickAIList(profile_config.aiRouting, profile_config.allowedAI, {
       scene: 'group', profile: pp.profile, user, group, executor: [user, group], text: markdown,
     }),
-    resolveCommandWith: {
-      executor: [user, group],
-      privateExecutor: false,
-      internalCall: false,
-    }
+    resolveCommandWith: ctx,
   });
   if (reply.text) {
     event.reply([
