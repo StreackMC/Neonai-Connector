@@ -1,4 +1,4 @@
-import qqBotBackend from 'qq-official-bot';
+import qqBotBackend, { segment } from 'qq-official-bot';
 import he from 'he';
 import JSON5 from 'json5';
 import { getLogger } from '../../../src/logger/Logger.js';
@@ -41,38 +41,102 @@ async function onPrivateMessageIn(event, pp) {
       internalCall: false,
     }
   });
-  if (reply) {
-    pp.logMsgOut('Private:', `to=${user} | msg=`, reply.replace(/\n/g, "\\n"));
-    event.reply(reply);
+  if (reply.text) {
+    event.reply([
+      segment.reply(event.message_id),
+      segment.text(reply.text),
+    ]).then(() => {
+      pp.logMsgOut('Private:', `to=${user} | reply=`, parseString(reply.text, false).replace(/\n/g, "\\n"));
+    }).catch((e) => {
+      pp.log('error', 'Failed to reply private message:', `to=${user} | error=`, e, ` | reply=`, parseString(reply.text, false).replace(/\n/g, "\\n"));
+    });
   }
 }
 
 /**
- * 群聊消息
+ * 群聊消息，处理「获取全部消息」
  * 
  * @param {qqBotBackend.GroupMessageEvent} event 
  * @param {PlatformQQBot} pp 
  */
 async function onGroupMessageIn(event, pp) {
+  event.men;
+
   /** 实例的 Profile 配置 */
   const profile_config = neonaicPlatformManager.getPlatformManager().getProfile(pp.profile);
   const user = `qUSR#${event.user_id}@${pp.selfInfo.id}`;
   const group = `qGRP#${event.group_id}@${pp.selfInfo.id}`;
   const markdown = toMarkdown(event.message, pp);
+  /** @type {object[]} 在 qq-official-bot 修复 #123 之前，此处没有类型声明 */
+  const mentioned = event.mentions;
   noteKnownNames(event, { user, group });
-
   pp.logMsgIn('Group:', `where=${group} | from=${user} | msg=` + parseString(event.message, false).replace(/\n/g, "\\n"));
-  neonaicEventBus.dispatchEvent(new NeonaicMessageEvent(pp, [user, group], markdown, async (msg) => {
-    pp.sendMsg(group, msg).then(() => {
-      pp.logMsgOut('Group:', `where=${group} | to=${user} | msg=`, msg.replace(/\n/g, "\\n"));
+
+  // 处理 @ 机器人的情形以及提到澪奈的情形，也就是主动式回复
+  if (Array.isArray(mentioned) && mentioned.length > 0 && mentioned.some((u) => !!u.is_you)) {
+    const reply = await neonaicMessageIn.resolveReply(markdown, {
+      AI: profile_config.useAI,
+      AIlist: pickAIList(profile_config.aiRouting, profile_config.allowedAI, {
+        scene: 'group', profile: pp.profile, user, group, executor: [user, group], text: markdown,
+      }),
+      resolveCommandWith: {
+        executor: [user, group],
+        privateExecutor: false,
+        internalCall: false,
+      }
+    });
+    if (reply.text) {
+      event.reply([
+        segment.reply(event.message_id),
+        segment.text(reply.text),
+      ]).then(() => {
+        pp.logMsgOut('GroupAt:', `where=${group} | to=${user} | reply=`, parseString(reply.text, false).replace(/\n/g, "\\n"));
+      }).catch((e) => {
+        pp.log('error', 'Failed to reply group message:', `where=${group} | to=${user} | error=`, e, ` | reply=`, parseString(reply.text, false).replace(/\n/g, "\\n"));
+      });
+    }
+    return;
+  }
+
+  // 处理没有 @ 机器人的情形，先检查命令
+  const commandResult = await neonaicMessageIn.resolveReply(markdown, {
+    AI: false,
+    resolveCommandWith: {
+      executor: [user, group],
+      privateExecutor: false,
+      internalCall: false,
+    },
+    dispatchEvent: false,
+    preventedByEvent: false,
+    resolveCommand: true,
+  });
+  if (commandResult.status === 'SUCCESS') {
+    event.reply([
+      segment.reply(event.message_id),
+      segment.text(commandResult.text),
+    ]).then(() => {
+      pp.logMsgOut('GroupAt:', `where=${group} | to=${user} | reply=`, parseString(commandResult.text, false).replace(/\n/g, "\\n"));
     }).catch((e) => {
-      pp.log('error', 'Failed to send message to group:', `where=${group} | to=${user} | error=`, e, ` | msg=`, msg.replace(/\n/g, "\\n"));
+      pp.log('error', 'Failed to reply group message:', `where=${group} | to=${user} | error=`, e, ` | reply=`, parseString(commandResult.text, false).replace(/\n/g, "\\n"));
+    });
+    return;
+  }
+
+  // 再使用被动回复
+  neonaicEventBus.dispatchEvent(new NeonaicMessageEvent(pp, [user, group], markdown, async (msg) => {
+    event.reply([
+      segment.reply(event.message_id),
+      segment.text(msg),
+    ]).then(() => {
+      pp.logMsgOut('Group:', `where=${group} | to=${user} | reply=`, parseString(msg, false).replace(/\n/g, "\\n"));
+    }).catch((e) => {
+      pp.log('error', 'Failed to send message to group:', `where=${group} | to=${user} | error=`, e, ` | reply=`, parseString(msg, false).replace(/\n/g, "\\n"));
     });
   }));
 }
 
 /**
- * 群聊消息
+ * 群聊消息，当没有授权「获取全部消息」时走此路由
  * 
  * @param {qqBotBackend.GroupMessageEvent} event 
  * @param {PlatformQQBot} pp 
@@ -84,8 +148,8 @@ async function onGroupAtMessageIn(event, pp) {
   const group = `qGRP#${event.group_id}@${pp.selfInfo.id}`;
   const markdown = toMarkdown(event.message, pp);
   noteKnownNames(event, { user, group });
-
   pp.logMsgIn('GroupAt:', `where=${group} | from=${user} | msg=` + parseString(event.message, false).replace(/\n/g, "\\n"));
+
   const reply = await neonaicMessageIn.resolveReply(markdown, {
     AI: profile_config.useAI,
     AIlist: pickAIList(profile_config.aiRouting, profile_config.allowedAI, {
@@ -97,9 +161,15 @@ async function onGroupAtMessageIn(event, pp) {
       internalCall: false,
     }
   });
-  if (reply) {
-    pp.logMsgOut('GroupAt:', `where=${group} | to=${user} | msg=`, reply.replace(/\n/g, "\\n"));
-    event.reply("\n" + reply);
+  if (reply.text) {
+    event.reply([
+      segment.reply(event.message_id),
+      segment.text(reply.text),
+    ]).then(() => {
+      pp.logMsgOut('GroupAt:', `where=${group} | to=${user} | reply=`, parseString(reply.text, false).replace(/\n/g, "\\n"));
+    }).catch((e) => {
+      pp.log('error', 'Failed to reply group at-message:', `where=${group} | to=${user} | error=`, e, ` | reply=`, parseString(reply.text, false).replace(/\n/g, "\\n"));
+    });
   }
 }
 
@@ -108,7 +178,7 @@ async function onGroupAtMessageIn(event, pp) {
  * @param {PlatformQQBot} instance QQ机器人实例
  * @param {string} who 目标对象
  * @param {qqBotBackend.Sendable|String} msg 消息内容
- * @returns {Promise<import('../qq-official-bot/lib/index.js').SendResult|null>} 结果（发送失败时 throw）
+ * @returns {Promise<import('qq-official-bot').SendResult|null>} 结果（发送失败时 throw）
  * @throws 无法识别参数 / 发送失败
  */
 export async function sendMsg(instance, who, msg) {
@@ -158,9 +228,10 @@ function noteKnownNames(event, targets) {
 /**
  * @param {qqBotBackend.Sendable} raw 原始信息
  * @param {PlatformQQBot} pp 
+ * @param {boolean} [textOnly=false] 开启后将只处理可用文本表达的消息片段，其余部分自动忽略，这将替换图片视频等内容为无意义占位符而非链接、Base64 等带内容的 Payload
  * @returns {String} Markdown 格式的信息
  */
-function toMarkdown(raw, pp) {
+function toMarkdown(raw, pp, textOnly = false) {
   let result = "";
   raw.forEach((piece) => {
     try {
@@ -176,13 +247,19 @@ function toMarkdown(raw, pp) {
           result += ` :[${fromQQElement(msgMeta, 'emoji')?.text ?? 'Unknown Emoji'}]: `;
           break;
         case 'image':// 图片
-          result += ` ![Image:${msgMeta?.name ?? 'Untitled Image'}](${msgMeta?.url ?? '//UnknownUrl'}) `;
+          result += textOnly
+            ? ` ![Image:${msgMeta?.name ?? 'Untitled Image'}](//noUrl)`
+            : ` ![Image:${msgMeta?.name ?? 'Untitled Image'}](${msgMeta?.url ?? '//UnknownUrl'}) `;
           break;
         case 'audio':// 音频
-          result += ` <audio controls title="${he.escape(msgMeta?.name ?? 'Untitled Audio')}"><source src="${he.escape(msgMeta?.url ?? '//UnknownUrl')}"></audio> `;
+          result += textOnly
+            ? ` <audio title="${he.escape(msgMeta?.name ?? 'Untitled Audio')}">NoSource</audio> `
+            : ` <audio controls title="${he.escape(msgMeta?.name ?? 'Untitled Audio')}"><source src="${he.escape(msgMeta?.url ?? '//UnknownUrl')}"></audio> `;
           break;
         case 'video':// 视频
-          result += ` <video controls title="${he.escape(msgMeta?.name ?? 'Untitled Video')}"><source src="${he.escape(msgMeta?.url ?? '//UnknownUrl')}"></video> `;
+          result += textOnly
+            ? ` <video title="${he.escape(msgMeta?.name ?? 'Untitled Video')}">NoSource</video> `
+            : ` <video controls title="${he.escape(msgMeta?.name ?? 'Untitled Video')}"><source src="${he.escape(msgMeta?.url ?? '//UnknownUrl')}"></video> `;
           break;
         case 'link':// 链接
           // Warn: 没有转义

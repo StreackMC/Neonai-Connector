@@ -53,9 +53,9 @@ export class PlatformQQBot extends NeonaiPlatform {
     if (this.bot === null) throw new NeonaicIOError(`无法创建 QQBot 实例，请检查配置`, this);
 
     // 注册消息事件
+    this.bot.on(EVENTS.message.group, (e) => MsgHandler.onGroupMessageIn(e, this));
     this.bot.on(EVENTS.message.groupAt, (e) => MsgHandler.onGroupAtMessageIn(e, this));
     this.bot.on(EVENTS.message.private, (e) => MsgHandler.onPrivateMessageIn(e, this));
-    this.bot.on(EVENTS.message.group, (e) => MsgHandler.onGroupMessageIn(e, this));
     await this.bot.start();
 
     // 获取机器人自身信息
