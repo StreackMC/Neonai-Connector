@@ -4,6 +4,9 @@ import { parseString } from "../utils/chore.js";
 import { NeonaicNewable } from "../utils/NeonaicNewableClass.js";
 import { NeonaicError, NeonaicIllegalArgumentError } from "../utils/NeonaicNewableError.js";
 
+/** 是否分发过 LoadedEvent @type {null|NeonaicLoadedEvent} */
+let loadedEventDispatched = null;
+
 /**
  * @typedef {Object} NeonaicTEventOptions
  * @property {boolean} [cancelable=true] 事件是否可被否决，否决后 dispatchEvent 将返回 false
@@ -32,18 +35,67 @@ export class NeonaicEventServices extends EventTarget {
       try {
         return super.dispatchEvent(new NeonaicEvent(event, payload, options));
       } catch (error) {
-        throw new NeonaicError(parseString("Unable to dispatch: Can not apply the syntactic sugar to new a event:", e), [event, payload, options, e]);
+        throw new NeonaicError(parseString("Unable to dispatch: Can not apply the syntactic sugar to new a event:", error), [event, payload, options, error]);
       }
     } else if (event instanceof NeonaicEvent) {
+      // 进行特殊事件处理
+      switch (event.type) {
+        // 标记已执行过和重复利用旧事件
+        case NeonaicLoadedEvent.EVENT_TYPE:
+          if /* 防止使用 type 竞争 */(!(event instanceof NeonaicLoadedEvent)) break;
+          if (loadedEventDispatched instanceof NeonaicLoadedEvent) {
+            return super.dispatchEvent(loadedEventDispatched);
+          } else {
+            loadedEventDispatched = event;
+          }
+          break;
+      }
+
       return super.dispatchEvent(event);
     }
+
     throw new NeonaicIllegalArgumentError("Unable to dispatch: The event must be an instance of NeonaicEvent or a string.", [event, payload, options]);
+  }
+
+  /**
+   * 添加事件监听器
+   * @param {string} type 要监听的事件类型
+   * @param {EventListener|EventListenerObject} listener 监听器
+   * @param {EventListenerOptions|boolean} [options] 监听选项
+   * @throws {NeonaicIllegalArgumentError|TypeError} 参数类型不合法
+   */
+  addEventListener(type, listener, options) {
+    if (typeof type !== 'string') throw new NeonaicIllegalArgumentError('Type of the event should be a string, but found:' + parseString(type), type);
+
+    // 进行特殊事件处理
+    switch (type) {
+      // 如果分发过就立即执行，否则强制修改为单次回调
+      case NeonaicLoadedEvent.EVENT_TYPE:
+        if (loadedEventDispatched instanceof NeonaicLoadedEvent) {
+          if (typeof listener === 'function') {
+            listener(loadedEventDispatched);
+            return;
+          };
+          if (typeof listener?.handleEvent === 'function') {
+            listener.handleEvent.call(listener, loadedEventDispatched);
+            return;
+          }
+        } else if (typeof options === 'object' && options !== null) {
+          options = { ...options, once: true };
+        } else {
+          options = { once: true };
+        }
+        break;
+    }
+
+    super.addEventListener(type, listener, options);
   }
 }
 
 /**
  * Neonaic 标准事件
  * @template T 业务承载的数据类型
+ * @extends {CustomEvent<T>}
  * @apiNote 原始类型，建议继承。
  */
 export class NeonaicEvent extends CustomEvent {
@@ -62,7 +114,6 @@ export class NeonaicEvent extends CustomEvent {
    * @param {NeonaicTEventOptions} [options] 事件选项
    */
   constructor(type, details, options = {}) {
-    if (typeof details !== 'object') throw new NeonaicIllegalArgumentError("details must be a non-null object");
     super(parseString(type).trim().toLowerCase(), {
       cancelable: options?.cancelable ?? true,
       /* NodeJS 中无效，为浏览器环境兼容而保留 */
@@ -71,12 +122,6 @@ export class NeonaicEvent extends CustomEvent {
       detail: details,
     });
   }
-
-  /**
-   * 获取业务承载的数据类型
-   * @type {T} 数据类型
-   */
-  get detail() { return super.detail; }
 }
 
 /**
@@ -111,7 +156,7 @@ export class NeonaicMessageEvent extends NeonaicEvent {
       message: message,
       user: Array.isArray(user) ? user.map(parseString) : [parseString(user)],
       pm: p,
-      reply: (typeof options?.reply === 'function') ? options.reply : undefined,
+      reply: (typeof replyFunc === 'function') ? replyFunc : undefined,
     }, options);
   }
 }
@@ -159,5 +204,25 @@ export class NeonaicCommandEvent extends NeonaicEvent {
       status: status,
       result: payload?.result ?? null,
     }, options);
+  }
+}
+
+/**
+ * 应用加载完成事件
+ * 
+ * @apiNote 本事件在应用初始化完成后分发一次，此后只要监听本事件都将立即执行回调
+ * @extends {NeonaicEvent<null>}
+ */
+export class NeonaicLoadedEvent extends NeonaicEvent {
+  /** 获取事件类型 */
+  static get EVENT_TYPE() { return "neonaic:loaded"; };
+
+  /**
+   * 构造一个事件；**如果同类事件已被分发过，那么再次分发时无论传入哪个同类事件都将使用旧事件**
+   * @param {NeonaicTEventOptions} [options] 事件选项
+   * @throws {NeonaicIllegalArgumentError} 参数不合法
+   */
+  constructor(options = {}) {
+    super(NeonaicLoadedEvent.EVENT_TYPE, null, options);
   }
 }

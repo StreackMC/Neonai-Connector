@@ -25,6 +25,8 @@ import { PlatformManager } from '../platform/platformManager.js';
 import { neonaicExtensionManager } from '../extension/extManager.js';
 import { neonaicMessageIn } from '../message/messageIn.js';
 import { neonaicChore } from '../utils/chore.js';
+import { neonaicEventBus } from '../event/neonaicEventBus.js';
+import { NeonaicLoadedEvent } from '../event/neonaicEventInterface.js';
 
 // ---- 常量 ----
 
@@ -231,6 +233,9 @@ async function bootstrap() {
     getLogger().main.error(`如果问题反复出现，请检查拓展运行，仍未解决请报告给我们→ https://github.com/StreackMC/Neonai-Connector/issues/new/choose`);
     // shutdown('unhandledRejection');
   });
+
+  // LoadedEvent
+  neonaicEventBus.dispatchEvent(new NeonaicLoadedEvent({ cancelable: false }));
 
   getLogger().main.info(`已启动“${neonaicConfManager.getBotName()}”，耗时 ${new Date() - when_started}ms。`);
 }

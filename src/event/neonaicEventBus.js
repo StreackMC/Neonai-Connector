@@ -26,6 +26,7 @@ export const neonaicEventBus = {
    * @param {string} type 要监听的事件类型
    * @param {EventListener|EventListenerObject} listener 监听器
    * @param {EventListenerOptions|boolean} [options] 监听选项
+   * @throws {NeonaicIllegalArgumentError|TypeError} 参数类型不合法
    */
   addEventListener: (type, listener, options) => getEventBus().addEventListener(type, listener, options),
   /**
