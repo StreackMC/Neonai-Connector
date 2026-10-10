@@ -58,6 +58,8 @@ const COMMAND_ENUMS = {
   PERM_ADMIN: 'admin',
   /** 超级管理员权限 */
   PERM_SUPERADMIN: 'superadmin',
+  /** 匿名：通常按一般用户处理，所以不应为该用户授予任何权限 */
+  ANONYMITY: '$anonymous',
 };
 
 export const neonaicCommandInterface = {
