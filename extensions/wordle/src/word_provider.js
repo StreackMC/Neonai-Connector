@@ -2847,6 +2847,7 @@ export const ALL_FIVE_LETTER_WORDS = [
   "asway",
   "aswim",
   "asyla",
+  "async",
   "ataps",
   "ataxy",
   "atigi",
