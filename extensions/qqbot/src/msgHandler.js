@@ -16,6 +16,7 @@ import { NeonaicIllegalArgumentError } from '../../../src/utils/NeonaicNewableEr
 import { neonaicEventBus } from '../../../src/event/neonaicEventBus.js';
 import { NeonaicMessageEvent } from '../../../src/event/neonaicEventInterface.js';
 import { neonaicPermissionServer } from '../../../src/command/permissionServer.js';
+import stripAnsi from 'strip-ansi';
 
 /**
  * 好友列表私聊
@@ -112,7 +113,7 @@ async function onGroupMessageIn(event, pp) {
       && /* 有这个权限 */neonaicPermissionServer.checkPermissionFromContext(ctx, cmd.permissions, cmd.permissionDefault)
     ) {
       try {
-        const quickCommandResult = await neonaicCommandServer.executeCommandSilent(cmdName, ctx, ...cmdArgs);
+        const quickCommandResult = stripAnsi(await neonaicCommandServer.executeCommandSilent(cmdName, ctx, ...cmdArgs));
         event.reply([
           segment.reply(event.message_id),
           segment.text(parseString(quickCommandResult)),
