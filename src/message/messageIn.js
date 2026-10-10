@@ -25,7 +25,7 @@ const REPLY_FALLBACK = Object.freeze({
   /** AI 回复失败 */
   AI_FAILED: () => `（${neonaicConfManager.getBotName()}静静地看着你，并未言语）`,
   /** 无法执行命令 */
-  CMD_FAILED: (err) => stripAnsi(`“${neonaicConfManager.getBotName()}”无法执行“${cmdName}”，因为“${parseString(err)}”。`),
+  CMD_FAILED: (err, cmdName) => stripAnsi(`“${neonaicConfManager.getBotName()}”无法执行“${cmdName}”，因为“${parseString(err)}”。`),
   /** 命令没有返回值 */
   VOID_CMD: (cmdName) => `“${neonaicConfManager.getBotName()}”成功执行了“${cmdName}”。`,
   /** 未知命令 */
@@ -109,7 +109,7 @@ async function resolveReply(msg, options) {
         return result != null ? stripAnsi(String(result)).trim() : REPLY_FALLBACK.VOID_CMD(cmdName);
       } catch (err) {
         getLogger().cmd.warn(`[msgIn] 无法以“`, ctx, `”执行命令“${cmdName}”: ${err.message}`);
-        return REPLY_FALLBACK.CMD_FAILED(err);
+        return REPLY_FALLBACK.CMD_FAILED(err, cmdName);
       }
     }
   }
