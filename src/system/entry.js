@@ -129,15 +129,27 @@ neonaicCommandServer.registerCommand('neonaic', 'version', function () {
     `${B}Repo${R}      ${REPO}\n` +
     `${D}----------------------------${R}\n` + sysLine
   );
-}, { description: '显示版本与版权信息', alias: ["ver", "about"] });
+}, {
+  description: '显示版本与版权信息',
+  alias: ["ver", "about"],
+  permissions: ['neonaic.command.version'],
+  permissionDefault: true,
+});
 
 neonaicCommandServer.registerCommand('neonaic', 'ping', function () {
   return `Pong!\n${neonaicCommandServer.executeCommandSilent('neonaic:version', this)}`;
-}, { description: 'PingPong' });
+}, {
+  description: 'PingPong',
+  permissions: ['neonaic.command.ping'],
+  permissionDefault: true,
+});
 
 neonaicCommandServer.registerCommand('neonaic', 'stop', function () {
   shutdown('COMMAND');
-}, { description: '安全关闭服务', permissions: [[neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.commmand.stop"]] });
+}, {
+  description: '安全关闭服务',
+  permissions: [[neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.commmand.stop"]],
+});
 
 // ---- 启动 ----
 

@@ -575,6 +575,8 @@ function installPermissionCommands(registerCommand) {
     return result;
   }, {
     description: "查询当前上下文身份以及特权令牌",
+    permissions: ['neonaic.command.whoami'],
+    permissionDefault: true,
   });
 }
 

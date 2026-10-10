@@ -114,6 +114,8 @@ export function registerMathSupportForAI() {
     description: "进行 24 点小游戏",
     usage: '/24 <算式> 或 /24 <help|new|无解|stop|solve 1 2 3 4 [target]>',
     alias: ['tf', 'tfp', 'twentyfour'],
+    permissions: ['twentyfourpoints.commands.tf'],
+    permissionDefault: true,
   });
 }
 

@@ -56,9 +56,10 @@ neonaicCommandServer.registerCommand('joyous', 'mc', async function (address) {
   if (!rt) return disabledNotice();
   return rt.statusReader.describeServer(address);
 }, {
-  description: '查询 Minecraft 服务器在线状态',
+  description: '查询 Minecraft 服务器在线状态，需要 JoyousStatusAPI',
   usage: 'mc [address]',
-  permissions: [],
+  permissions: ['joyous.command.mc'],
+  permissionDefault: true
 });
 
 neonaicCommandServer.registerCommand('joyous', 'bridge', function () {

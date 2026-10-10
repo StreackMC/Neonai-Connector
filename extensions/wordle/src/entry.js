@@ -113,6 +113,8 @@ export function onEnable(ctx) {
     description: "开始和进行 Wordle 游戏",
     usage: 'wordle <word> 或 wordle <help|new [难度] [首个猜测]|history|stop>',
     alias: ['wd', 'wl'],
+    permissions: ['wordle.command.wordle'],
+    permissionDefault: true,
   });
 }
 

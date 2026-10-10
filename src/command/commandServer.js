@@ -393,6 +393,8 @@ registerCommand('neonaic', 'help', function (...which) {
 }, {
   description: '显示可用命令列表',
   usage: '/help [cmd]',
+  permissions: ['neonaic.commmand.help'],
+  permissionDefault: true,
 });
 
 async function sudoOrRunuser(inherit, who, cmd, ...args) {

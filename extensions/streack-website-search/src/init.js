@@ -80,7 +80,8 @@ export function onEnable(ctx) {
     description: '搜索 Streack 网站内容',
     usage: 'streack <keyword>',
     alias: ['streacksearch'],
-    permissions: [],
+    permissions: ['streackwebsitesearch.command.streack'],
+    permissionDefault: true,
   });
   if (conflicts) {
     getLogger().ext.warn(`[streack-website-search] 命令“streack”注册失败，与已有命令冲突：`, conflicts);
