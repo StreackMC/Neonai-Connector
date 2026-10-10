@@ -229,10 +229,10 @@ function executeCommandSilent(cmdName, ctx = {}, ...args) {
   const context = new NeonaicCommandContext(ctx);
 
   // 权限检查：CLI / 内部调用跳过
-  if (!context.internalCall && context.executor) {
-    const permErr = neonaicPermissionServer.checkPermissionFromContext(context, meta.permissions);
-    if (permErr) {
-      throw new NeonaicIllegalStateError(buildError(cmdName, permErr));
+  if (!context.internalCall) {
+    const passed = neonaicPermissionServer.checkPermissionFromContext(context, meta.permissions);
+    if (!passed) {
+      throw new NeonaicIllegalStateError(buildError(cmdName, '权限不足'));
     }
   }
 
@@ -247,8 +247,8 @@ function executeCommandSilent(cmdName, ctx = {}, ...args) {
 export class NeonaicCommandContext extends NeonaicNewable {
   #privateExecutor = false; #internalCall = false; #this = undefined; #executor = []; #timestamp = new Date();
 
-  /** 命令开始执行时的时间，每切换一次上下文自动变更，不可变 @type {Date} */
-  get timestamp() { return this.#timestamp; };
+  /** 命令开始执行时的时间，每切换一次上下文自动变更，返回拷贝 @type {Date} */
+  get timestamp() { return new Date(this.#timestamp.getTime()); };
 
   /** 命令执行是否处于私密场景（如私聊），非私密场景如群聊中其他成员可见 @type {boolean} */
   get privateExecutor() { return this.#privateExecutor; };
@@ -265,9 +265,9 @@ export class NeonaicCommandContext extends NeonaicNewable {
   /** 改变命令执行时上下文，可以透传类对象 @type {Object|undefined} */
   set this(value) { this.#this = value; };
 
-  /** 执行者：请不要传入'$'开头的，除非是内部使用；同时请勿完全信任本处内容。'$console'表示控制台，'$unknown'表示未知。Index越小的执行者越近 @type {string[]} */
-  get executor() { return this.#executor; };
-  /** 追加执行者 @param {string|string[]} value 执行者列表 */
+  /** 上下文的历史执行者；返回副本 @type {string[]} */
+  get executor() { return this.#executor.slice(0); };
+  /** 追加执行者；请不要传入'$'开头的，除非是内部使用；同时请勿完全信任本处内容。'$console'表示控制台，'$unknown'表示未知。Index越小的执行者越近 @param {string|string[]} value 执行者列表 */
   set executor(value) {
     if (Array.isArray(value)) {
       this.#executor = [...value.map(resolveExecutor), ...this.#executor];
