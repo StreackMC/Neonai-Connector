@@ -205,10 +205,10 @@ export async function sendMsg(instance, who, msg) {
   who = parseString(who).trim();
   if (who.startsWith('qUSR#')) {
     // 私聊
-    return await instance.bot.sendPrivateMessage(who.slice(4).replace(/@.*$/, ''), msg);
+    return await instance.bot.sendPrivateMessage(who.slice(5).replace(/@.*$/, ''), msg);
   } else if (who.startsWith('qGRP#')) {
     // 群聊
-    return await instance.bot.sendGroupMessage(who.slice(4).replace(/@.*$/, ''), msg);
+    return await instance.bot.sendGroupMessage(who.slice(5).replace(/@.*$/, ''), msg);
   }
   // 无效用户
   throw new NeonaicIllegalArgumentError("无法识别的用户：" + parseString(who));
