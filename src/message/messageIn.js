@@ -14,6 +14,14 @@ import { NeonaicMessageEvent } from '../event/neonaicEventInterface.js';
 import { parseString } from '../utils/chore.js';
 import { neonaicPermissionServer } from '../command/permissionServer.js';
 
+/**
+ * @typedef {Object} NeonaicTReplyPayload
+ * @property {string} text 回复内容
+ * @property {boolean} failed 如果为真，表示回复失败，此时另外一个字段就不是 null 了
+ * @property {NeonaicTReplyStatus} status 回复状态
+ * @typedef {'SUCCESS' | 'CANCELED_BY_EVENT' | 'PERMISSION_OF_AI_DENIED' | 'AI_DISABLED' | 'AI_FAILED' | 'CMD_FAILED' | 'VOID_CMD' | 'UNKNOWN_CMD' | 'PERMISSION_OF_CMD_DENIED' | 'UNABLE_TO_GET_CMD'} NeonaicTReplyStatus
+ */
+
 /** 回复因各种原因失败的预设值 */
 const REPLY_FALLBACK = Object.freeze({
   /** 被事件中断 */
@@ -45,7 +53,7 @@ const REPLY_FALLBACK = Object.freeze({
  * @param {string[]|string} [options.AIlist="*"]
  * @param {boolean} [options.resolveCommand=true] 是否要执行命令
  * @param {import('../command/commandServer.js').NeonaicCommandContext} options.resolveCommandWith 执行时命令上下文
- * @returns {Promise<string>}
+ * @returns {Promise<NeonaicTReplyPayload>}
  */
 async function resolveReply(msg, options) {
   getLogger().tool.debug('[msgIn] 正为消息生成回复：', { msg, options });
@@ -78,7 +86,11 @@ async function resolveReply(msg, options) {
       )
     )) {
       getLogger().tool.debug('[msgIn] 消息被事件取消，返回默认回复。');
-      return REPLY_FALLBACK.CANCELED_BY_EVENT();
+      return {
+        text: REPLY_FALLBACK.CANCELED_BY_EVENT(),
+        failed: true,
+        status: 'CANCELED_BY_EVENT'
+      };
     }
   }
 
@@ -93,35 +105,71 @@ async function resolveReply(msg, options) {
       const cmdStr = trimmed.slice(prefix.length)./* 防止 "/ cmd" 这样的输入 */trimStart();
       /** 解析完成的参数列表 */
       const args = neonaicCommandServer.parseArgs(cmdStr);
-      if (/* 没有解析到命令 */!args[0]) return REPLY_FALLBACK.UNABLE_TO_GET_CMD(trimmed);
+      if (/* 没有解析到命令 */!args[0]) return {
+        text: REPLY_FALLBACK.UNABLE_TO_GET_CMD(trimmed),
+        failed: true,
+        status: 'UNABLE_TO_GET_CMD'
+      };
 
       const [cmdName, cmdArgs] = args;
-      if (/* 命令不存在 */!neonaicCommandServer.hasCommand(cmdName)) return REPLY_FALLBACK.UNKNOWN_CMD(cmdName);
+      if (/* 命令不存在 */!neonaicCommandServer.hasCommand(cmdName)) return {
+        text: REPLY_FALLBACK.UNKNOWN_CMD(cmdName),
+        failed: true,
+        status: 'UNKNOWN_CMD'
+      };
 
       /* 开始执行命令 */
       const ctx = new NeonaicCommandContext(config.resolveCommandWith || {});
       if (neonaicPermissionServer.checkPermissionFromContext(ctx, neonaicCommandServer.resolveCommand(cmdName).permissions) === false) {
         getLogger().cmd.debug(`[msgIn] 无法以“`, ctx, `”执行命令“${cmdName}”: 权限不足`);
-        return REPLY_FALLBACK.PERMISSION_OF_CMD_DENIED(cmdName);
+        return {
+          text: REPLY_FALLBACK.PERMISSION_OF_CMD_DENIED(cmdName),
+          failed: true,
+          status: 'PERMISSION_OF_CMD_DENIED'
+        };
       }
       try {
         const result = await neonaicCommandServer.executeCommandSilent(cmdName, ctx, ...cmdArgs);
-        return result != null ? stripAnsi(String(result)).trim() : REPLY_FALLBACK.VOID_CMD(cmdName);
+        return {
+          text: result != null ? stripAnsi(String(result)).trim() : REPLY_FALLBACK.VOID_CMD(cmdName),
+          failed: false,
+          status: 'SUCCESS'
+        };
       } catch (err) {
         getLogger().cmd.warn(`[msgIn] 无法以“`, ctx, `”执行命令“${cmdName}”: ${err.message}`);
-        return REPLY_FALLBACK.CMD_FAILED(err, cmdName);
+        return {
+          text: REPLY_FALLBACK.CMD_FAILED(err, cmdName),
+          failed: true,
+          status: 'CMD_FAILED'
+        };
       }
     }
   }
 
   // ---- AI 兜底 ----
-  if (/* 禁用 AI 回复时 */!config.AI) return REPLY_FALLBACK.AI_DISABLED();
-  if (/* 无权使用 AI */neonaicAI.isAIBanned(config.resolveCommandWith?.executor)) return REPLY_FALLBACK.PERMISSION_OF_AI_DENIED();
+  if (/* 禁用 AI 回复时 */!config.AI) return {
+    text: REPLY_FALLBACK.AI_DISABLED(),
+    failed: false,
+    status: 'AI_DISABLED'
+  };
+  if (/* 无权使用 AI */neonaicAI.isAIBanned(config.resolveCommandWith?.executor)) return {
+    text: REPLY_FALLBACK.PERMISSION_OF_AI_DENIED(),
+    failed: true,
+    status: 'PERMISSION_OF_AI_DENIED'
+  };
   try {
-    return stripAnsi(await neonaicAI.askAI(msg, { AIlist: config.AIlist, caller: config.resolveCommandWith?.executor })).trim();
+    return {
+      text: stripAnsi(await neonaicAI.askAI(msg, { AIlist: config.AIlist, caller: config.resolveCommandWith?.executor })).trim(),
+      failed: false,
+      status: 'SUCCESS'
+    };
   } catch (err) {
     getLogger().tool.error(`[msgIn] AI 回复失败: `, err);
-    return REPLY_FALLBACK.AI_FAILED();
+    return {
+      text: REPLY_FALLBACK.AI_FAILED(),
+      failed: true,
+      status: 'AI_FAILED'
+    };
   }
 }
 
