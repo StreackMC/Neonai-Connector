@@ -62,6 +62,7 @@ export class TwentyFourSession extends NeonaicNewable {
   get solutionCount() { return this.solutions.length; }
 
   constructor(t, user) {
+    super();
     if (t !== TwentyFourSession_Private_Constructure_Token) throw new NeonaicUnsupportedOperationError("不支持直接新建 24 点会话");
     this.#user = user;
     // 发牌：1–13 等概率且允许重复，等同于洗一副牌后连抽 4 张，因此不保证有解

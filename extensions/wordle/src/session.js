@@ -118,6 +118,7 @@ export class WordleSession extends NeonaicNewable {
   maxTries = MAX_TURN;
 
   constructor(t, user, difficulty = WordleDifficulty.normal) {
+    super();
     if (t !== WordleSession_Private_Constructure_Token) throw new NeonaicUnsupportedOperationError("不支持直接新建 Wordle 会话");
     this.#user = user;
     this.difficulty = difficulty;
