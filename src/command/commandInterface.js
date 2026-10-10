@@ -1,7 +1,26 @@
 /**
+ * 权限表达式。
+ *
+ * 叶子是字符串，可带 `!` 前缀表示「须缺失」；数组是分组，分组语义**按嵌套深度交替**：
+ * 第 0 层（最外层）AND → 第 1 层 OR → 第 2 层 AND → 第 3 层 OR → … 以此类推。
+ *
+ * 例：
+ *   'a'                  → a
+ *   ['a', 'b']           → a AND b
+ *   [['a', 'b']]         → a OR b
+ *   [['a', 'b'], 'c']    → (a OR b) AND c
+ *   [[['a', 'b'], 'c']]  → (a AND b) OR c
+ *
+ * 空数组取单位元：AND 层为 true、OR 层为 false；最外层 `[]` 表示「无要求」（恒通过）。
+ * @typedef {string|PermissionSpec[]} PermissionSpec
+ */
+
+/**
  * @typedef {Object} CommandRegisterOptions
  * @property {string|string[]} [alias=[]] 别名设置
- * @property {(string|string[])[]|string|string[]} [permissions=[]] 需求权限：第一层数组间为 AND 关系，第二层数组间为 OR 关系；有 ! 前缀表示需要缺失该权限。
+ * @property {PermissionSpec} [permissions=[]] 需求权限（见 {@link PermissionSpec}）；默认 `[]` = 无要求，任何人可执行
+ * @property {boolean} [permissionDefault=false] 权限叶子在**未显式设置**时的判定值（等价于 checkPermission 的 fallback）。
+ *   默认 false 即「未设置 = 不具备该权限」；设为 true 即「默认授予」，此时 `'!perm'` 会因默认值被取反而不通过
  * @property {string} [description=""] 命令描述
  * @property {string} [usage=""] 命令用法
  */
@@ -13,7 +32,8 @@
  * @property {string} name 原名
  * @property {string[]} aliases 别名列表
  * @property {Function} handler
- * @property {string[]} permissions
+ * @property {PermissionSpec} permissions 需求权限
+ * @property {boolean} permissionDefault 权限叶子未显式设置时的判定值
  * @property {string} [description]
  * @property {string} [usage]
  */

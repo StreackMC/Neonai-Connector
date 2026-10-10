@@ -8,6 +8,17 @@
  * 执行者链：["USR#xxx", "GRP#xxx"]
  *   最左侧最近，最后总隐式接 global ("*")。
  *   权限检查从最近开始，未设置时顺次向上继承。
+ *
+ * 权限表达式（permission）：
+ *   叶子为字符串，可带 `!` 前缀表示「须缺失」；数组为分组，分组语义**按嵌套深度交替**：
+ *     第 0 层（最外）AND → 第 1 层 OR → 第 2 层 AND → 第 3 层 OR → …
+ *   例：'a' = a｜['a','b'] = a AND b｜[['a','b']] = a OR b
+ *       [[['a','b'],'c']] = (a AND b) OR c｜[['a','b'],'c'] = (a OR b) AND c
+ *   空数组取单位元（AND 层 true、OR 层 false）；最外层 `[]` 即「无要求」。
+ *
+ * 未显式设置（叶子在执行者链的四层里都无记录）由调用方的 fallback 决定取值
+ * （默认 false，即「未设置 = 不具备该权限」），之后才施加 `!` 取反。
+ * 故检查结果恒为布尔，调用方通过 fallback 表达「未设置怎么算」，不再有 null 三态。
  */
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -120,79 +131,121 @@ function ensure(tempOrPermanent, user) {
 
 // ---- 检查 ----
 
+/** 内部哨兵：该权限在执行者链的四层里都没有被显式设置 @type {symbol} */
+const UNSET = Symbol('UNSET');
+
 /**
- * 检查用户对单条权限（无 AND/OR）的原始结果。
- * @returns {boolean|null}
+ * 沿执行者链查表：取最近一层显式设置的结果。
+ * @param {string|string[]|null} user 用户标识（可为执行者链）
+ * @param {string} permission 权限名（不含 `!`）
+ * @returns {boolean|typeof UNSET} 整条链（含 `*` 兜底）都未设置时为 {@link UNSET}
  */
-function _test(user, permission) {
+function _lookup(user, permission) {
   if (Array.isArray(user)) {
     for (let i = 0; i < user.length; i++) {
-      const r = _checkSingle(user[i], permission);
-      if (r !== null) return r;
+      const r = _lookupSingle(user[i], permission);
+      if (r !== UNSET) return r;
     }
-    return _checkSingle('*', permission);
+    return _lookupSingle('*', permission);
   }
-  return _checkSingle(user || '*', permission);
+  return _lookupSingle(user || '*', permission);
 }
 
 /**
- * 检查单条权限（支持 "!" 否定前缀）。
- * 供 commandServer 等复用，统一否定语义。
- * @returns {boolean} true = 通过
+ * 求值单个叶子（形如 `'perm'` / `'!perm'`）。
+ *
+ * 未显式设置的权限取 `fallback`（默认 false），**随后**才施加 `!` 取反；
+ * 故 `'!a'` 在 a 未设置且 fallback=false 时通过（未设置 = 确实不具备该权限）。
+ * 空名与 `'*'` 恒为 false（通配不成叶片）。
+ * @param {string|string[]|null} user 用户标识（可为执行者链）
+ * @param {string} permission 叶子权限，可带 `!` 前缀
+ * @param {boolean} [fallback=false] 该权限未显式设置时的取值
+ * @returns {boolean}
  */
-function checkSinglePermission(user, permission) {
+function _evaluateLeaf(user, permission, fallback = false) {
   const isNegate = permission.startsWith('!');
   const name = isNegate ? permission.slice(1) : permission;
   if (!name || name === '*') return false;
-  const has = _test(user, name);
-  return isNegate ? has !== true : has === true;
+  const raw = _lookup(user, name);
+  const has = raw === UNSET ? !!fallback : raw;
+  return isNegate ? !has : has;
 }
 
 /**
- * 测试用户是否满足权限规则（支持 AND/OR 嵌套）。
- * @param {string|string[]|null} user 用户标识
- * @param {string|(string|string[])[]} permission 权限规则
- *   - 字符串 → 单条（支持 "!" 否定）
- *   - 数组 → 外层 AND，内层 OR
- * @returns {boolean|null}
- *   true/false: 明确结果 | null: 所有层级均未设置（仅单条查询时）
+ * 递归求值权限表达式。
+ *
+ * 分组语义按嵌套深度交替：depth 为偶数（含最外层 0）是 AND，奇数是 OR。
+ * 空数组取单位元：AND 层 true、OR 层 false。
+ * @param {string|string[]|null} user 用户标识（可为执行者链）
+ * @param {string|Array<*>} spec 权限表达式
+ * @param {number} depth 当前嵌套深度
+ * @param {boolean} fallback 叶子未显式设置时的取值
+ * @returns {boolean}
  */
-function checkPermission(user, permission) {
-  if (!permission || permission === '*') return false;
-
-  // AND/OR 嵌套语法
-  if (Array.isArray(permission)) {
-    for (const item of permission) {
-      if (Array.isArray(item)) {
-        // OR 组：至少一项通过
-        if (!item.some((p) => checkSinglePermission(user, p))) return false;
-      } else {
-        // AND 项：必须通过
-        if (!checkSinglePermission(user, item)) return false;
-      }
+function _evaluate(user, spec, depth, fallback) {
+  if (Array.isArray(spec)) {
+    const isAnd = depth % 2 === 0;
+    for (const item of spec) {
+      const r = _evaluate(user, item, depth + 1, fallback);
+      if (isAnd && !r) return false; // AND：一项不通过即失败
+      if (!isAnd && r) return true;  // OR ：一项通过即成功
     }
-    return true;
+    return isAnd; // 空组取单位元；非空组走完循环亦同此结论
   }
+  return _evaluateLeaf(user, String(spec), fallback);
+}
 
-  // 单条字符串
-  return _test(user, permission);
+/**
+ * 检查单条权限（支持 `!` 否定前缀）。
+ * 供 commandServer 与拓展复用，统一否定语义。
+ * @param {string|string[]|null} user 用户标识（可为执行者链）
+ * @param {string} permission 权限名，可带 `!` 前缀
+ * @param {boolean} [fallback=false] 该权限未显式设置时的判定值
+ * @returns {boolean} true = 通过
+ */
+function checkSinglePermission(user, permission, fallback = false) {
+  return _evaluateLeaf(user, permission, fallback);
+}
+
+/**
+ * 测试用户是否满足权限规则。
+ * @param {string|string[]|null} user 用户标识（可为执行者链）
+ * @param {string|Array<*>} permission 权限表达式
+ *   - 字符串 → 单个叶子（支持 `!` 否定）
+ *   - 数组 → 分组，语义按嵌套深度交替：第 0 层 AND、第 1 层 OR、第 2 层 AND……
+ *     例：`[a, b]` = a AND b；`[[a, b]]` = a OR b；`[[[a, b], c]]` = (a AND b) OR c
+ *   - 未传 / `''` / `'*'` → 恒 false（无要求请用 `[]`）
+ * @param {boolean} [fallback=false] 叶子权限未显式设置时的判定值。
+ *   注意最外层 `[]` 表示「无要求」恒为 true，不受本参数影响。
+ * @returns {boolean} 恒为布尔
+ */
+function checkPermission(user, permission, fallback = false) {
+  if (!permission || permission === '*') return false;
+  return _evaluate(user, permission, 0, fallback);
 }
 
 /**
  * 测试命令上下文是否满足权限规则。
  * CLI/internalCall 始终返回 true。
  * @param { import('./commandServer.js').NeonaicCommandContext } ctx
- * @param {string|(string|string[])[]} permission
+ * @param {string|Array<*>} permission 权限表达式
+ * @param {boolean} [fallback=false] 叶子权限未显式设置时的判定值
  * @returns {boolean}
  */
-function checkPermissionFromContext(ctx, permission) {
+function checkPermissionFromContext(ctx, permission, fallback = false) {
   if (ctx?.internalCall) return true;
-  const result = checkPermission(ctx?.executor, permission);
-  return result === true;
+  return checkPermission(ctx?.executor, permission, fallback);
 }
 
-/** 对单用户检查 4 层权限 */
-function _checkSingle(user, permission) {
+/**
+ * 单个执行者的 4 层查表。
+ * 过期的临时项就地删除后继续向下层继承 —— 因此「过期」表现为**回落到下一层**（最终可能为未设置），
+ * 而不是变成拒绝。
+ * @param {string} user 单个执行者
+ * @param {string} permission 权限名（不含 `!`）
+ * @returns {boolean|typeof UNSET} 四层均未显式设置时为 {@link UNSET}
+ */
+function _lookupSingle(user, permission) {
   const key = String(user ?? '*');
 
   // 1. 临时权限
@@ -224,7 +277,7 @@ function _checkSingle(user, permission) {
   const gp = store.global.get(permission);
   if (gp != null) return !!gp;
 
-  return null; // 所有层级未设置
+  return UNSET; // 所有层级未设置
 }
 
 // ---- 设置 ----

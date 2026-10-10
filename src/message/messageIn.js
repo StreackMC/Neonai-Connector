@@ -120,7 +120,9 @@ async function resolveReply(msg, options) {
 
       /* 开始执行命令 */
       const ctx = new NeonaicCommandContext(config.resolveCommandWith || {});
-      if (neonaicPermissionServer.checkPermissionFromContext(ctx, neonaicCommandServer.resolveCommand(cmdName).permissions) === false) {
+      /** 目标命令元信息（上游 hasCommand 已确认存在） */
+      const cmdMeta = neonaicCommandServer.resolveCommand(cmdName);
+      if (neonaicPermissionServer.checkPermissionFromContext(ctx, cmdMeta.permissions, cmdMeta.permissionDefault) === false) {
         getLogger().cmd.debug(`[msgIn] 无法以“`, ctx.executor, `”执行命令“${cmdName}”: 权限不足`);
         return {
           text: REPLY_FALLBACK.PERMISSION_OF_CMD_DENIED(cmdName),

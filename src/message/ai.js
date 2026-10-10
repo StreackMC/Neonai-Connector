@@ -370,8 +370,10 @@ async function callProvider(provider, userMessage, overrideAITool = [], override
  */
 function isAIBanned(caller) {
   if (caller == null) return false;
-  // 权限被明确设置为 false 视为封禁；未设置（null）默认允许
-  return neonaicPermissionServer.checkPermission(caller, AI_BAN_PERMISSION) === false;
+  // 该权限语义是「允许使用 neonaic 的 AI 工具调用」：
+  // 显式设为 false 才算封禁；未显式设置时默认允许 ⇒ fallback 传 true，
+  // 于是「未设置」与「显式 true」都得到 true，只有显式 false 会判为封禁。
+  return neonaicPermissionServer.checkPermission(caller, AI_BAN_PERMISSION, true) === false;
 }
 
 /**

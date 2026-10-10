@@ -8,8 +8,11 @@
  *   parseArgs(input) / inferNext(input) / getCommands() — 工具
  *
  * 权限：
- *   opts.permissions: "perm" (须拥有) | "!perm" (须缺失) | ["perm", "!other"]
- *   所有条件须同时满足。CLI 发起时 internalCall=true，跳过权限检查。
+ *   opts.permissions: 权限表达式，叶子可带 "!" 前缀（须缺失）——
+ *     "perm" | "!perm" | ["perm", "!other"] | [["a", "b"]] | [[["a", "b"], "c"]]
+ *     数组分组语义按嵌套深度交替：第 0 层 AND、第 1 层 OR、第 2 层 AND……
+ *   opts.permissionDefault: 叶子权限**未显式设置**时的判定值（默认 false = 视为不具备）。
+ *   CLI 发起时 internalCall=true，跳过权限检查。
  *
  * 上下文（传入 handler 的 this）：
  *   { executor, internalCall, timestamp, this: originalThis }
@@ -37,7 +40,8 @@ const R = '\x1b[0m';
  * @property {string} name 命令原名，命名空间内唯一
  * @property {string[]} aliases 命令别名列表（不含原名）；别名可与其它命令的原名同槽并覆盖之
  * @property {function(...*): *|Promise<*>} handler 命令处理器，参数以 `...args` 展开传入，`this` 为 {@link NeonaicCommandContext}
- * @property {Array<string|string[]>} permissions 权限要求：`"perm"`（须拥有）/ `"!perm"`（须缺失）/ 数组项为 OR 组；各项之间为 AND，全部满足方可执行
+ * @property {import('./commandInterface.js').PermissionSpec} permissions 权限要求（表达式语义见 {@link import('./commandInterface.js').PermissionSpec}）
+ * @property {boolean} permissionDefault 权限叶子未显式设置时的判定值（默认 false）
  * @property {string|undefined} description 命令描述，供 `help` 等展示
  * @property {string|undefined} usage 用法示例，权限或参数错误时提示
  */
@@ -111,10 +115,11 @@ function registerCommand(namespace, name, /** @this {NeonaicCommandContext} */ha
   const perms = opts.permissions
     ? (Array.isArray(opts.permissions) ? opts.permissions : [opts.permissions])
     : [];
+  const permissionDefault = !!opts.permissionDefault;
 
   const cmd = {
     namespace, name, aliases: [...aliases],
-    handler, permissions: perms,
+    handler, permissions: perms, permissionDefault,
     description: opts.description, usage: opts.usage,
   };
 
@@ -230,7 +235,7 @@ function executeCommandSilent(cmdName, ctx = {}, ...args) {
 
   // 权限检查：CLI / 内部调用跳过
   if (!context.internalCall) {
-    const passed = neonaicPermissionServer.checkPermissionFromContext(context, meta.permissions);
+    const passed = neonaicPermissionServer.checkPermissionFromContext(context, meta.permissions, meta.permissionDefault);
     if (!passed) {
       throw new NeonaicIllegalStateError(buildError(cmdName, '权限不足'));
     }
@@ -337,7 +342,7 @@ registerCommand('neonaic', 'help', function (...which) {
     const names = allCommands.filter((meta) => {
       // 过滤掉无权限命令
       if (!meta?.permissions?.length || ctx.internalCall) return true;
-      return neonaicPermissionServer.checkPermissionFromContext(ctx, meta.permissions);
+      return neonaicPermissionServer.checkPermissionFromContext(ctx, meta.permissions, meta.permissionDefault);
     }).map((meta) => {
       const label = meta.namespace ? `${meta.namespace}:${meta.name}` : meta.name;
       const aliasTxt = meta.aliases.length ? ` [别名: ${meta.aliases.join(', ')}]` : '';
@@ -348,7 +353,7 @@ registerCommand('neonaic', 'help', function (...which) {
     // 有子参数，查找命令
     const cmdItem = resolveCommand(lookingupCmd);
     if (!cmdItem) return `“${neonaicConfManager.getBotName()}”无法找到命令“${lookingupCmd}”。`;
-    if (!neonaicPermissionServer.checkPermissionFromContext(ctx, cmdItem.permissions))
+    if (!neonaicPermissionServer.checkPermissionFromContext(ctx, cmdItem.permissions, cmdItem.permissionDefault))
       return `你无权查看“${lookingupCmd}”的详细信息。`;
     return [
       `命令“${cmdItem.namespace}:${cmdItem.name}”：`,
