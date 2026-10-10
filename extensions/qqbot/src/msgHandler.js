@@ -29,8 +29,8 @@ async function onPrivateMessageIn(event, pp) {
   const user = `qUSR#${event.user_id}@${pp.selfInfo.id}`;
   const markdown = toMarkdown(event.message, pp);
   const ctx = {
-    executor: [user, group],
-    privateExecutor: false,
+    executor: [user],
+    privateExecutor: true,
     internalCall: false,
   };
   noteKnownNames(event, { user });
