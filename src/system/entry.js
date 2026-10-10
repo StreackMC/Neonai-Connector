@@ -154,7 +154,7 @@ async function bootstrap() {
     // 调试模式：console 走原生输出，设置全局标志位，启用 $()
     neonaicLogger.setDebugMode(true);
     globalThis.$ = (input) => {
-      const args = neonaicCommandServer.parseArgs(String(input));
+      const args = neonaicCommandServer.resolveCommandArgs(String(input));
       const [cmdName, cmdArgs] = args;
       const result = neonaicCommandServer.executeCommand(cmdName, { internalCall: true, privateExecutor: true }, ...cmdArgs);
       return result;

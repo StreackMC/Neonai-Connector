@@ -5,7 +5,7 @@
  *   registerCommand(name, handler, opts) — 注册命令（含权限）
  *   executeCommand(cmdName, ctx, ...args) — 执行 + auto-catch
  *   executeCommandSilent(cmdName, ctx, ...args) — 执行 + throw
- *   parseArgs(input) / inferNext(input) / getCommands() — 工具
+ *   resolveCommandArgs(input, prefixes) / inferNext(input) / getCommands() — 工具
  *
  * 权限：
  *   opts.permissions: 权限表达式，叶子可带 "!" 前缀（须缺失）——
@@ -60,12 +60,39 @@ const fqns = new Map();
 
 // ---- 参数解析 ----
 
-/** 按 POSIX 标准解析参数 @returns {[string, string[]]} 首个参数为命令名，第二个为参数列表 */
-function parseArgs(input) {
+/**
+ * 解析命令输入：可选地 trim、识别并剥离命令前缀，最后按 POSIX 标准分词。
+ *
+ * 三者都是可选项，按调用场景组合：
+ *   - CLI / 内部调用：`resolveCommandArgs(line)` —— 不 trim、不剥前缀
+ *   - 平台消息入口：`resolveCommandArgs(msg, prefixes, true)` —— 先 trim 再剥前缀
+ *
+ * @param {string} input 原始输入（启用 `prefixes` 时应含前缀）
+ * @param {string|string[]} [prefixes] 命令前缀（可给多个，取**列表中首个匹配**者，与配置书写顺序一致）；
+ *   省略则完全不识别前缀。剥前缀后会 trimStart，以容忍 `"/ cmd"` 这类输入
+ * @param {boolean} [trim=false] 是否先对整体做 trim。
+ *   注意它只影响「前缀识别」与首 token：分词器本身会跳过连续空白，不产生空参数；
+ *   但若输入可能带前导空白，启用 `prefixes` 时必须同时开启，否则前缀匹配不上
+ * @returns {[string, string[]]|null} `[命令名, 参数列表]`；
+ *   仅当传入 `prefixes` 且没有任何一个前缀匹配时返回 null（表示「这不是一条命令」），
+ *   其余情况恒为该二元组（输入为空时是 `['', []]`）
+ */
+function resolveCommandArgs(input, prefixes, trim = false) {
+  let text = String(input ?? '');
+  if (trim) text = text.trim();
+
+  if (prefixes) {
+    const list = Array.isArray(prefixes) ? prefixes : [prefixes];
+    /** 首个匹配的前缀；一个都没匹配上说明这不是一条命令 */
+    const hit = list.find((p) => typeof p === 'string' && p.length > 0 && text.startsWith(p));
+    if (!hit) return null;
+    text = text.slice(hit.length).trimStart();
+  }
+
   const args = [];
   let current = '', inSingle = false, inDouble = false, escape = false;
 
-  for (const ch of input) {
+  for (const ch of text) {
     if (escape) {
       if (inDouble && ch !== '"' && ch !== '\\') current += '\\';
       current += ch; escape = false; continue;
@@ -412,7 +439,7 @@ registerCommand('neonaic', 'force', async function (cmd, ...args) {
 });
 
 export const neonaicCommandServer = {
-  parseArgs,
+  resolveCommandArgs,
   registerCommand,
   resolveCommand,
   executeCommand,

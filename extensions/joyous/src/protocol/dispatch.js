@@ -210,7 +210,7 @@ function normalizeRequest(request) {
  */
 function fromInput(input) {
   const rawText = String(input).trim();
-  const [ref, args] = neonaicCommandServer.parseArgs(rawText);
+  const [ref, args] = neonaicCommandServer.resolveCommandArgs(rawText);
   return { ref, args, rawText };
 }
 

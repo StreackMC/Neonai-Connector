@@ -59,7 +59,7 @@ function startCLI() {
   _rl.on('line', async (line) => {
     const trimmed = line.trim();
     if (trimmed) {
-      const args = neonaicCommandServer.parseArgs(trimmed);
+      const args = neonaicCommandServer.resolveCommandArgs(trimmed);
       const [cmdName, cmdArgs] = args;
       try {
         const result = await neonaicCommandServer.executeCommandSilent(cmdName, {

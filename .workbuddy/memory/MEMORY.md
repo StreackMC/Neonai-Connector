@@ -26,6 +26,9 @@
 
 - `neonaicCommandServer.registerCommand(namespace, name, handler, opts)`；各模块 import 时自注册，handler 的 `this` 是 `NeonaicCommandContext`（`handler.call(ctx, ...args)` 展开）。opts：`alias`/`permissions`（第一层 AND、第二层 OR，`!perm` 须缺失）/`description`/`usage`；引用支持 `name`/`alias`/`ns:name`/`ns:alias`。`registerCommand` 把 `permissions` 归一为数组（缺省 `[]`）。
 - 内置命令见 `neonaic:help`；拓展注册 `joyous:mc`、`qqbot:qbsend`、`wordle:wordle`(wd)、`twentyfourpoints:24`(tf/tfp/twentyfour)。原则：声明式、子模块互不引用、惰性单例、优雅关闭（5s 超时）。
+- **命令输入解析全仓库只有一份：`resolveCommandArgs(input, prefixes?, trim = false)`（`commandServer.js`）**，一并负责 trim、识别并剥离前缀、POSIX 分词（引号/转义、跳过连续空白）。三者均可选：省略 `prefixes` 时行为与旧 `parseArgs` **逐字一致**（CLI / `entry.js` 的 `$()` /  joyous 走这条，均不传前缀）；`messageIn` 传 `(msg, prefixes, true)`。
+  - 传了 `prefixes` 而**无一匹配**时返回 `null`（＝「这不是一条命令」，交给 AI 兜底）；其余情况恒为 `[命令名, 参数列表]`，输入为空时 `['', []]`。前缀取**列表中首个匹配**者（等于配置书写顺序，`config/main.json` 是 `["/", "!"]`）。
+  - 既有行为（非 bug）：整体以空白分隔时**长度为 0 的 token 会被丢弃**，故 `cmd "" x` 得到 `['cmd', ['x']]`。
 
 ## 权限系统（`src/command/permissionServer.js`）
 

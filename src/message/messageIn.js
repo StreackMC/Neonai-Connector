@@ -97,21 +97,16 @@ async function resolveReply(msg, options) {
   // ---- 命令匹配 ----
   if (config.resolveCommand && trimmed) {
     const prefixes = neonaicConfManager.getConfig(neonaicConfManager.CONFIG_PATHS.main).getList('prefix');
-    for (const prefix of prefixes) {
-      if (typeof prefix !== 'string' || !prefix) continue;
-      if (!trimmed.startsWith(prefix)) continue;
-
-      /** 无前缀的命令文本 */
-      const cmdStr = trimmed.slice(prefix.length)./* 防止 "/ cmd" 这样的输入 */trimStart();
-      /** 解析完成的参数列表 */
-      const args = neonaicCommandServer.parseArgs(cmdStr);
-      if (/* 没有解析到命令 */!args[0]) return {
+    /** 解析结果；为 null 说明没有任何命令前缀匹配，即「这不是一条命令」，交给 AI 兜底 */
+    const parsed = neonaicCommandServer.resolveCommandArgs(msg, prefixes, true);
+    if (parsed) {
+      const [cmdName, cmdArgs] = parsed;
+      if (/* 只有前缀、没有命令名 */!cmdName) return {
         text: REPLY_FALLBACK.UNABLE_TO_GET_CMD(trimmed),
         failed: true,
         status: 'UNABLE_TO_GET_CMD'
       };
 
-      const [cmdName, cmdArgs] = args;
       if (/* 命令不存在 */!neonaicCommandServer.hasCommand(cmdName)) return {
         text: REPLY_FALLBACK.UNKNOWN_CMD(cmdName),
         failed: true,
