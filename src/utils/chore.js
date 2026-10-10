@@ -15,13 +15,13 @@ const STORAGE_UNIT = Object.freeze({
 /**
  * 尝试将输入尽可能地转化为文本
  * @param {*} val 输入值
- * @param {boolean} [short] 是否要截断：会只枚举前3个属性/对象；当调试模式时默认禁用，反之同理。**需要严格为真以防传入参数语义不明**
- * @param {boolean} [processString=false] 是否要把文本规整化。**需要严格为真以防传入参数语义不明**
+ * @param {boolean} [short=false] 是否要截断：会只枚举前3个属性/对象；为保证非日志场景的间接性，自 0.2.0 起默认为 false，日志场景请显式传入 true
+ * @param {boolean} [processString=false] 是否要把文本规整化：当输入值已经是字符串时，会对其进行转义和格式化。**需要严格为真以防传入参数语义不明**
  * @returns {String} 处理后的文本。Array→[1, 2, ...]  Map→{key=value, k=v, ...}  Set→{1, 2, ...}  Object→.toString()/{key: value, ...}
  * @apiNote 本函数为全项目通用文本化工具，被大量模块直接引用；为避免调用点过度冗长，
  *          它保持顶层具名导出，不收纳进 NeonaicLogger 对象。
  */
-export function parseString(val, short = !(DEBUGING || neonaicConfManager.getConfig(neonaicConfManager.CONFIG_PATHS.main).getBoolean('detailedLog', false)), processString = false) {
+export function parseString(val, short = false, processString = false) {
   // 基础类型：字符串加单引号，并转义特殊字符
   if (typeof val === 'string') {
     return (processString === true) ? `'${val.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t')}'` : val;
