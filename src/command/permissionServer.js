@@ -25,9 +25,10 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import JSON5 from 'json5';
-import { parseString } from '../utils/chore.js';
+import { neonaicChore, parseString } from '../utils/chore.js';
 import { neonaicConfManager } from '../system/confManager.js';
 import { neonaicCommandInterface } from './commandInterface.js';
+import { NeonaicIllegalArgumentError } from '../utils/NeonaicNewableError.js';
 
 // 注：本模块不 import commandServer.js 的运行期能力，避免循环依赖。
 // 权限命令由组合根（entry.js）通过 installPermissionCommands(registerCommand) 安装。
@@ -205,6 +206,77 @@ function _evaluate(user, spec, depth, fallback) {
  */
 function checkSinglePermission(user, permission, fallback = false) {
   return _evaluateLeaf(user, permission, fallback);
+}
+
+/**
+ * 获取单条权限的状态。
+ * 
+ * @param {string} user 用户标识，**单个**
+ * @param {string} permission 权限名，**不可带 `!` 前缀**
+ * @returns {{status: 'true'|'false'|'unset', scope: 'global'|'user', permanent: boolean, until?: Date}} 权限状态，只会返回最近一层（临时权限 > 永久权限 > 全局临时权限 > 全局权限）显式设置的结果
+ * @throws {NeonaicIllegalArgumentError} permission 不合法
+ */
+function getSinglePermissionStatus(user, permission) {
+  if (typeof user !== 'string') throw new NeonaicIllegalArgumentError('user 必须为单个字符串');
+  if (typeof permission !== 'string' || !permission || permission === '*' || permission.trim().startsWith('!')) throw new NeonaicIllegalArgumentError('permission 必须为非空字符串，且不可为 * 或以 ! 开头');
+
+  const name = permission.trim();
+
+  const userTemp = store.temp.get(user);
+  if (userTemp?.[name] != null) {
+    const entry = userTemp[name];
+    if (entry.until && Date.now() > entry.until) {
+      delete userTemp[name];
+      if (Object.keys(userTemp).length === 0) store.temp.delete(user);
+      _save();
+    } else {
+      return {
+        status: entry.status ? 'true' : 'false',
+        scope: 'user',
+        permanent: false,
+        ...(entry.until ? { until: new Date(entry.until) } : {}),
+      };
+    }
+  }
+
+  const userPermanent = store.permanent.get(user);
+  if (userPermanent?.[name] != null) {
+    return {
+      status: userPermanent[name] ? 'true' : 'false',
+      scope: 'user',
+      permanent: true,
+    };
+  }
+
+  const globalTemp = store.globalTemp.get(name);
+  if (globalTemp != null) {
+    if (globalTemp.until && Date.now() > globalTemp.until) {
+      store.globalTemp.delete(name);
+      _save();
+    } else {
+      return {
+        status: globalTemp.status ? 'true' : 'false',
+        scope: 'global',
+        permanent: false,
+        ...(globalTemp.until ? { until: new Date(globalTemp.until) } : {}),
+      };
+    }
+  }
+
+  const globalPermanent = store.global.get(name);
+  if (globalPermanent != null) {
+    return {
+      status: globalPermanent ? 'true' : 'false',
+      scope: 'global',
+      permanent: true,
+    };
+  }
+
+  return {
+    status: 'unset',
+    scope: 'global',
+    permanent: false,
+  };
 }
 
 /**
@@ -464,7 +536,7 @@ function cmd(type, user, permission, status, lasting) {
 
     // 解析持续时间（若有）→ 过期时间 = 当前 + 持续
     if (lasting !== undefined) {
-      const ms = parseDuration(lasting);
+      const ms = neonaicChore.parseDuration(lasting);
       if (ms == null) {
         return `无法解析持续时间: "${lasting}"（如 '1y2M3d4h5m6s'）`;
       }
@@ -501,39 +573,6 @@ function cmd(type, user, permission, status, lasting) {
 cmd.meta = {
   usage: "permission <set|unset> <user|*> <perm> [true|false] [lasting]",
   description: "控制权限"
-}
-
-/**
- * 解析持续时间字符串，如 '1y2M3d4h5m6s'。
- * 单位（区分大小写）：y=年，M=月，d=天，h=时，m=分，s=秒。
- * @param {string} input 持续时间，如 '1y'、'2h30m'、'1y2M3d4h5m6s'
- * @returns {number|null} 对应的毫秒数；无法解析返回 null
- */
-function parseDuration(input) {
-  if (!input) return null;
-  const s = String(input).trim();
-  if (!s) return null;
-
-  const UNIT_MS = {
-    y: 365 * 24 * 60 * 60 * 1000,   // 年（按 365 天计）
-    M: 30 * 24 * 60 * 60 * 1000,    // 月（按 30 天计）
-    d: 24 * 60 * 60 * 1000,         // 天
-    h: 60 * 60 * 1000,              // 时
-    m: 60 * 1000,                   // 分
-    s: 1000,                        // 秒
-  };
-
-  // 至少一段 "数字+单位"，可重复拼接；单位仅限定 y/M/d/h/m/s，不允许空段
-  if (!/^(\d+(?:[yMdhm]|s))+$/.test(s)) return null;
-
-  let total = 0;
-  const re = /(\d+)(?:([yMdhm])|(s))/g;
-  let m;
-  while ((m = re.exec(s))) {
-    const unit = m[2] || m[3];
-    total += Number(m[1]) * UNIT_MS[unit];
-  }
-  return total;
 }
 
 /**
@@ -600,6 +639,7 @@ export const neonaicPermissionServer = {
   checkSinglePermission,
   checkPermission,
   checkPermissionFromContext,
+  getSinglePermissionStatus,
   setPermission,
   setTempPermission,
   setGlobalPermission,
@@ -608,6 +648,5 @@ export const neonaicPermissionServer = {
   clearTempPermission,
   clearGlobalPermission,
   clearGlobalTempPermission,
-  parseDuration,
   installPermissionCommands,
 };

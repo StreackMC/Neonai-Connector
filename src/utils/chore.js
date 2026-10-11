@@ -241,5 +241,38 @@ export const neonaicChore = Object.freeze({
     }
 
     return `${formatter.format(value)} ${units[times]}`;
+  },
+
+  /**
+   * 解析持续时间字符串，如 '1y2M3d4h5m6s'。
+   * 单位（区分大小写）：y=年，M=月，d=天，h=时，m=分，s=秒。
+   * @param {string} input 持续时间，如 '1y'、'2h30m'、'1y2M3d4h5m6s'
+   * @returns {number|null} 对应的毫秒数；无法解析返回 null
+   */
+  parseDuration: (input) => {
+    if (!input) return null;
+    const s = parseString(input).trim();
+    if (!s) return null;
+  
+    const UNIT_MS = {
+      y: 365 * 24 * 60 * 60 * 1000,   // 年（按 365 天计）
+      M: 30 * 24 * 60 * 60 * 1000,    // 月（按 30 天计）
+      d: 24 * 60 * 60 * 1000,         // 天
+      h: 60 * 60 * 1000,              // 时
+      m: 60 * 1000,                   // 分
+      s: 1000,                        // 秒
+    };
+  
+    // 至少一段 "数字+单位"，可重复拼接；单位仅限定 y/M/d/h/m/s，不允许空段
+    if (!/^(\d+(?:[yMdhm]|s))+$/.test(s)) return null;
+  
+    let total = 0;
+    const re = /(\d+)(?:([yMdhm])|(s))/g;
+    let m;
+    while ((m = re.exec(s))) {
+      const unit = m[2] || m[3];
+      total += Number(m[1]) * UNIT_MS[unit];
+    }
+    return total;
   }
 });
