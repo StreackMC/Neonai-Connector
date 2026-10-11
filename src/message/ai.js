@@ -366,14 +366,29 @@ async function callProvider(provider, userMessage, overrideAITool = [], override
 /**
  * 检查调用者是否被禁止使用 AI。
  * @param {string|string[]|null|undefined} caller 调用者标识（执行者链）
- * @returns {boolean} true = 已被封禁
+ * @returns {{banned: boolean, until?: Date}}
  */
 function isAIBanned(caller) {
-  if (caller == null) return false;
-  // 该权限语义是「允许使用 neonaic 的 AI 工具调用」：
-  // 显式设为 false 才算封禁；未显式设置时默认允许 ⇒ fallback 传 true，
-  // 于是「未设置」与「显式 true」都得到 true，只有显式 false 会判为封禁。
-  return neonaicPermissionServer.checkPermission(caller, AI_BAN_PERMISSION, true) === false;
+  if (!Array.isArray(caller)) caller = caller ? [parseString(caller)] : [neonaicCommandInterface.COMMAND_ENUMS.FROM_UNKNOW];
+
+  // 对每一层校验
+  for (let index = 0; index < caller.length; index++) {
+    const user = caller[index];
+    const result = neonaicPermissionServer.getSinglePermissionStatus(user, AI_BAN_PERMISSION);
+    // 如果权限没有显式拒绝则跳过
+    if (result.status !== 'false') continue;
+    // 被拒绝后判断是不是临时拒绝
+    if (result.permanent) {
+      return { banned: true };
+    } else {
+      return {
+        banned: true,
+        until: result.until
+      };
+    }
+  }
+  // 每一层都没有拒绝
+  return { banned: false };
 }
 
 /**
@@ -422,7 +437,7 @@ async function askAI(userMessage, options) {
     overrideAITool: [],
     overridePrompt: undefined,
   }, options);
-  if (isAIBanned(conf.caller)) throw new NeonaicIllegalStateError('对“智能回复”的访问被拒绝');
+  if (neonaicAI.isAIBanned(conf.caller).banned) throw new NeonaicIllegalStateError('对“智能回复”的访问被拒绝');
 
   // 对 AIlist 做标准化处理：字符串 → 数组，去除空值，trim
   if (!Array.isArray(conf.AIlist)) conf.AIlist = [conf.AIlist];
@@ -809,7 +824,7 @@ function aiBan(ctx, user, time) {
 
   if (time !== undefined) {
     // 临时封禁：解析持续时间 → 过期时间 = 当前 + 持续
-    const ms = neonaicPermissionServer.parseDuration(time);
+    const ms = neonaicChore.parseDuration(time);
     if (ms == null) return `无法解析持续时间: "${time}"（如 '1h'、'2d'、'1y2M3d4h5m6s'）`;
     const until = Date.now() + ms;
     neonaicPermissionServer.setTempPermission(user, AI_BAN_PERMISSION, false, until);

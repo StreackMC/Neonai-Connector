@@ -27,7 +27,10 @@ const REPLY_FALLBACK = Object.freeze({
   /** 被事件中断 */
   CANCELED_BY_EVENT: () => `（${neonaicConfManager.getBotName()}静静地看着你，并未言语）`,
   /** 无权限使用 AI */
-  PERMISSION_OF_AI_DENIED: () => `（${neonaicConfManager.getBotName()}静静地看着别处，并未言语）`,
+  PERMISSION_OF_AI_DENIED: (pardonTime) =>
+    `（${neonaicConfManager.getBotName()}静静地看着别处，并未言语）`
+    + (pardonTime instanceof Date ? `\n在 ${pardonTime.toLocaleString()} 之前，你无法使用“智能回复”。` : "")
+    + (typeof pardonTime === 'number' ? `\n在 ${new Date(pardonTime).toLocaleString()} 之前，你无法使用“智能回复”。` : ""),
   /** AI 回复被禁用 */
   AI_DISABLED: () => `（${neonaicConfManager.getBotName()}可能在看着你，但并未言语）`,
   /** AI 回复失败 */
@@ -149,8 +152,9 @@ async function resolveReply(msg, options) {
     failed: false,
     status: 'AI_DISABLED'
   };
-  if (/* 无权使用 AI */neonaicAI.isAIBanned(config.resolveCommandWith?.executor)) return {
-    text: REPLY_FALLBACK.PERMISSION_OF_AI_DENIED(),
+  const aiBan = neonaicAI.isAIBanned(config.resolveCommandWith?.executor)
+  if (/* 无权使用 AI */aiBan.banned) return {
+    text: REPLY_FALLBACK.PERMISSION_OF_AI_DENIED(aiBan.until),
     failed: true,
     status: 'PERMISSION_OF_AI_DENIED'
   };
