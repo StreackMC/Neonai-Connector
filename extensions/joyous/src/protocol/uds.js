@@ -389,6 +389,10 @@ export class JoyousUdsLink extends JoyousNewable {
     socket.on('data', (chunk) => session.acceptChunk(chunk));
     socket.on('error', (err) => {
       this.#lastError = describeConnectError(err, this.#endpoint, this.#platform);
+      // @apiNote 必须在这里冒泡：套接字不存在 / 被拒绝这类失败在 Node 里是**异步** emit 的
+      //          （`connect()` 不会同步抛出），只在同步抛出路径上报错会让
+      //          「对端未启动」这一最常见的失败完全静默 —— 文档承诺的 `error` 事件收不到。
+      this.#emit('error', err);
     });
     socket.on('close', () => {
       if (this.#session !== session) return; // 已被更新的连接取代

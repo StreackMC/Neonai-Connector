@@ -42,12 +42,30 @@ import { BRIDGE_EXECUTOR, fail, withTimeout } from './dispatch.js';
 export const BRIDGE_BUSINESS_GATE_PERMISSION = 'joyous.bridge.business';
 
 /**
+ * 「把自己的聊天同步到服务器侧」的**逐用户开关**（内播方向 `to-mc` 的过滤条件）。
+ *
+ * 语义沿用对端 `Neonaic.yml` 的既有说明：**持有该权限 = 不同步**。
+ * 由 `/joyous:chatsync` 自助切换；管理员也可直接
+ * `/neonaic:permission set <用户> joyous.chatsync.disabled true`。
+ */
+export const CHAT_SYNC_DISABLED_PERMISSION = 'joyous.chatsync.disabled';
+
+/**
  * 业务方法的「分项」权限名。
  * @param {string} method 方法名，如 `chat.publish`
  * @returns {string} 如 `joyous.bridge.chat.publish`
  */
 export function businessPermissionKey(method) {
   return `joyous.bridge.${method}`;
+}
+
+/**
+ * 该用户是否已关闭「聊天同步到服务器」。
+ * @param {string|string[]|null} users 单个执行者或执行者链
+ * @returns {boolean}
+ */
+export function isChatSyncDisabled(users) {
+  return neonaicPermissionServer.checkSinglePermission(users, CHAT_SYNC_DISABLED_PERMISSION);
 }
 
 /**
@@ -115,6 +133,8 @@ class SlidingWindowLimiter {
  *   dispatch: (method: string, payload: object) => Promise<object>,
  *   outbound: (method: string, payload: object, timeoutMs?: number) => Promise<object>,
  *   broadcast: (payload: object) => Promise<object>,
+ *   buildChatBroadcast: (input: object) => object,
+ *   claimIdentity: (input: object) => Promise<object>,
  *   notifyIdentityChanged: (payload: object) => boolean,
  * }}
  */
@@ -123,12 +143,13 @@ export function createBridgeLayer(rt) {
   const limiter = new SlidingWindowLimiter(cfg?.bridge?.rateLimit?.perMinute ?? 0);
   const outbound = createOutbound(rt);
 
-  /** 四个业务方法的原始实现（不含授权，授权在 gated/dispatch 上） */
+  /** 本端应答的业务方法（不含授权，授权在 gated/dispatch 上） */
   const methods = {
     [METHODS.CHAT_PUBLISH]: (payload) => chatPublish(rt, payload, limiter),
     [METHODS.AI_REQUEST]: (payload) => aiRequest(rt, payload, limiter),
     [METHODS.IDENTITY_BIND]: (payload) => identityBind(rt, payload),
     [METHODS.IDENTITY_RESOLVE]: (payload) => identityResolve(rt, payload),
+    [METHODS.IDENTITY_UNBIND]: (payload) => identityUnbind(rt, payload),
   };
 
   /** 带授权的同一批方法：UDS 直接注册这张表，HTTP 走 dispatch 查这张表 */
@@ -157,6 +178,10 @@ export function createBridgeLayer(rt) {
     outbound,
     /** 把一条外部聊天内播到 MC（`chat.broadcast`） */
     broadcast(payload) { return outbound(METHODS.CHAT_BROADCAST, payload); },
+    /** 组装一条 `chat.broadcast` 载荷（含绑定解析后的 `user`，见 PROTOCOL-V2 §5.3.1） */
+    buildChatBroadcast(input) { return buildChatBroadcast(rt, input); },
+    /** 用绑定代码向对端换取 MC 身份（`identity.claim`，PROTOCOL-V2 §5.7.2） */
+    claimIdentity(input) { return claimIdentity(rt, input); },
     /** 告知对端绑定关系已变更（单向事件；不可用时静默跳过） */
     notifyIdentityChanged(payload) { return notifyEvent(rt, EVENTS.IDENTITY_CHANGED, payload); },
   };
@@ -226,6 +251,11 @@ async function chatPublish(rt, payload, limiter) {
   const text = normalizeChatText(message);
   if (!text) throw fail(ERROR_CODES.INVALID_ARGUMENT, 'chat.publish 的 message 为空白');
 
+  // 玩家名快照保鲜（PROTOCOL-V2 §5.7.4）：sender 已带 { name, uuid }，
+  // 于是「改名后聊天软件侧仍显示旧名」这件事不需要任何新增协议方法——
+  // 名称随聊天流自然更新。未绑定的 uuid 不会被匹配到，天然忽略。
+  refreshSenderName(sender);
+
   const platform = resolvePlatform(target.platform);
   await platform.sendMsg(channel, text);
 
@@ -234,6 +264,23 @@ async function chatPublish(rt, payload, limiter) {
   rt.logger?.info?.(`[joyous] chat.publish：${who || '未知玩家'} → ${target.platform}/${channel}：${text}`);
 
   return { delivered: true, channel, ts: Date.now() };
+}
+
+/**
+ * 按 `sender.uuid` 刷新绑定记录里的玩家名快照。
+ * @apiNote 这里刻意**不让任何异常逸出**：名称保鲜是「顺手做」的副作用，
+ *          不该因为它失败而让一条正常聊天发不出去。
+ * @param {{ name?: string, uuid?: string }} sender
+ */
+function refreshSenderName(sender) {
+  try {
+    const uuid = parseString(sender?.uuid ?? '').trim();
+    const name = parseString(sender?.name ?? '').trim();
+    if (!uuid || !name) return;
+    joyousIdentity.refreshNameByUuid(uuid, name);
+  } catch {
+    // 忽略：快照过期只影响显示，不影响消息投递
+  }
 }
 
 /**
@@ -465,6 +512,120 @@ async function identityResolve(rt, payload) {
     : { bound: true, chatId: binding.chatId };
 }
 
+/**
+ * `identity.unbind`：解除某个 MC 身份的全部绑定（PROTOCOL-V2 §5.7.3）。
+ *
+ * @param {object} rt
+ * @param {object} payload `{ mc, profile? }`；`profile` 缺省表示**全部 profile**
+ * @returns {Promise<object>} `{ bound: false, removed: [chatId…] }`
+ * @apiNote `removed` 为空数组**不是错误**——该 MC 身份本就未绑定。
+ */
+async function identityUnbind(rt, payload) {
+  const { mc, profile } = payload ?? {};
+  if (!mc || typeof mc !== 'object') {
+    throw fail(ERROR_CODES.INVALID_ARGUMENT, 'identity.unbind 缺少 mc');
+  }
+  if (profile !== undefined && profile !== null && typeof profile !== 'string') {
+    throw fail(ERROR_CODES.INVALID_ARGUMENT, 'identity.unbind 的 profile 必须是字符串');
+  }
+
+  const removed = joyousIdentity.unbindByMc(mc, typeof profile === 'string' ? profile : undefined);
+  const mcEcho = {
+    name: parseString(mc?.name ?? ''),
+    uuid: parseString(mc?.uuid ?? ''),
+  };
+
+  if (removed.length) {
+    rt.logger?.info?.(
+      `[joyous] identity.unbind：${mcEcho.uuid || mcEcho.name} 解除了 ${removed.length} 条绑定`,
+    );
+    // 每个被解除的聊天标识各发一条事件——这样事件载荷与 §6 的形状保持一致
+    for (const chatId of removed) {
+      notifyEvent(rt, EVENTS.IDENTITY_CHANGED, { profile: profile ?? null, mc: mcEcho, chatId, bound: false });
+    }
+  }
+
+  return { bound: false, removed };
+}
+
+/**
+ * 组装一条 `chat.broadcast` 载荷（PROTOCOL-V2 §5.3.1）。
+ *
+ * ── 为什么 `user` 要在这里拼 ──
+ * MC 侧希望「已绑定的来源显示 MC 玩家名而不是聊天昵称」，而「聊天标识 ↔ MC UUID」的关联
+ * **只有本端持有**，所以必须在发出前解析好：
+ *   - `uuid`  ：已绑定 → MC UUID；未绑定 → `null`（MC 侧据此判定是否已绑定）
+ *   - `name`  ：已绑定 → MC 玩家名快照（对端若该玩家在线会再用实时名覆盖）；未绑定 → 聊天昵称
+ *   - `nickname`：聊天侧**原始昵称**，供 MC 侧 `[nickname]` 占位符
+ *   - `id`    ：聊天标识，供日志与回溯
+ *
+ * @param {object} rt
+ * @param {object} input `{ profile, channel, chatId, text, ts? }`
+ * @returns {object} 可直接交给 `broadcast()` 的载荷
+ */
+function buildChatBroadcast(rt, input) {
+  const profile = parseString(input?.profile ?? '').trim();
+  const channel = parseString(input?.channel ?? '').trim();
+  const chatId = parseString(input?.chatId ?? '').trim();
+  const message = parseString(input?.text ?? '').trim();
+
+  const binding = joyousIdentity.resolveByChatId(profile, chatId);
+  // 聊天昵称：取自内核名录（平台自动登记或人工 whois），取不到就留空——
+  // 绝不把原始代号当名字展示。
+  const chatName = readableNameOf(chatId);
+
+  return {
+    profile,
+    channel,
+    user: {
+      uuid: binding?.uuid ?? null,
+      name: binding ? (binding.name || chatName) : chatName,
+      nickname: chatName,
+      subname: '',
+      id: chatId,
+    },
+    message,
+    visibility: 'public',
+    ts: Number.isFinite(Number(input?.ts)) ? Number(input.ts) : Date.now(),
+  };
+}
+
+/**
+ * 用绑定代码向对端换取 MC 身份（PROTOCOL-V2 §5.7.2）。
+ * @param {object} rt
+ * @param {{ code: string, chatId: string, user?: object, profile?: string }} input
+ * @returns {Promise<{ bound: true, mc: { name: string, uuid: string }, chatId?: string, profile?: string }>}
+ * @throws {NeonaicCommandError} `invalid_argument`（缺 code）/ `not_bound`（代码无效、已用或过期）
+ * @apiNote 对端刻意**不区分**「无效 / 已用 / 过期」，一律回 `not_bound`（避免探测）；
+ *          调用方也应统一按「代码无效或已过期」提示。
+ */
+function claimIdentity(rt, input) {
+  const code = parseString(input?.code ?? '').trim();
+  const chatId = parseString(input?.chatId ?? '').trim();
+  if (!code) throw fail(ERROR_CODES.INVALID_ARGUMENT, 'identity.claim 缺少 code');
+  if (!chatId) throw fail(ERROR_CODES.INVALID_ARGUMENT, 'identity.claim 缺少 chatId');
+
+  const profile = parseString(input?.profile ?? '').trim();
+  const payload = { code, chatId };
+  if (input?.user && typeof input.user === 'object') payload.user = input.user;
+  if (profile) payload.profile = profile;
+
+  return rt.bridge.outbound(METHODS.IDENTITY_CLAIM, payload);
+}
+
+/**
+ * 取一个内部代号的可读名（取不到则空串）。
+ * @param {string} code
+ * @returns {string}
+ */
+function readableNameOf(code) {
+  try {
+    return neonaicUserDirectory.get(code)?.name ?? '';
+  } catch {
+    return '';
+  }
+}
+
 // =====================================================================
 // 出站调用（Neonaic → Joyous）
 // =====================================================================
@@ -516,6 +677,9 @@ function notifyEvent(rt, name, payload) {
 
 export const joyousMethods = Object.freeze({
   BRIDGE_BUSINESS_GATE_PERMISSION,
+  CHAT_SYNC_DISABLED_PERMISSION,
   businessPermissionKey,
+  isChatSyncDisabled,
+  readableNameOf,
   createBridgeLayer,
 });

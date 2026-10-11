@@ -86,11 +86,19 @@ export const CAPABILITIES = Object.freeze({
   IDENTITY_BIND: 'identity.bind',
   /** 接受 `identity.resolve`（身份解析）请求 */
   IDENTITY_RESOLVE: 'identity.resolve',
+  /**
+   * 接受 `identity.claim`（用绑定代码换取 MC 身份）请求。
+   * @apiNote **由 Joyous 提供**、本端是调用方，故**不在** {@link NEONAI_CAPABILITIES} 内；
+   *          此处保留常量仅为与对端 `BridgeProtocol.Capabilities` 逐项对齐。
+   */
+  IDENTITY_CLAIM: 'identity.claim',
+  /** 接受 `identity.unbind`（解除某 MC 身份的全部绑定）请求 */
+  IDENTITY_UNBIND: 'identity.unbind',
 });
 
 /**
  * Neonaic 侧实现并对外声明的能力（`welcome` 帧申报）。
- * `chat.broadcast` 由 Joyous 提供，Neonaic 是调用方，故**不在**本列表内。
+ * `chat.broadcast` 与 `identity.claim` 由 Joyous 提供，Neonaic 是调用方，故**不在**本列表内。
  */
 export const NEONAI_CAPABILITIES = Object.freeze([
   CAPABILITIES.COMMAND_EXECUTE,
@@ -99,17 +107,22 @@ export const NEONAI_CAPABILITIES = Object.freeze([
   CAPABILITIES.AI_REQUEST,
   CAPABILITIES.IDENTITY_BIND,
   CAPABILITIES.IDENTITY_RESOLVE,
+  CAPABILITIES.IDENTITY_UNBIND,
 ]);
 
 /**
  * V2 新增的**业务方法**（除 command.execute / status.query 之外）。
  * 业务闸（methods.js）以此列表为准，未列出的方法不会被动注册。
+ *
+ * @apiNote `identity.claim` 不在其中：它由 Joyous 应答、本端发起调用，
+ *          不构成本端方法表里的一项（也就不需要业务闸）。
  */
 export const BUSINESS_METHODS = Object.freeze([
   CAPABILITIES.CHAT_PUBLISH,
   CAPABILITIES.AI_REQUEST,
   CAPABILITIES.IDENTITY_BIND,
   CAPABILITIES.IDENTITY_RESOLVE,
+  CAPABILITIES.IDENTITY_UNBIND,
 ]);
 
 /** 帧类型 */
@@ -142,10 +155,14 @@ export const METHODS = Object.freeze({
   CHAT_BROADCAST: 'chat.broadcast',
   /** 请求生成一段 AI 回复：payload = { profile?, trigger, actor, prompt, context?, visibility?, maxOutputChars? } */
   AI_REQUEST: 'ai.request',
-  /** 绑定 MC 身份与聊天身份：payload = { profile, mc, chatId, code? } */
+  /** 绑定 MC 身份与聊天身份：payload = { profile, mc, chatId, code? }（管理员直接设置） */
   IDENTITY_BIND: 'identity.bind',
   /** 按 MC 身份查询绑定：payload = { profile, mc } */
   IDENTITY_RESOLVE: 'identity.resolve',
+  /** 用绑定代码换取 MC 身份（本端发起、Joyous 应答）：payload = { code, chatId, user?, profile? } */
+  IDENTITY_CLAIM: 'identity.claim',
+  /** 解除某 MC 身份的全部绑定：payload = { mc, profile? } */
+  IDENTITY_UNBIND: 'identity.unbind',
   /** 心跳（也可直接用 PING 帧） */
   PING: 'ping',
 });

@@ -526,13 +526,16 @@ Neonaic  ◄─POST /neonai/command {"input":"…"} ─  JoyousPlugin      （�
 
 | 文件 | 职责 |
 |---|---|
-| `src/protocol/methods.js` | V2 四个业务方法（`chat.publish` / `ai.request` / `identity.bind` / `identity.resolve`）与出站 `chat.broadcast`；**第二个接缝**：认识平台 / AI / 身份，不认识具体传输 |
-| `src/identity.js` | MC ↔ 聊天身份绑定表（`config/saves/joyous-identities.json`，该目录 gitignore） |
+| `src/protocol/methods.js` | 本端应答的五个业务方法（`chat.publish` / `ai.request` / `identity.bind` / `identity.resolve` / `identity.unbind`）、出站 `chat.broadcast` 与 `identity.claim`；**第二个接缝**：认识平台 / AI / 身份，不认识具体传输 |
+| `src/identity.js` | MC ↔ 聊天身份绑定表，以 `chatId` 为键（`config/saves/joyous-identities.json`，该目录 gitignore） |
 | `src/protocol/http.js` | 新增通用调用端点（入）与 `invoke()`（出） |
 | `src/protocol/session.js` | 握手帧补 `subname` |
 
 出站调用的传输由 `bridge.transport` 决定（`auto` = UDS 就绪走 UDS，否则回退 HTTP）；
 入站请求经 UDS 方法表或 HTTP 通用端点，**两条路共用同一张方法表与同一道授权闸**。
+
+`identity.claim` 与其它方法方向相反（本端发起、Joyous 应答），因此**不**在本端方法表内，
+而是经同一条出站通道调用。
 
 ### 16.2 业务方法授权（与 §11 的命令授权**相互独立**）
 
@@ -540,7 +543,7 @@ Neonaic  ◄─POST /neonai/command {"input":"…"} ─  JoyousPlugin      （�
 
 | 层 | 名称 | 语义 | 缺省 |
 |---|---|---|---|
-| 静态白名单 | `bridge.allowedMethods`（配置） | 只允许列出的方法 | 四个业务方法全列 |
+| 静态白名单 | `bridge.allowedMethods`（配置） | 只允许列出的方法 | 五个业务方法全列 |
 | 总闸 | `joyous.bridge.business` | 未授予则一切业务方法都拒绝 | **不授予**（开箱即全关） |
 | 分项 | `joyous.bridge.<method>`（如 `joyous.bridge.ai.request`） | 显式 `false` 才拒绝，用于逐方法收窄 | 未设置 ⇒ 放行 |
 
@@ -555,28 +558,58 @@ Neonaic  ◄─POST /neonai/command {"input":"…"} ─  JoyousPlugin      （�
 反之业务方法也**不**要求 `joyous.bridge.execute`。这样「允许执行命令」与「允许聊天/AI/绑定」
 可以分别授权。
 
+另有一条**逐用户**的开关，与上面三层无关：`joyous.chatsync.disabled`（持有 = 不把自己的
+聊天内播到服务器侧），由用户自己用 `/joyous:chatsync` 切换。
+
 ### 16.3 业务侧配置
 
 | 配置项 | 作用 |
 |---|---|
-| `bridge.profiles.<Joyous 的 profile 键>` | `{ platform, channels }`：`platform` 是实际投递到的 Neonaic 平台 Profile 名（**两侧命名可以不同**），`channels` 是频道白名单 |
-| `bridge.broadcast.enabled` | 是否把外部群聊经 `chat.broadcast` 内播到 MC（默认开；只有落在 `channels` 白名单里的频道会被转发） |
-| `bridge.identity.code` | `identity.bind` 的校验码；留空表示直接绑定 |
+| `bridge.profiles.<Joyous 的 profile 键>` | `{ platform, channels }`：`platform` 是实际投递到的 Neonaic 平台 Profile 名（留空 ⇒ 与键同名），`channels` 是频道白名单 |
+| `bridge.broadcast.enabled` | 是否把外部群聊经 `chat.broadcast` 内播到 MC（默认开；只有落在 `channels` 白名单里的频道才会被转发） |
+| `bridge.identity.code` | `identity.bind`（管理员直接设置）的校验码；留空表示直接绑定。自助绑定走绑定代码流程，与此项无关 |
 | `bridge.ai.AIlist` / `bridge.ai.timeoutMs` | `ai.request` 缺省使用的 AI Profile 与生成超时（超时回 `timeout`） |
 | `bridge.rateLimit.perMinute` | 业务方法限流（超限回 `rate_limited`）；0 表示不限 |
 | `bridge.transport` | 出站业务调用的传输选择 |
 | `httpServer.invokePath` | 本端通用调用端点路径（缺省 `/neonai/invoke`） |
 | `httpServer.joyousInvokeUrl` | 对端通用端点地址，用于 HTTP 出站（缺省空 ⇒ 不出站） |
 
-### 16.4 内播的触发方式
+### 16.4 内播的触发与 `user` 字段
 
 Neonaic 订阅内核的 `neonaic:message` 事件，按**执行者链与配置频道白名单的匹配**决定内播：
 链里出现某个已配置的频道标识即转发，其余场景（私聊、未配置的群）一律忽略。
 这样「支持哪些平台」完全由配置表达，新增平台无需改代码。
 
-### 16.5 运维提示
+转发时按 `chatId` 查本地绑定表，把结果填进 `user`（PROTOCOL-V2 §5.3.1）：
+
+* `uuid`：已绑定 → MC 玩家 UUID；未绑定 → `null`（对端据此判定是否已绑定）；
+* `name`：已绑定 → MC 玩家名快照（对端若该玩家在线会再用实时名覆盖）；未绑定 → 聊天昵称；
+* `nickname`：聊天侧原始昵称，供对端的 `[nickname]` 占位符；
+* 可读名取自内核名录，**取不到就留空**，绝不把原始代号当名字展示。
+
+玩家改名不需要新增协议方法：`chat.publish` 的 `sender` 已带 `{ name, uuid }`，
+本端收到后会按 `uuid` 就地刷新快照（§5.7.4）。
+
+### 16.5 自助命令
+
+| 命令 | 作用 |
+|---|---|
+| `/joyous:bind <code>` | 用游戏内取得的绑定代码向对端发 `identity.claim`，成功后把 `chatId ↔ {uuid, name}` 落到本地绑定表 |
+| `/joyous:bind clear` | 移除调用者自己在**全部 profile** 下的绑定 |
+| `/joyous:chatsync [on\|off]` | 切换自己的 `joyous.chatsync.disabled`；不带参时只显示当前状态 |
+
+两条命令都只作用于**调用者自己**：一律拒绝内部调用与 `$` 开头的合成执行者，
+因此可以放心下发给所有用户（`permissionDefault: true`）。
+
+`identity.claim` 的失败一律按「代码无效或已过期」提示——对端刻意不区分
+「无效 / 已被使用 / 已过期」，本端也不区分，避免探测。
+
+### 16.6 运维提示
 
 * 对端 `Neonaic.yml` 的 `connect.timeout.request`（缺省 10 秒）是**对端等待我方应答**的上限；
   AI 生成常超过 10 秒，`ai.request` 场景建议调到 60 秒以上。
+* 对端把连接的开始/结束抽成了公开 API 与命令（`/neonaic bridge start|stop|restart`、
+  配置 `connect.auto-connect`），**且它是监听端、不主动重连**——因此本端的 UDS 指数退避重连
+  是恢复能力的唯一来源，不可移除；`bridge` 状态命令里能看到重连次数与下次重连时刻。
 * 改完 `extensions/joyous/config.json` 需 `/neonaic:reload` 并**重启拓展**；
   通道不会热切换。

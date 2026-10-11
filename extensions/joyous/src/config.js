@@ -182,7 +182,10 @@ function load() {
     },
     ai: {
       AIlist: pickTextList(
-        conf.getList('bridge.ai.AIlist'),
+        // 必须把默认值交给 getList：否则「字段缺省」也会得到 []，
+        // 于是每次全新配置启动都会误报一条「AIlist 为空」的 issue。
+        // 传了默认值后，只有用户**显式写了空列表**才会告警。
+        conf.getList('bridge.ai.AIlist', [...DEFAULTS.bridge.ai.AIlist]),
         DEFAULTS.bridge.ai.AIlist,
         'bridge.ai.AIlist',
         issues,

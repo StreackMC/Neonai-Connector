@@ -30,7 +30,6 @@ import { neonaicCommandInterface } from '../../../src/command/commandInterface.j
 import { neonaicCommandServer } from '../../../src/command/commandServer.js';
 import { neonaicPermissionServer } from '../../../src/command/permissionServer.js';
 import { neonaicConfManager } from '../../../src/system/confManager.js';
-import { neonaicUserDirectory } from '../../../src/message/userDirectory.js';
 import { neonaicEventBus } from '../../../src/event/neonaicEventBus.js';
 import { NeonaicMessageEvent } from '../../../src/event/neonaicEventInterface.js';
 import { getLogger } from '../../../src/logger/Logger.js';
@@ -87,6 +86,109 @@ neonaicCommandServer.registerCommand('joyous', 'bridge', function () {
     neonaicCommandInterface.COMMAND_ENUMS.PERM_ADMIN,
     neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN,
   ]],
+});
+
+/**
+ * `/joyous:bind <code>` —— 用游戏内取得的绑定代码，把自己的聊天账号与 MC 玩家绑定。
+ * `/joyous:bind clear` —— 解除自己的绑定。
+ *
+ * @apiNote 关联的权威持有方在本端；对端只持一次性、短时效的「代码 → UUID」映射
+ *          （PROTOCOL-V2 §5.7）。因此成功后**必须**把结果落到本地绑定表。
+ */
+neonaicCommandServer.registerCommand('joyous', 'bind', async function (...args) {
+  const rt = runtime;
+  if (!rt) return disabledNotice();
+
+  const self = requireSelfExecutor(this);
+  if (!self.ok) return self.message;
+
+  if (!args.length) {
+    return '用法：/joyous:bind <绑定代码>（在游戏内执行 /neonaicbindidentity 取得）'
+      + '，或 /joyous:bind clear 解除自己的绑定。';
+  }
+
+  if (String(args[0]).toLowerCase() === 'clear') {
+    return clearOwnBinding(rt, self.chatId);
+  }
+
+  // 代码可能被平台分词（"K7M 2QP"）或因可读性写成 "K7M-2QP"，这里拼回去交给对端归一化
+  const code = args.join('').trim();
+  const profile = pickProfileFor(rt.cfg, self.chatId);
+  if (!profile) return profileAmbiguityMessage(rt.cfg);
+
+  let result;
+  try {
+    result = await rt.bridge.claimIdentity({
+      code,
+      chatId: self.chatId,
+      profile,
+      // 昵称对端只存档用；取不到可读名就留空，绝不传原始代号当名字
+      user: { name: joyousMethods.readableNameOf(self.chatId), subname: '' },
+    });
+  } catch (e) {
+    return claimFailureMessage(e, code);
+  }
+
+  const mc = {
+    name: String(result?.mc?.name ?? '').trim(),
+    uuid: String(result?.mc?.uuid ?? '').trim(),
+  };
+  if (!mc.uuid && !mc.name) {
+    return '绑定未完成：对端没有返回有效的 MC 身份。';
+  }
+
+  const binding = joyousIdentity.bind(profile, mc, String(result?.chatId ?? self.chatId).trim());
+  rt.bridge.notifyIdentityChanged({ profile, mc, chatId: binding.chatId, bound: true });
+  rt.logger?.info?.(`[joyous] /joyous:bind：${mc.name || mc.uuid} ↔ ${binding.chatId}（profile ${profile}）`);
+
+  return `已绑定到 MC 玩家 ${mc.name || mc.uuid}。`
+    + `\n如需解除，可在游戏内执行 /neonaicunbindidentity，或在此执行 /joyous:bind clear 。`;
+}, {
+  description: '用游戏内取得的绑定代码，把自己的聊天账号与 MC 玩家绑定（自助）',
+  usage: 'bind <code> | bind clear',
+  permissions: ['joyous.bind'],
+  permissionDefault: true,
+});
+
+/**
+ * `/joyous:chatsync [on|off]` —— 自助设置「是否允许把自己的聊天同步到游戏服务器侧」。
+ *
+ * @apiNote 只允许改**调用者自己**的那一项权限（`joyous.chatsync.disabled`），
+ *          不提供任何改他人或改其它权限的能力，因此可以放心下发给所有用户。
+ */
+neonaicCommandServer.registerCommand('joyous', 'chatsync', function (...args) {
+  const rt = runtime;
+  if (!rt) return disabledNotice();
+
+  const self = requireSelfExecutor(this);
+  if (!self.ok) return self.message;
+
+  const disabled = joyousMethods.isChatSyncDisabled(self.chatId);
+  const state = () => (joyousMethods.isChatSyncDisabled(self.chatId)
+    ? '当前**不会**把你的聊天同步到服务器侧。'
+    : '当前**会**把你的聊天同步到服务器侧。');
+  const usage = '用法：/joyous:chatsync on 允许同步，/joyous:chatsync off 停止同步。';
+
+  const sub = String(args[0] ?? '').toLowerCase();
+  if (!sub) return `${state()}\n${usage}`;
+
+  const enableWords = ['on', 'enable', 'open', '开', '开启', '允许'];
+  const disableWords = ['off', 'disable', 'close', '关', '关闭', '停止'];
+  if (enableWords.includes(sub)) {
+    neonaicPermissionServer.clearPermission(self.chatId, joyousMethods.CHAT_SYNC_DISABLED_PERMISSION);
+  } else if (disableWords.includes(sub)) {
+    neonaicPermissionServer.setPermission(self.chatId, joyousMethods.CHAT_SYNC_DISABLED_PERMISSION, true);
+  } else {
+    return `${state()}\n${usage}`;
+  }
+
+  rt.logger?.info?.(`[joyous] /joyous:chatsync ${sub}：${self.chatId}`);
+  return state();
+}, {
+  description: '设置是否允许把自己的聊天同步到游戏服务器侧（只影响自己）',
+  usage: 'chatsync [on|off]',
+  permissions: ['joyous.chatsync'],
+  permissionDefault: true,
 });
 
 // =====================================================================
@@ -410,21 +512,19 @@ async function handleInboundChat(rt, targets, event) {
   // 执行者链里越靠前越近，故第一个不是该频道的标识即说话者
   const senderCode = codes.find((c) => c !== hit.channel) ?? codes[0];
 
+  // 逐用户开关：发言者自己可以关掉「把我的聊天同步到服务器侧」
+  if (joyousMethods.isChatSyncDisabled(senderCode)) {
+    rt.logger.debug?.(`[joyous] ${senderCode} 已关闭聊天同步，跳过内播`);
+    return;
+  }
+
   try {
-    await rt.bridge.broadcast({
+    await rt.bridge.broadcast(rt.bridge.buildChatBroadcast({
       profile: hit.joyousKey,
       channel: hit.channel,
-      user: {
-        // 可读名来自内核名录（由平台自动登记或人工 whois 设置）；
-        // 取不到名就留空——**绝不把内部代号当名字展示**，但机器用的 id 照常带上。
-        name: readableNameOf(senderCode),
-        subname: '',
-        id: senderCode,
-      },
-      message,
-      visibility: 'public',
-      ts: Date.now(),
-    });
+      chatId: senderCode,
+      text: message,
+    }));
   } catch (e) {
     if (e?.code === 'not_handshaken') {
       // 没有可用通道是常态（桥接未启用 / 对端不在线），不值得刷警告
@@ -448,19 +548,6 @@ function matchChannel(targets, codes) {
     }
   }
   return null;
-}
-
-/**
- * 取一个内部代号的可读名（取不到则空串）。
- * @param {string} code
- * @returns {string}
- */
-function readableNameOf(code) {
-  try {
-    return neonaicUserDirectory.get(code)?.name ?? '';
-  } catch {
-    return '';
-  }
 }
 
 /**
@@ -525,6 +612,113 @@ async function shutdown(rt, reason) {
   rt.logger.info(`[joyous] 桥接已关闭（${reason}）`);
 }
 
+// =====================================================================
+// 内部：自助命令的辅助
+// =====================================================================
+
+/**
+ * 取「调用者自己」的聊天侧稳定标识。
+ *
+ * @apiNote 两条自助命令（`/joyous:bind`、`/joyous:chatsync`）都只能作用于**调用者自己**：
+ *          一律拒绝内部调用（没有聊天身份）与 `$` 开头的合成执行者（桥接/控制台），
+ *          这样既不需要额外权限，也不存在越权改他人数据的可能。
+ * @param {import('../../../src/command/commandServer.js').NeonaicCommandContext} ctx
+ * @returns {{ ok: true, chatId: string } | { ok: false, message: string }}
+ */
+function requireSelfExecutor(ctx) {
+  if (ctx?.internalCall) {
+    return { ok: false, message: '该命令只能由聊天侧的用户自己执行（控制台与内部调用不适用）。' };
+  }
+  const chatId = parseString(ctx?.executor?.[0] ?? '').trim();
+  if (!chatId) return { ok: false, message: '无法识别你的聊天账号，请从聊天平台发起该命令。' };
+  if (chatId.startsWith('$')) {
+    return { ok: false, message: '该命令不接受桥接/内部身份（合成执行者）。' };
+  }
+  return { ok: true, chatId };
+}
+
+/**
+ * 推断某聊天账号属于哪个 Joyous profile 键。
+ *
+ * @apiNote 只配了一个 profile 时无需推断（绝大多数部署）；配了多个时，
+ *          用「账号后缀」区分——群标识 `qGRP#<群>@<机器人>` 与用户标识
+ *          `qUSR#<用户>@<机器人>` 共享同一段 `@<机器人>`，因此不必硬编码任何平台的标识前缀。
+ * @param {object} cfg
+ * @param {string} chatId
+ * @returns {string|null} null 表示无法唯一确定
+ */
+function pickProfileFor(cfg, chatId) {
+  const profiles = cfg?.bridge?.profiles ?? {};
+  const keys = Object.keys(profiles);
+  if (keys.length === 1) return keys[0];
+  if (!keys.length) return null;
+
+  const at = chatId.indexOf('@');
+  const suffix = at >= 0 ? chatId.slice(at) : '';
+  if (!suffix) return null;
+  const hits = keys.filter((key) => (profiles[key]?.channels ?? [])
+    .some((channel) => String(channel).endsWith(suffix)));
+  return hits.length === 1 ? hits[0] : null;
+}
+
+/**
+ * 无法确定 profile 时的可读说明。
+ * @param {object} cfg
+ * @returns {string}
+ */
+function profileAmbiguityMessage(cfg) {
+  const keys = Object.keys(cfg?.bridge?.profiles ?? {});
+  if (!keys.length) {
+    return '绑定失败：尚未配置 bridge.profiles（请在拓展配置里登记 profile 与频道后重启拓展）。';
+  }
+  return `绑定失败：无法确定你的聊天账号属于哪个 profile（候选：${keys.join('、')}）。`
+    + '请让对应 profile 的 channels 覆盖你所在的频道（/joyous:bridge 可查看当前映射）。';
+}
+
+/**
+ * 解除调用者自己的全部绑定。
+ * @param {NonNullable<typeof runtime>} rt
+ * @param {string} chatId
+ * @returns {string}
+ */
+function clearOwnBinding(rt, chatId) {
+  const hits = joyousIdentity.findByChatId(chatId);
+  if (!hits.length) return '你当前没有已登记的绑定。';
+
+  joyousIdentity.removeByChatId(chatId);
+  for (const hit of hits) {
+    rt.bridge.notifyIdentityChanged({
+      profile: hit.profile,
+      mc: { name: hit.name, uuid: hit.uuid ?? '' },
+      chatId: hit.chatId,
+      bound: false,
+    });
+  }
+  rt.logger?.info?.(`[joyous] /joyous:bind clear：解除了 ${hits.length} 处绑定`);
+  return `已解除你的绑定（${hits.map((h) => h.profile).join('、')}）。`;
+}
+
+/**
+ * 把 `identity.claim` 的失败翻译成给用户看的话。
+ * @param {Error} error
+ * @param {string} code 用户输入的代码（仅用于提示格式问题）
+ * @returns {string}
+ */
+function claimFailureMessage(error, code) {
+  switch (error?.code) {
+    case 'not_bound':
+      // 对端刻意不区分「无效 / 已被使用 / 已过期」，此处也不区分（避免探测）
+      return '绑定失败：代码无效或已过期。请在游戏内重新执行 /neonaicbindidentity 取得新代码。';
+    case 'invalid_argument':
+      return `绑定失败：代码格式不正确（收到 ${code}）。用法：/joyous:bind <绑定代码>`;
+    case 'not_handshaken':
+      return '绑定失败：与 Minecraft 服务器侧的桥接通道未就绪，请稍后再试'
+        + '（管理员可用 /joyous:bridge 查看通道状态）。';
+    default:
+      return `绑定失败：${error?.message ?? String(error)}`;
+  }
+}
+
 /**
  * 从拓展上下文读取版本号用于自述。
  * @param {{ manifest?: Object }|undefined} ctx
@@ -541,7 +735,7 @@ function readExtensionVersion(ctx) {
   } catch {
     // 仅用于自述，读不到就用兜底值
   }
-  return '0.3.0';
+  return '0.4.0';
 }
 
 /**
@@ -656,7 +850,12 @@ function renderBridgeStatus(rt) {
   }
   lines.push(
     `· 已登记身份绑定：${joyousIdentity.size()} 条`
-    + `（校验码 ${cfg.bridge.identity.code ? '已设置' : '未设置'}）`,
+    + `（管理员直接设置的校验码 ${cfg.bridge.identity.code ? '已设置' : '未设置'}）`,
+  );
+  lines.push(
+    '· 自助命令：/joyous:bind <code> 绑定自己的聊天账号，/joyous:bind clear 解除；'
+    + `/joyous:chatsync on|off 切换「是否把自己的聊天同步到服务器侧」`
+    + `（权限 ${joyousMethods.CHAT_SYNC_DISABLED_PERMISSION}）`,
   );
 
   return lines.join('\n');
