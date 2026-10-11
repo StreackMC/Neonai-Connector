@@ -3,17 +3,19 @@
  *
  * HTTP 模式下 Neonaic **同时是客户端与服务端**：
  *
- *   出（Neonaic → JoyousPlugin）：`NeonaicJoyousHttpClient`
- *     以 HTTP 客户端身份 GET JoyousPlugin 的 StatusAPI（`/japi/status`），
- *     把服务器状态取回来供命令与 AI 工具使用。
+ *   出（Neonaic → JoyousPlugin）：`JoyousHttpClient`
+ *     ① GET JoyousPlugin 的 StatusAPI（`/japi/status`），把服务器状态取回来供命令与 AI 工具使用；
+ *     ② POST JoyousPlugin 的**通用调用端点**（V2，缺省 `/neonai/invoke`），承载
+ *        `chat.broadcast` 这类「Neonaic 发起、Joyous 应答」的方法。
  *
- *   入（JoyousPlugin → Neonaic）：`NeonaicJoyousHttpServer`
- *     以 HTTP 服务端身份接收 JoyousPlugin 的「执行命令」请求，
- *     交给注入的 handler（默认 {@link joyousDispatcher.execute}）处理后回传结果。
+ *   入（JoyousPlugin → Neonaic）：`JoyousHttpServer`
+ *     ① POST 命令端点（V1 契约不变）接收「执行命令」请求；
+ *     ② POST 通用调用端点（V2，缺省 `/neonai/invoke`）接收 `{ id, method, payload }` 信封，
+ *        转交注入的 invokeHandler 处理后回传同构应答。
  *
- * 关键设计：本模块**不认识命令系统**。它只知道「一个 handler 接收请求对象、返回
- * `{ output }` 或抛带 `code` 的错误」这条契约，具体怎么执行命令是 dispatch 的事。
- * 这就是「通信层与命令系统分离」的落点。
+ * 关键设计：本模块**不认识命令系统，也不认识业务方法**。它只知道
+ * 「一个 handler 接收请求、返回结果对象、或抛带 `code` 的错误」这条契约，
+ * 具体怎么执行是 dispatch.js / methods.js 的事 —— 这就是「通信层与业务分离」的落点。
  */
 
 import { createServer } from 'node:http';
@@ -61,18 +63,21 @@ export class JoyousHttpClient extends JoyousNewable {
   #timeoutMs;
   /** @type {(target: string, timeout: number) => Promise<Response>} */
   #fetchImpl;
+  /** @type {(url: string, init: object, timeoutMs: number) => Promise<Response>} */
+  #postImpl;
   /** @type {ReturnType<typeof Object.freeze>} */
   #log;
 
   /**
    * @param {object} [options]
    * @param {number} [options.timeoutMs=5000] 单次请求超时
-   * @param {Function} [options.fetchImpl] 自定义 fetch（测试用），默认走内核 neonaicNetwork.fetch
+   * @param {Function} [options.fetchImpl] 自定义 GET（测试用），默认走内核 neonaicNetwork.fetch
+   * @param {Function} [options.postImpl] 自定义 POST（测试用），默认走自带的带超时 fetch
    * @param {object} [options.log] 日志器
    */
   constructor(options = {}) {
     super();
-    const { timeoutMs = DEFAULT_TIMEOUTS.CONNECT, fetchImpl, log } = options;
+    const { timeoutMs = DEFAULT_TIMEOUTS.CONNECT, fetchImpl, postImpl, log } = options;
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
       throw new NeonaicIllegalArgumentError(`HTTP 客户端超时配置不合法：${timeoutMs}`);
     }
@@ -80,6 +85,9 @@ export class JoyousHttpClient extends JoyousNewable {
     this.#fetchImpl = typeof fetchImpl === 'function'
       ? fetchImpl
       : (target, timeout) => neonaicNetwork.fetch(target, timeout);
+    // 内核的 neonaicNetwork.fetch 只支持 GET（不接受 fetch init），
+    // 而通用调用必须 POST ⇒ 自带一个带超时的 POST。
+    this.#postImpl = typeof postImpl === 'function' ? postImpl : postWithTimeout;
     this.#log = log ?? NULL_LOG;
   }
 
@@ -121,6 +129,94 @@ export class JoyousHttpClient extends JoyousNewable {
       return { ok: false, reason: err?.message ?? String(err) };
     }
   }
+
+  /**
+   * 通用调用（V2 §5.6）：POST `{ id, method, payload }` 到 Joyous 的通用端点。
+   *
+   * @apiNote 这是**出方向**的调用（Neonaic 主动调用 Joyous，如 `chat.broadcast`）。
+   *          与 {@link JoyousHttpClient#fetchStatus} 不同，失败一律抛错：调用方需要知道
+   *          「这条消息到底有没有送到 MC」，静默失败会让聊天同步悄悄丢消息。
+   *
+   * @param {string} method 方法名，建议取自 {@link METHODS}
+   * @param {object} [payload]
+   * @param {string} url Joyous 侧的通用端点地址
+   * @param {string} [token=''] 共享令牌
+   * @param {number} [timeoutMs] 单次调用超时，缺省用构造时的 timeoutMs
+   * @returns {Promise<object>} 应答的 `payload`
+   * @throws {NeonaicProtocolError} 带 `code`：`timeout` / `bad_frame` / 对端返回的错误码
+   */
+  async invoke(method, payload = {}, url, token = '', timeoutMs) {
+    if (typeof method !== 'string' || !method.trim()) {
+      throw new NeonaicIllegalArgumentError('调用 Joyous 时必须提供方法名');
+    }
+    if (typeof url !== 'string' || !url.trim()) {
+      throw new NeonaicIllegalArgumentError(`调用 ${method} 时缺少 Joyous 的通用端点地址`);
+    }
+    const limit = Number(timeoutMs) > 0 ? Number(timeoutMs) : this.#timeoutMs;
+    const body = { id: `na-${Date.now()}`, method, payload: payload ?? {} };
+
+    let res;
+    const started = Date.now();
+    try {
+      res = await this.#postImpl(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          ...(token ? { 'X-Neonai-Token': token } : {}),
+        },
+        body: JSON.stringify(body),
+      }, limit);
+    } catch (e) {
+      const timeout = e?.name === 'AbortError' || /abort/i.test(String(e?.name ?? ''));
+      const err = new NeonaicProtocolError(
+        `调用 ${method} 失败（${timeout ? `超过 ${limit}ms` : (e?.message ?? e)}）`,
+        e,
+      );
+      err.code = timeout ? ERROR_CODES.TIMEOUT : ERROR_CODES.INTERNAL_ERROR;
+      throw err;
+    }
+
+    const text = await res.text();
+    let parsed = null;
+    try {
+      parsed = text && text.trim() ? JSON.parse(text) : null;
+    } catch {
+      parsed = null;
+    }
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      const err = new NeonaicProtocolError(
+        `调用 ${method} 的响应不是合法 JSON 对象（HTTP ${res.status}，耗时 ${Date.now() - started}ms）`,
+      );
+      err.code = ERROR_CODES.BAD_FRAME;
+      throw err;
+    }
+
+    if (!res.ok || parsed.ok === false || parsed.code != null) {
+      const err = new NeonaicProtocolError(
+        String(parsed.message ?? parsed.error ?? `调用 ${method} 失败（HTTP ${res.status}）`),
+      );
+      err.code = (typeof parsed.code === 'string' && parsed.code) ? parsed.code : ERROR_CODES.INTERNAL_ERROR;
+      throw err;
+    }
+    return parsed.payload ?? {};
+  }
+}
+
+/**
+ * 带超时的 POST（内置实现）。
+ * @apiNote 用 `AbortController` 而不是 `fetch` 的 `signal: AbortSignal.timeout()`，
+ *          因为前者在断开连接上更主动，也能兼容注入的自定义实现。
+ * @param {string} url
+ * @param {object} init fetch 选项
+ * @param {number} timeoutMs
+ * @returns {Promise<Response>}
+ */
+function postWithTimeout(url, init, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), Math.max(1, Number(timeoutMs) || 1));
+  timer.unref?.();
+  return fetch(url, { ...init, signal: controller.signal })
+    .finally(() => clearTimeout(timer));
 }
 
 // =====================================================================
@@ -146,50 +242,68 @@ export class JoyousHttpServer extends JoyousNewable {
   #config;
   /** @type {CommandHandler} */
   #handler;
+  /** @type {((method: string, payload: object) => Promise<object>)|null} */
+  #invokeHandler;
   /** @type {ReturnType<typeof Object.freeze>} */
   #log;
 
   /**
    * @param {object} options
    * @param {CommandHandler} options.handler 命令处理器（通信层与命令系统的接缝）
+   * @param {(method: string, payload: object) => Promise<object>} [options.invokeHandler]
+   *   通用调用处理器（V2 §5.6，通信层与业务方法层的接缝）；不传则不提供通用端点
    * @param {string} [options.host='127.0.0.1'] 监听地址
    * @param {number} [options.port=8081] 监听端口，0 表示由系统分配
    * @param {string} [options.path='/neonai/command'] 命令端点路径
+   * @param {string} [options.invokePath='/neonai/invoke'] 通用调用端点路径
    * @param {string} [options.healthPath='/neonai/health'] 健康检查路径
    * @param {string} [options.token=''] 共享令牌；为空时仅允许非回环地址以外的场景拒绝启动
    * @param {string} [options.selfName='neonai'] 健康检查里申报的名称
+   * @param {string} [options.selfSubname=''] 健康检查里申报的副名
    * @param {string} [options.selfVersion='0.0.0'] 健康检查里申报的版本
+   * @param {string[]} [options.capabilities=[]] 健康检查里申报的能力
    * @param {number} [options.maxBodyBytes=MAX_BODY_BYTES] 请求体上限
    * @param {object} [options.log] 日志器
    */
   constructor(options = {}) {
     super();
     const {
-      handler, host = '127.0.0.1', port = 8081,
-      path = '/neonai/command', healthPath = '/neonai/health',
-      token = '', selfName = 'neonai', selfVersion = '0.0.0',
+      handler, invokeHandler, host = '127.0.0.1', port = 8081,
+      path = '/neonai/command', invokePath = '/neonai/invoke', healthPath = '/neonai/health',
+      token = '', selfName = 'neonai', selfSubname = '', selfVersion = '0.0.0', capabilities = [],
       maxBodyBytes = MAX_BODY_BYTES, log,
     } = options;
 
     if (typeof handler !== 'function') {
       throw new NeonaicIllegalArgumentError('HTTP 服务端必须提供命令处理器');
     }
+    if (invokeHandler !== undefined && invokeHandler !== null && typeof invokeHandler !== 'function') {
+      throw new NeonaicIllegalArgumentError('HTTP 服务端的通用调用处理器必须是函数');
+    }
     if (!Number.isInteger(port) || port < 0 || port > 65535) {
       throw new NeonaicIllegalArgumentError(`HTTP 服务端端口不合法：${port}`);
     }
-    for (const [label, value] of [['path', path], ['healthPath', healthPath]]) {
+    for (const [label, value] of [['path', path], ['invokePath', invokePath], ['healthPath', healthPath]]) {
       if (typeof value !== 'string' || !value.startsWith('/')) {
         throw new NeonaicIllegalArgumentError(`HTTP 服务端的 ${label} 必须以 / 开头：${value}`);
       }
     }
+    if (path === invokePath || path === healthPath || invokePath === healthPath) {
+      throw new NeonaicIllegalArgumentError(
+        `HTTP 服务端的端点路径不能重复：path=${path}，invokePath=${invokePath}，healthPath=${healthPath}`,
+      );
+    }
 
     this.#handler = handler;
+    this.#invokeHandler = typeof invokeHandler === 'function' ? invokeHandler : null;
     this.#log = log ?? NULL_LOG;
     this.#config = {
-      host, port, path, healthPath,
+      host, port, path, invokePath, healthPath,
       token: String(token ?? ''),
       selfName: String(selfName),
+      selfSubname: String(selfSubname ?? ''),
       selfVersion: String(selfVersion),
+      capabilities: Array.isArray(capabilities) ? [...capabilities] : [],
       maxBodyBytes,
     };
 
@@ -219,6 +333,12 @@ export class JoyousHttpServer extends JoyousNewable {
 
   /** 命令端点路径 @returns {string} */
   get commandPath() { return this.#config.path; }
+
+  /** 通用调用端点路径 @returns {string} */
+  get invokePath() { return this.#config.invokePath; }
+
+  /** 是否提供通用调用端点 @returns {boolean} */
+  get hasInvokeEndpoint() { return this.#invokeHandler !== null; }
 
   /**
    * 开始监听。
@@ -250,8 +370,10 @@ export class JoyousHttpServer extends JoyousNewable {
         this.#server = server;
         const addr = this.address;
         this.#log.info?.(
-          `[joyous/http] 命令端点已监听 http://${addr.host}:${addr.port}${this.#config.path}` +
-          `${this.#config.token ? '（已启用令牌校验）' : ''}`,
+          `[joyous/http] 已监听 http://${addr.host}:${addr.port}`
+          + `（命令端点 ${this.#config.path}`
+          + `${this.hasInvokeEndpoint ? `，通用调用端点 ${this.#config.invokePath}` : '，未启用通用调用端点'}`
+          + `）${this.#config.token ? '（已启用令牌校验）' : ''}`,
         );
         resolve(addr);
       });
@@ -302,60 +424,128 @@ export class JoyousHttpServer extends JoyousNewable {
         v: PROTOCOL_VERSION,
         role: 'neonai',
         name: this.#config.selfName,
+        subname: this.#config.selfSubname,
         version: this.#config.selfVersion,
+        capabilities: [...this.#config.capabilities],
+        invokePath: this.hasInvokeEndpoint ? this.#config.invokePath : null,
         ts: Date.now(),
       });
     }
+
+    if (path === this.#config.invokePath) return this.#handleInvoke(req, res);
 
     if (path !== this.#config.path) {
       return sendJson(res, 404, { ok: false, code: 'not_found', message: `未知端点：${path}` });
     }
 
-    if (req.method !== 'POST') {
-      res.setHeader('Allow', 'POST');
-      return sendJson(res, 405, { ok: false, code: ERROR_CODES.INVALID_ARGUMENT, message: '命令端点仅支持 POST' });
-    }
+    if (!this.#passesGuard(req, res, '命令端点')) return;
 
-    if (!this.#authorized(req)) {
-      this.#log.warn?.(`[joyous/http] 拒绝了一次未通过令牌校验的命令请求（来源 ${req.socket.remoteAddress}）`);
-      return sendJson(res, 401, { ok: false, code: 'unauthorized', message: '令牌校验未通过' });
-    }
-
-    let raw;
-    try {
-      raw = await readBody(req, this.#config.maxBodyBytes);
-    } catch (e) {
-      const tooLarge = e instanceof NeonaicProtocolError && e.code === ERROR_CODES.FRAME_TOO_LARGE;
-      return sendJson(res, tooLarge ? 413 : 400, {
-        ok: false,
-        code: tooLarge ? ERROR_CODES.FRAME_TOO_LARGE : ERROR_CODES.BAD_FRAME,
-        message: e?.message ?? String(e),
-      });
-    }
-
-    let request;
-    try {
-      request = JSON.parse(raw);
-      if (request === null || typeof request !== 'object' || Array.isArray(request)) {
-        return sendJson(res, 400, { ok: false, code: ERROR_CODES.BAD_FRAME, message: '请求体必须是 JSON 对象' });
-      }
-    } catch (e) {
-      return sendJson(res, 400, { ok: false, code: ERROR_CODES.BAD_FRAME, message: `请求体不是合法 JSON：${e?.message ?? e}` });
+    const body = await this.#readJsonObject(req);
+    if (!body.ok) {
+      return sendJson(res, body.status, { ok: false, code: body.code, message: body.message });
     }
 
     // 到这里才进入业务：错误码由 handler 决定，HTTP 状态码只作辅助
     try {
-      const result = await this.#handler(request);
-      return sendJson(res, 200, { ok: true, id: request.id ?? null, ...result });
+      const result = await this.#handler(body.value);
+      return sendJson(res, 200, { ok: true, id: body.value.id ?? null, ...result });
     } catch (e) {
       const code = (typeof e?.code === 'string' && e.code) ? e.code : ERROR_CODES.INTERNAL_ERROR;
       this.#log.debug?.(`[joyous/http] 命令请求被拒绝（${code}）：${e?.message ?? e}`);
       return sendJson(res, httpStatusFor(code), {
         ok: false,
-        id: request.id ?? null,
+        id: body.value.id ?? null,
         code,
         message: e?.message ?? String(e),
       });
+    }
+  }
+
+  /**
+   * 通用调用端点（V2 §5.6）：接收 `{ id, method, payload }`，回 `{ ok, id, payload }`。
+   * @apiNote 与命令端点同构，因此「新增一个方法」只需在方法表里多注册一项，不必再新增端点。
+   * @param {import('node:http').IncomingMessage} req
+   * @param {import('node:http').ServerResponse} res
+   */
+  async #handleInvoke(req, res) {
+    if (!this.#invokeHandler) {
+      return sendJson(res, 501, { ok: false, code: ERROR_CODES.UNKNOWN_METHOD, message: '本端未启用通用调用端点' });
+    }
+    if (!this.#passesGuard(req, res, '通用调用端点')) return;
+
+    const body = await this.#readJsonObject(req);
+    if (!body.ok) {
+      return sendJson(res, body.status, { ok: false, code: body.code, message: body.message });
+    }
+
+    const env = body.value;
+    if (typeof env.method !== 'string' || !env.method.trim()) {
+      return sendJson(res, 400, { ok: false, id: env.id ?? null, code: ERROR_CODES.BAD_FRAME, message: '缺少 method' });
+    }
+
+    try {
+      const out = await this.#invokeHandler(env.method, env.payload ?? {});
+      return sendJson(res, 200, { ok: true, id: env.id ?? null, payload: out ?? {} });
+    } catch (e) {
+      const code = (typeof e?.code === 'string' && e.code) ? e.code : ERROR_CODES.INTERNAL_ERROR;
+      this.#log.debug?.(`[joyous/http] 通用调用 ${env.method} 被拒绝（${code}）：${e?.message ?? e}`);
+      return sendJson(res, httpStatusFor(code), {
+        ok: false,
+        id: env.id ?? null,
+        code,
+        message: e?.message ?? String(e),
+      });
+    }
+  }
+
+  /**
+   * 端点通用前置校验：仅接受 POST，且必须通过令牌校验。
+   * @param {import('node:http').IncomingMessage} req
+   * @param {import('node:http').ServerResponse} res
+   * @param {string} label 用于日志的端点名
+   * @returns {boolean} true 表示可以继续；false 表示响应已写出、调用方应立即返回
+   */
+  #passesGuard(req, res, label) {
+    if (req.method !== 'POST') {
+      res.setHeader('Allow', 'POST');
+      sendJson(res, 405, { ok: false, code: ERROR_CODES.INVALID_ARGUMENT, message: `${label}仅支持 POST` });
+      return false;
+    }
+    if (!this.#authorized(req)) {
+      this.#log.warn?.(`[joyous/http] 拒绝了一次未通过令牌校验的请求（${label}，来源 ${req.socket.remoteAddress}）`);
+      sendJson(res, 401, { ok: false, code: 'unauthorized', message: '令牌校验未通过' });
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * 读取并解析「JSON 对象」请求体。
+   * @param {import('node:http').IncomingMessage} req
+   * @returns {Promise<{ ok: true, value: object }
+   *   | { ok: false, status: number, code: string, message: string }>} 失败时已带好 HTTP 状态码
+   */
+  async #readJsonObject(req) {
+    let raw;
+    try {
+      raw = await readBody(req, this.#config.maxBodyBytes);
+    } catch (e) {
+      const tooLarge = e instanceof NeonaicProtocolError && e.code === ERROR_CODES.FRAME_TOO_LARGE;
+      return {
+        ok: false,
+        status: tooLarge ? 413 : 400,
+        code: tooLarge ? ERROR_CODES.FRAME_TOO_LARGE : ERROR_CODES.BAD_FRAME,
+        message: e?.message ?? String(e),
+      };
+    }
+    try {
+      const value = JSON.parse(raw);
+      if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+        return { ok: false, status: 400, code: ERROR_CODES.BAD_FRAME, message: '请求体必须是 JSON 对象' };
+      }
+      return { ok: true, value };
+    } catch (e) {
+      return { ok: false, status: 400, code: ERROR_CODES.BAD_FRAME, message: `请求体不是合法 JSON：${e?.message ?? e}` };
     }
   }
 
@@ -479,6 +669,10 @@ function httpStatusFor(code) {
       return 403;
     case ERROR_CODES.UNKNOWN_COMMAND:
       return 404;
+    case ERROR_CODES.NOT_BOUND:
+      return 409;
+    case ERROR_CODES.RATE_LIMITED:
+      return 429;
     case ERROR_CODES.UNKNOWN_METHOD:
       return 501;
     case ERROR_CODES.TIMEOUT:

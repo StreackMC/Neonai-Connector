@@ -41,6 +41,7 @@ import {
  * @typedef {object} PeerInfo
  * @property {string} role 对端角色
  * @property {string} name 对端名称
+ * @property {string} subname 对端副名（V2 新增；未提供时为空串）
  * @property {string} version 对端版本
  * @property {string} protocol 对端声明的协议名
  * @property {number} v 对端声明的协议主版本
@@ -95,7 +96,7 @@ export class JoyousBridgeSession extends JoyousNewable {
    * @param {(text: string) => void} options.write 写出一整帧文本
    * @param {(why: string) => void} [options.teardown] 要求关闭底层连接
    * @param {string} [options.mode=HANDSHAKE_MODES.RESPONDER] 握手次序
-   * @param {object} options.self 本端自述信息 `{ name, version, capabilities? }`
+   * @param {object} options.self 本端自述信息 `{ name, subname?, version, capabilities? }`
    * @param {object} [options.timeouts] 覆盖 {@link DEFAULT_TIMEOUTS}
    * @param {object} [options.log] 日志器（需具备 debug/info/warn/error）
    * @param {number} [options.maxFrameBytes] 单帧字节上限
@@ -122,6 +123,7 @@ export class JoyousBridgeSession extends JoyousNewable {
     this.#mode = mode;
     this.#self = {
       name: String(self.name ?? 'neonai'),
+      subname: String(self.subname ?? ''),
       version: String(self.version ?? '0.0.0'),
       capabilities: Array.isArray(self.capabilities) ? [...self.capabilities] : [],
     };
@@ -424,6 +426,7 @@ export class JoyousBridgeSession extends JoyousNewable {
     this.#peer = {
       role: String(frame.role ?? CHANNEL_ROLES.JOYOUS),
       name: String(frame.name ?? 'unknown'),
+      subname: String(frame.subname ?? ''),
       version: String(frame.version ?? 'unknown'),
       protocol: String(frame.protocol),
       v: Number(frame.v),
@@ -447,7 +450,8 @@ export class JoyousBridgeSession extends JoyousNewable {
     this.#setState(CHANNEL_STATES.READY);
     this.#log.info?.(
       `[joyous/bridge] 握手成功：对端 ${this.#peer.role}/${this.#peer.name} v${this.#peer.version}` +
-      `（协议 ${this.#peer.protocol} v${this.#peer.v}，能力 ${this.#peer.capabilities.join(',') || '无'}，会话 ${this.#sessionId}）`,
+      `（协议 ${this.#peer.protocol} v${this.#peer.v}，副名 ${this.#peer.subname || '无'}，` +
+      `能力 ${this.#peer.capabilities.join(',') || '无'}，会话 ${this.#sessionId}）`,
     );
     this.#startHeartbeat();
     this.#emit('ready', this.#peer);
@@ -676,7 +680,7 @@ export class JoyousBridgeSession extends JoyousNewable {
 /**
  * 构造本端的握手帧。
  * @param {string} type {@link FRAME_TYPES.HELLO} 或 {@link FRAME_TYPES.WELCOME}
- * @param {{ name: string, version: string, capabilities: string[] }} self
+ * @param {{ name: string, subname?: string, version: string, capabilities: string[] }} self
  * @param {string} sessionId
  * @returns {object}
  */
@@ -689,6 +693,7 @@ function selfFrame(type, self, sessionId) {
     ts: Date.now(),
     role: CHANNEL_ROLES.NEONAI,
     name: self.name,
+    subname: self.subname ?? '',
     version: self.version,
     capabilities: [...self.capabilities],
     session: sessionId,

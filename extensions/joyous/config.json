@@ -3,7 +3,7 @@
   // Joyous 桥接拓展配置（JSON5：允许注释与尾逗号）
   //
   // 改动本文件后执行 `/neonaic:reload` 再重启拓展即可生效。
-  // 各字段的语义与协议约定详见同目录下的 PROTOCOL.md 。
+  // 各字段的语义与协议约定详见同目录下的 PROTOCOL.md（V1）与 PROTOCOL-V2.md（V2）。
   // ─────────────────────────────────────────────────────────────
 
   "status": {
@@ -23,19 +23,26 @@
   },
 
   "httpServer": {
-    // 是否以 HTTP 服务端身份接收 JoyousPlugin 的「执行命令」请求。
+    // 是否以 HTTP 服务端身份接收 JoyousPlugin 的请求。
     // 默认关闭：开启后 Neonaic 会额外监听一个端口。
     "enabled": false,
     // 监听地址。非回环地址且未配置 token 时会拒绝启动。
     "host": "127.0.0.1",
     "port": 8081,
-    // 命令端点
+    // 命令端点（V1 契约：承载 command.execute）
     "path": "/neonai/command",
-    // 健康检查端点（GET，返回协议名与版本，便于对端探活）
+    // 通用调用端点（V2 §5.6：承载 chat.publish / ai.request / identity.*）
+    // 与 path 不能相同。
+    "invokePath": "/neonai/invoke",
+    // 健康检查端点（GET，返回协议名、版本、副名与能力，便于对端探活）
     "healthPath": "/neonai/health",
     // 共享令牌。对端需通过 `X-Neonai-Token: <token>`（或 `Authorization: Bearer <token>`）携带。
-    // 留空表示不校验——仅当监听回环地址时才被允许。
+    // 留空表示不校验——仅当监听回环地址时才被允许。两个端点共用同一枚令牌。
     "token": "",
+    // Joyous 侧 HTTP 服务端上的通用端点，用于 Neonaic **主动调用** Joyous（如 chat.broadcast）。
+    // 留空 ⇒ 出站不走 HTTP（UDS 模式无需配置）。
+    // Joyous 侧对应配置：connect.http.server-path（缺省 /neonai/invoke）。
+    "joyousInvokeUrl": "",
   },
 
   "uds": {
@@ -46,6 +53,7 @@
     // Windows 命名管道名（仅 Windows 生效；留空则从 path 的文件名推导）
     "pipe": "neonai-joyous",
     // 握手次序："responder"（本端被动，等对端 hello） | "initiator"（本端主动发 hello）
+    // JoyousPlugin 作为 UDS 监听方会**先发 hello**，故本端应保持 "responder"。
     "handshake": "responder",
     // 各阶段超时（毫秒）
     "connectTimeoutMs": 5000,
@@ -70,5 +78,59 @@
   "dispatch": {
     // 单条命令的兜底超时（毫秒）
     "commandTimeoutMs": 30000,
+  },
+
+  "bridge": {
+    // 出站业务调用（chat.broadcast / 事件）的传输选择，语义同 status.transport：
+    //   "auto" — UDS 就绪走 UDS，否则回退 HTTP   "http" — 只用 HTTP   "uds" — 只用 UDS
+    "transport": "auto",
+
+    // 握手帧里的 `subname`（展示副名，会出现在 MC 侧的消息格式里）。
+    // 留空 ⇒ 回退到 config/main.json 的 `subname`。
+    "subname": "",
+
+    // Joyous 侧 profile 键 → 投递目标。
+    //   键      = Joyous 的 Neonaic.yml 里 group-chat-sync.profile 的键
+    //   platform= 投递到哪个 Neonaic 平台 Profile（两侧命名可以不同，缺省与键同名）
+    //   channels= 该 profile 下允许的频道标识白名单（**必须显式列出**，空列表 ⇒ 一律拒绝）
+    // 例：
+    //   "profiles": {
+    //     "streack-qq-bot": {
+    //       "platform": "streack-neonai-qqbot",
+    //       "channels": ["qGRP#<群号>@<机器人号>"],
+    //     },
+    //   },
+    "profiles": {},
+
+    // 允许 $joyous 调用哪些 V2 业务方法（静态白名单，叠加在权限系统之上）。
+    // 空数组 ⇒ 全部拒绝。可用：chat.publish / ai.request / identity.bind / identity.resolve
+    "allowedMethods": ["chat.publish", "ai.request", "identity.bind", "identity.resolve"],
+
+    "broadcast": {
+      // 是否把外部群聊经 chat.broadcast 内播到 MC。
+      // 只有出现在上面 channels 白名单里的频道才会被转发。
+      "enabled": true,
+    },
+
+    "identity": {
+      // identity.bind 的校验码。留空 ⇒ 不校验（直接绑定）。
+      // 非空时，Joyous 侧 `/neonaic bind <profile> <chatId> <code>` 必须携带一致的值。
+      "code": "",
+    },
+
+    "ai": {
+      // ai.request 未指定 profile 时用哪些 AI Profile（写法同 askAI 的 AIlist：
+      // "*" 全部、"!name" 排除）。
+      "AIlist": ["*"],
+      // AI 生成的兜底超时（毫秒）。超时回 `timeout`。
+      // 注意：对端 Joyous 的 connect.timeout.request（缺省 10 秒）也要足够大，
+      // 否则它会先于本端放弃等待。
+      "timeoutMs": 30000,
+    },
+
+    "rateLimit": {
+      // 每个业务方法每分钟允许的次数（chat.publish / ai.request）；0 表示不限流。
+      "perMinute": 120,
+    },
   },
 }

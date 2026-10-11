@@ -158,7 +158,7 @@ export class JoyousUdsLink extends JoyousNewable {
    * @param {string} [options.path] POSIX 套接字路径（Windows 下用于推导管道名）
    * @param {string} [options.pipe] Windows 管道名或完整管道路径
    * @param {string} [options.mode=HANDSHAKE_MODES.RESPONDER] 握手次序
-   * @param {object} options.self 本端自述信息 `{ name, version, capabilities? }`
+   * @param {object} options.self 本端自述信息 `{ name, subname?, version, capabilities? }`
    * @param {object} [options.methods] 方法名 → 处理器，供对端调用
    * @param {object} [options.timeouts] 覆盖 {@link DEFAULT_TIMEOUTS}
    * @param {object} [options.reconnect] `{ enabled, initialDelayMs, maxDelayMs, factor, jitterRatio }`
@@ -306,6 +306,22 @@ export class JoyousUdsLink extends JoyousNewable {
       );
     }
     return session.request(method, payload, timeoutMs);
+  }
+
+  /**
+   * 向对端发送一条单向事件（不等待应答，V2 §6）。
+   * @apiNote 事件是**单向通知**：链路未就绪或发送失败都只返回 false，绝不抛错——
+   *          事件丢失不应影响调用方的主流程。
+   * @param {string} name 事件名，建议取自 `constants.js` 的 `EVENTS`
+   * @param {object} [payload]
+   * @returns {boolean} 是否已送出
+   */
+  notify(name, payload = {}) {
+    try {
+      return this.#session?.notify(name, payload) === true;
+    } catch {
+      return false;
+    }
   }
 
   /**

@@ -6,12 +6,21 @@
  * 下一次 `load()` 拿到新值（已启动的通道不会热切换，重启拓展即可生效）。
  *
  * 本模块只做「读值 + 校验 + 归一化」，不创建任何连接，也不写文件。
+ *
+ * 段落：
+ *   `status`     状态查询的目标与传输
+ *   `httpServer` 本端 HTTP 服务端（命令端点 + V2 通用调用端点）与出站端点地址
+ *   `uds`        UDS 链路参数
+ *   `dispatch`   命令执行的兜底超时
+ *   `bridge`     V2 业务层：出站传输、profile↔频道映射、业务方法白名单、限流等
  */
 
 import { neonaicConfManager } from '../../../src/system/confManager.js';
 import {
+  BUSINESS_METHODS,
   HANDSHAKE_MODES,
   DEFAULT_TIMEOUTS,
+  TRANSPORTS,
 } from './protocol/constants.js';
 import {
   DEFAULT_PIPE_NAME,
@@ -21,8 +30,8 @@ import {
 /** 配置文件路径（相对项目根） */
 const CONFIG_PATH = 'extensions/joyous/config.json';
 
-/** 状态查询的传输选择 */
-const STATUS_TRANSPORTS = Object.freeze(['auto', 'http', 'uds']);
+/** 状态查询的传输选择（与 `bridge.transport` 同源） */
+const STATUS_TRANSPORTS = TRANSPORTS;
 
 /** 缺省值：配置文件缺失或字段缺省时使用 */
 const DEFAULTS = Object.freeze({
@@ -38,8 +47,12 @@ const DEFAULTS = Object.freeze({
     host: '127.0.0.1',
     port: 8081,
     path: '/neonai/command',
+    invokePath: '/neonai/invoke',
     healthPath: '/neonai/health',
     token: '',
+    // Joyous 侧 HTTP 服务端上的通用端点（用于 Neonaic 主动调用 Joyous，如 chat.broadcast）。
+    // 留空表示不通过 HTTP 出站——UDS 模式或纯「接收」场景无需配置。
+    joyousInvokeUrl: '',
   }),
   uds: Object.freeze({
     enabled: false,
@@ -61,11 +74,40 @@ const DEFAULTS = Object.freeze({
   dispatch: Object.freeze({
     commandTimeoutMs: DEFAULT_TIMEOUTS.COMMAND,
   }),
+  bridge: Object.freeze({
+    // 出站业务调用（chat.broadcast / 事件）的传输选择，语义同 status.transport
+    transport: 'auto',
+    // 握手 `subname`。留空则回退到 main.json 的 `subname`
+    subname: '',
+    // Joyous 侧 profile 键 → { platform, channels }；空对象 ⇒ 不投递、也不接受任何 chat.publish
+    profiles: Object.freeze({}),
+    // 允许 $joyous 调用的业务方法（静态白名单；空数组 ⇒ 全关）
+    allowedMethods: BUSINESS_METHODS,
+    broadcast: Object.freeze({
+      // 是否把外部群聊内播到 MC。channels 为空时本就无所匹配，故这里默认开
+      enabled: true,
+    }),
+    identity: Object.freeze({
+      // 绑定校验码。留空 ⇒ 不校验（直接绑定）
+      code: '',
+    }),
+    ai: Object.freeze({
+      // ai.request 未指定 profile 时用哪些 AI Profile
+      AIlist: Object.freeze(['*']),
+      // AI 生成的兜底超时；超时回 `timeout`
+      timeoutMs: DEFAULT_TIMEOUTS.COMMAND,
+    }),
+    rateLimit: Object.freeze({
+      // 每个业务方法每分钟允许的次数；0 ⇒ 不限流
+      perMinute: 120,
+    }),
+  }),
 });
 
 /**
  * 读取并归一化拓展配置。
- * @returns {{ status: object, httpServer: object, uds: object, dispatch: object, issues: string[] }}
+ * @returns {{ status: object, httpServer: object, uds: object, dispatch: object,
+ *   bridge: object, issues: string[] }}
  *   `issues` 为「可容忍的问题」清单（缺省、取值不合法而被回退等），供调用方记日志；
  *   存在 issues 不代表加载失败，通道仍会用回退后的值启动。
  */
@@ -87,9 +129,18 @@ function load() {
     host: pickText(conf.getString('httpServer.host', DEFAULTS.httpServer.host), 'httpServer.host', issues),
     port: pickPort(conf.getInt('httpServer.port', DEFAULTS.httpServer.port), 'httpServer.port', issues),
     path: pickPath(conf.getString('httpServer.path', DEFAULTS.httpServer.path), 'httpServer.path', issues),
+    invokePath: pickPath(conf.getString('httpServer.invokePath', DEFAULTS.httpServer.invokePath), 'httpServer.invokePath', issues),
     healthPath: pickPath(conf.getString('httpServer.healthPath', DEFAULTS.httpServer.healthPath), 'httpServer.healthPath', issues),
     token: String(conf.getString('httpServer.token', DEFAULTS.httpServer.token) ?? ''),
+    joyousInvokeUrl: String(conf.getString('httpServer.joyousInvokeUrl', DEFAULTS.httpServer.joyousInvokeUrl) ?? '').trim(),
   };
+  if (httpServer.path === httpServer.invokePath) {
+    issues.push(
+      `httpServer.path 与 httpServer.invokePath 不能相同（都是 ${httpServer.path}），`
+      + `invokePath 已回退为缺省值 ${DEFAULTS.httpServer.invokePath}`,
+    );
+    httpServer.invokePath = DEFAULTS.httpServer.invokePath;
+  }
 
   const uds = {
     enabled: conf.getBoolean('uds.enabled', DEFAULTS.uds.enabled),
@@ -118,10 +169,105 @@ function load() {
     commandTimeoutMs: pickPositiveInt(conf.getInt('dispatch.commandTimeoutMs', DEFAULTS.dispatch.commandTimeoutMs), DEFAULTS.dispatch.commandTimeoutMs, 'dispatch.commandTimeoutMs', issues),
   };
 
-  return { status, httpServer, uds, dispatch, issues };
+  const bridge = {
+    transport: pickEnum(conf.getString('bridge.transport', DEFAULTS.bridge.transport), TRANSPORTS, 'bridge.transport', issues),
+    subname: String(conf.getString('bridge.subname', DEFAULTS.bridge.subname) ?? ''),
+    profiles: readProfiles(conf, issues),
+    allowedMethods: readMethods(conf, issues),
+    broadcast: {
+      enabled: conf.getBoolean('bridge.broadcast.enabled', DEFAULTS.bridge.broadcast.enabled),
+    },
+    identity: {
+      code: String(conf.getString('bridge.identity.code', DEFAULTS.bridge.identity.code) ?? '').trim(),
+    },
+    ai: {
+      AIlist: pickTextList(
+        conf.getList('bridge.ai.AIlist'),
+        DEFAULTS.bridge.ai.AIlist,
+        'bridge.ai.AIlist',
+        issues,
+      ),
+      timeoutMs: pickPositiveInt(conf.getInt('bridge.ai.timeoutMs', DEFAULTS.bridge.ai.timeoutMs), DEFAULTS.bridge.ai.timeoutMs, 'bridge.ai.timeoutMs', issues),
+    },
+    rateLimit: {
+      perMinute: pickNonNegativeInt(conf.getInt('bridge.rateLimit.perMinute', DEFAULTS.bridge.rateLimit.perMinute), DEFAULTS.bridge.rateLimit.perMinute, 'bridge.rateLimit.perMinute', issues),
+    },
+  };
+
+  return { status, httpServer, uds, dispatch, bridge, issues };
 }
 
 // ---- 归一化小工具（不变量在读取处一次说清，避免散落到使用处）----
+
+/**
+ * 读取 `bridge.profiles`：Joyous 侧 profile 键 → 投递目标。
+ *
+ * @apiNote 刻意允许两侧的 profile **命名不同**：Joyous 的 `group-chat-sync.profile` 键
+ *          与 Neonaic 的平台 Profile 名是两套命名空间，用 `platform` 字段显式对应，
+ *          避免一方改名就悄悄同步失败。
+ * @param {object} conf NeonaicConfig
+ * @param {string[]} issues
+ * @returns {Record<string, { platform: string, channels: string[] }>}
+ */
+function readProfiles(conf, issues) {
+  const raw = conf.getSection('bridge.profiles', null);
+  if (!raw) return {};
+
+  const out = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      issues.push(`bridge.profiles.${key} 不是对象，已忽略`);
+      continue;
+    }
+    const channels = (Array.isArray(value.channels)
+      ? value.channels
+      : (value.channels == null ? [] : [value.channels]))
+      .map((c) => String(c ?? '').trim())
+      .filter(Boolean);
+    if (!channels.length) {
+      // fail-closed：宁可拒绝也不能「不写白名单就等于全放行」
+      issues.push(`bridge.profiles.${key} 未配置 channels：该 profile 的 chat.publish 会被一律拒绝`);
+    }
+    const platform = String(value.platform ?? '').trim();
+    out[key] = { platform: platform || key, channels };
+  }
+  return out;
+}
+
+/**
+ * 读取 `bridge.allowedMethods`。
+ * @param {object} conf
+ * @param {string[]} issues
+ * @returns {string[]}
+ */
+function readMethods(conf, issues) {
+  const raw = conf.getList('bridge.allowedMethods', [...DEFAULTS.bridge.allowedMethods]);
+  const out = [];
+  for (const value of Array.isArray(raw) ? raw : []) {
+    const method = String(value ?? '').trim();
+    if (method && !out.includes(method)) out.push(method);
+  }
+  if (!out.length) {
+    issues.push('bridge.allowedMethods 为空：$joyous 将无法调用任何业务方法');
+  }
+  return out;
+}
+
+/**
+ * @param {Array} value
+ * @param {readonly string[]} fallback
+ * @param {string} label
+ * @param {string[]} issues
+ * @returns {string[]}
+ */
+function pickTextList(value, fallback, label, issues) {
+  const out = (Array.isArray(value) ? value : [])
+    .map((v) => String(v ?? '').trim())
+    .filter(Boolean);
+  if (out.length) return out;
+  issues.push(`${label} 为空，已回退为 ${JSON.stringify([...fallback])}`);
+  return [...fallback];
+}
 
 /**
  * @param {string} value

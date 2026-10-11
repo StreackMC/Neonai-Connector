@@ -51,6 +51,9 @@ export class JoyousLineFrameCodec extends JoyousNewable {
    * @param {number} [maxBytes=MAX_FRAME_BYTES] 单帧字节上限，超出视为协议错误
    */
   constructor(maxBytes = MAX_FRAME_BYTES) {
+    // 派生类必须在触碰 this 之前调用 super()，漏掉会在**首次建立连接**时抛
+    // ReferenceError（正是因为本条缺失，UDS 链路曾整体不可用）
+    super();
     if (!Number.isFinite(maxBytes) || maxBytes <= 0) {
       throw new NeonaicIllegalArgumentError(`帧编解码器的单帧上限不合法：${maxBytes}`);
     }

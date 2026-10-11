@@ -20,6 +20,9 @@
  * 授权示例（管理员在 CLI 执行）：
  *   /neonaic:permission set $joyous joyous.bridge.execute true
  *   /neonaic:permission set $joyous joyous.command.joyous:mc true
+ *
+ * @apiNote V2 新增的 `chat.publish` / `ai.request` / `identity.*` **不走本模块**：
+ *          它们不是「执行命令」，授权模型也不同，见 {@link ./methods.js} 的业务闸。
  */
 
 import { neonaicCommandServer } from '../../../../src/command/commandServer.js';
@@ -52,6 +55,18 @@ export const BRIDGE_EXECUTOR = '$joyous';
 
 /** 总闸权限名：未授予时整个桥接不可执行任何命令 */
 export const BRIDGE_GATE_PERMISSION = 'joyous.bridge.execute';
+
+/**
+ * 供权限系统评估的「虚拟上下文」。
+ *
+ * `internalCall: false` 是**安全关键**：它标明这个身份不是内部调用，因此
+ * 权限检查必须真的走一遍（`internalCall: true` 会被 `checkPermissionFromContext` 直接放行）。
+ */
+export const BRIDGE_CONTEXT = Object.freeze({
+  internalCall: false,
+  privateExecutor: true,
+  executor: BRIDGE_EXECUTOR,
+});
 
 /**
  * 命令请求的两种等价写法。
@@ -216,13 +231,20 @@ function fromInput(input) {
 
 /**
  * 校验 `$joyous` 是否有权执行该命令。
- * @param {{ namespace: string, name: string, permissions: Array<string|string[]> }} meta
+ * @param {{ namespace: string, name: string, permissions: Array<string|string[]>, permissionDefault?: boolean }} meta
  * @returns {string|null} 拒绝原因；通过返回 null
  */
 function authorize(meta) {
+  // 命令系统原生语义（AND / OR / `!` 否定 / `permissionDefault`），与 CLI、平台消息入口
+  // 完全同源 —— 这里刻意复用 `checkPermissionFromContext`，而不是自造一套判断。
   if (meta.permissions?.length) {
-    // 命令系统原生语义
-    return neonaicCommandServer.checkCommandPerms(meta.name, meta.permissions, BRIDGE_EXECUTOR);
+    if (!neonaicPermissionServer.checkPermissionFromContext(
+      BRIDGE_CONTEXT, meta.permissions, meta.permissionDefault,
+    )) {
+      const ref = meta.namespace ? `${meta.namespace}:${meta.name}` : meta.name;
+      return `命令“${ref}”的权限要求未被 ${BRIDGE_EXECUTOR} 满足`;
+    }
+    return null;
   }
   // 空权限命令 → 要求专有授权
   const key = commandPermissionKey(meta);
@@ -260,26 +282,29 @@ function classify(error, ref) {
 }
 
 /**
+ * 构造一个带协议错误码的异常。
+ * @apiNote 对外导出，供同层的业务方法层（methods.js）复用同一套错误形状，
+ *          避免两处各造一份「带 code 的错误」。
  * @param {string} code
  * @param {string} message
  * @param {Error|null} [cause]
  * @returns {NeonaicCommandError}
  */
-function fail(code, message, cause = null) {
+export function fail(code, message, cause = null) {
   const err = new NeonaicCommandError(message, cause);
   err.code = code;
   return err;
 }
 
 /**
- * 给可能不返回 Promise 的命令补上超时保护。
+ * 给可能不返回 Promise 的任务补上超时保护。
  * @template T
  * @param {T|Promise<T>} value
  * @param {number} ms
  * @param {string} label
  * @returns {Promise<T>}
  */
-function withTimeout(value, ms, label) {
+export function withTimeout(value, ms, label) {
   if (!Number.isFinite(ms) || ms <= 0) return Promise.resolve(value);
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -324,8 +349,11 @@ function clampOutput(text) {
 
 export const joyousDispatcher = Object.freeze({
   BRIDGE_EXECUTOR,
+  BRIDGE_CONTEXT,
   BRIDGE_GATE_PERMISSION,
   commandPermissionKey,
   execute,
   dryRun,
+  fail,
+  withTimeout,
 });
