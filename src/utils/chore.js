@@ -253,7 +253,7 @@ export const neonaicChore = Object.freeze({
     if (!input) return null;
     const s = parseString(input).trim();
     if (!s) return null;
-  
+
     const UNIT_MS = {
       y: 365 * 24 * 60 * 60 * 1000,   // 年（按 365 天计）
       M: 30 * 24 * 60 * 60 * 1000,    // 月（按 30 天计）
@@ -262,10 +262,10 @@ export const neonaicChore = Object.freeze({
       m: 60 * 1000,                   // 分
       s: 1000,                        // 秒
     };
-  
+
     // 至少一段 "数字+单位"，可重复拼接；单位仅限定 y/M/d/h/m/s，不允许空段
     if (!/^(\d+(?:[yMdhm]|s))+$/.test(s)) return null;
-  
+
     let total = 0;
     const re = /(\d+)(?:([yMdhm])|(s))/g;
     let m;
@@ -274,5 +274,17 @@ export const neonaicChore = Object.freeze({
       total += Number(m[1]) * UNIT_MS[unit];
     }
     return total;
-  }
+  },
+
+  /**
+   * 将时间解析为中国时区的日期时间对象
+   * 
+   * @param {Date|number} time 原始时间
+   */
+  parseCnDatetime: (time) => new Date(time).toLocaleString('zh-CN', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hourCycle: 'h23',
+  }),
+
 });

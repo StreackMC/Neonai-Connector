@@ -11,7 +11,7 @@ import { getLogger } from '../logger/Logger.js';
 import { neonaicConfManager } from '../system/confManager.js';
 import stripAnsi from 'strip-ansi';
 import { NeonaicMessageEvent } from '../event/neonaicEventInterface.js';
-import { parseString } from '../utils/chore.js';
+import { neonaicChore, parseString } from '../utils/chore.js';
 import { neonaicPermissionServer } from '../command/permissionServer.js';
 
 /**
@@ -29,8 +29,8 @@ const REPLY_FALLBACK = Object.freeze({
   /** 无权限使用 AI */
   PERMISSION_OF_AI_DENIED: (pardonTime) =>
     `（${neonaicConfManager.getBotName()}静静地看着别处，并未言语）`
-    + (pardonTime instanceof Date ? `\n在 ${pardonTime.toLocaleString()} 之前，你无法使用“智能回复”。` : "")
-    + (typeof pardonTime === 'number' ? `\n在 ${new Date(pardonTime).toLocaleString()} 之前，你无法使用“智能回复”。` : ""),
+    + (pardonTime instanceof Date ? `\n在 ${neonaicChore.parseCnDatetime(pardonTime)} 之前，你无法使用“智能回复”。` : "")
+    + (typeof pardonTime === 'number' ? `\n在 ${neonaicChore.parseCnDatetime(new Date(pardonTime))} 之前，你无法使用“智能回复”。` : ""),
   /** AI 回复被禁用 */
   AI_DISABLED: () => `（${neonaicConfManager.getBotName()}可能在看着你，但并未言语）`,
   /** AI 回复失败 */

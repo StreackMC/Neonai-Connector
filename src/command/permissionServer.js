@@ -546,7 +546,7 @@ function cmd(type, user, permission, status, lasting) {
     if (isGlobal) {
       if (until) {
         setGlobalTempPermission(permission, bool, until);
-        return `已设置全局临时权限 ${permission}=${bool}，持续 ${lasting}，过期 ${new Date(until).toLocaleString()}`;
+        return `已设置全局临时权限 ${permission}=${bool}，持续 ${lasting}，过期 ${neonaicChore.parseCnDatetime(new Date(until))}`;
       }
       setGlobalPermission(permission, bool);
       return `已设置全局权限 ${permission}=${bool}`;
@@ -554,7 +554,7 @@ function cmd(type, user, permission, status, lasting) {
 
     if (until) {
       setTempPermission(user, permission, bool, until);
-      return `已设置 ${user} 的临时权限 ${permission}=${bool}，持续 ${lasting}，过期 ${new Date(until).toLocaleString()}`;
+      return `已设置 ${user} 的临时权限 ${permission}=${bool}，持续 ${lasting}，过期 ${neonaicChore.parseCnDatetime(new Date(until))}`;
     }
     setPermission(user, permission, bool);
     return `已设置 ${user} 的权限 ${permission}=${bool}`;

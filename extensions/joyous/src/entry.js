@@ -36,6 +36,7 @@ import { joyousDispatcher } from './protocol/dispatch.js';
 import { CAPABILITIES, METHODS } from './protocol/constants.js';
 import { JoyousHttpClient, JoyousHttpServer } from './protocol/http.js';
 import { JoyousUdsLink } from './protocol/uds.js';
+import { neonaicChore } from '../../../src/utils/chore.js';
 
 /**
  * 运行期状态。`null` 表示拓展尚未启用（或已被停用）。
@@ -364,7 +365,7 @@ function renderBridgeStatus(rt) {
       lines.push(`  对端：${s.peer.role}/${s.peer.name} v${s.peer.version}，能力 ${s.peer.capabilities.join(', ') || '无'}`);
     }
     if (s.lastError) lines.push(`  最近错误：${s.lastError}`);
-    if (s.nextRetryAt) lines.push(`  下次重连：${new Date(s.nextRetryAt).toLocaleString()}`);
+    if (s.nextRetryAt) lines.push(`  下次重连：${neonaicChore.parseCnDatetime(new Date(s.nextRetryAt))}`);
   } else {
     lines.push('· UDS 链路：未启用');
   }

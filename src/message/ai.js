@@ -828,7 +828,7 @@ function aiBan(ctx, user, time) {
     if (ms == null) return `无法解析持续时间: "${time}"（如 '1h'、'2d'、'1y2M3d4h5m6s'）`;
     const until = Date.now() + ms;
     neonaicPermissionServer.setTempPermission(user, AI_BAN_PERMISSION, false, until);
-    return `已临时封禁 ${user} 使用 AI 功能，持续 ${time}，过期 ${new Date(until).toLocaleString()}`;
+    return `已临时封禁 ${user} 使用 AI 功能，持续 ${time}，过期 ${neonaicChore.parseCnDatetime(new Date(until))}`;
   }
 
   neonaicPermissionServer.setPermission(user, AI_BAN_PERMISSION, false);
