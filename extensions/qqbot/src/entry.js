@@ -54,7 +54,8 @@ export class PlatformQQBot extends NeonaiPlatform {
 
     // 注册消息事件
     this.bot.on(EVENTS.message.group, (e) => MsgHandler.onGroupMessageIn(e, this));
-    this.bot.on(EVENTS.message.groupAt, (e) => MsgHandler.onGroupAtMessageIn(e, this));
+    // see JSDoc of the func
+    //this.bot.on(EVENTS.message.groupAt, (e) => MsgHandler.onGroupAtMessageIn(e, this));
     this.bot.on(EVENTS.message.private, (e) => MsgHandler.onPrivateMessageIn(e, this));
     await this.bot.start();
 

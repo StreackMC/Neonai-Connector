@@ -63,8 +63,6 @@ async function onPrivateMessageIn(event, pp) {
  * @param {PlatformQQBot} pp 
  */
 async function onGroupMessageIn(event, pp) {
-  event.men;
-
   /** 实例的 Profile 配置 */
   const profile_config = neonaicPlatformManager.getPlatformManager().getProfile(pp.profile);
   const user = `qUSR#${event.user_id}@${pp.selfInfo.id}`;
@@ -152,11 +150,12 @@ async function onGroupMessageIn(event, pp) {
 
 /**
  * 群聊消息，当没有授权「获取全部消息」时走此路由
- * 
+ * @deprecated 根据业务实践，实际上没有授权但 @ 了仍能触发 {@link onGroupMessageIn}，所以本函数属于重复调用，不再使用
  * @param {qqBotBackend.GroupMessageEvent} event 
  * @param {PlatformQQBot} pp 
  */
 async function onGroupAtMessageIn(event, pp) {
+  return;
   /** 实例的 Profile 配置 */
   const profile_config = neonaicPlatformManager.getPlatformManager().getProfile(pp.profile);
   const user = `qUSR#${event.user_id}@${pp.selfInfo.id}`;
