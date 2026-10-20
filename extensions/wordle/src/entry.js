@@ -24,7 +24,7 @@ const DIFFICULTY_RULES = Object.freeze({
 });
 
 /** 查询历史的别名 */
-const HISTORY_ALIASES = ['h', 'history', 'tries', 'try'];
+const HISTORY_ALIASES = ['h', 'history', 'tries', 'try', /* 语法糖，没有输入也视作查询 */''];
 /** 放弃对局的别名 */
 const ABANDON_ALIASES = ['abandon', 'givenup', 'quit', 'exit', 'stop'];
 /** 开始新游戏的别名 */
@@ -100,7 +100,7 @@ export function onEnable(ctx) {
 
       if (param.length == 5) return play(session, param);
       // 字母数量不对，子命令在前面已经处理，这里就不用解析
-      return `“${param}”的字母数量不对`;
+      return `“${param}”的字母数量不对，也不是可用的子命令。`;
     }
 
     // ---- 没有会话：把参数当作开局的语法糖 ----
