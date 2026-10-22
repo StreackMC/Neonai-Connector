@@ -74,8 +74,8 @@ const _toolFqn = new Map();
 
 /**
  * 定义一个 AI 工具。
- * @param {string} namespace 命名空间（'' 表示全局）
- * @param {string} name 工具名
+ * @param {string} namespace 命名空间（'' 表示全局），仅允许 [a-zA-Z0-9_]，会被自动替换掉其他字符
+ * @param {string} name 工具名，仅允许 [a-zA-Z0-9_]，会被自动替换掉其他字符
  * @param {object} definition 工具定义
  * @param {string} [definition.description] 工具描述（会发送给模型）
  * @param {*} definition.inputSchema 输入 schema（zod schema）
@@ -87,8 +87,8 @@ function defineAITool(namespace, name, definition) {
     return [null, null];
   }
   const def = {
-    namespace: parseString(namespace),
-    name: parseString(name),
+    namespace: parseString(namespace).replace(/[^a-zA-Z0-9_]/g, '_'),
+    name: parseString(name).replace(/[^a-zA-Z0-9_]/g, '_'),
     description: definition.description ?? '',
     inputSchema: definition.inputSchema,
     execute: definition.execute,
@@ -258,7 +258,7 @@ function buildToolSet(toolList) {
     if (!def) continue;
     const fqn = `${def.namespace}:${def.name}`;
     // OpenAI 工具名仅允许 [a-zA-Z0-9_-]，将 fqn 的 ':' 替换为 '_' 作为模型可见名
-    const modelName = fqn.replace(/:/g, '_');
+    const modelName = fqn.replace(/:/g, '-');
     tools[modelName] = tool({
       description: def.description || undefined,
       inputSchema: def.inputSchema,
@@ -346,7 +346,7 @@ async function callProvider(provider, userMessage, overrideAITool = [], override
   const toolCalls = await (result.toolCalls ?? []);
   if (toolCalls.length) {
     const summary = toolCalls
-      .map((t) => `${t.toolName}(${JSON.stringify(t.input ?? {})})`)
+      .map((t) => `${t.toolName.replace(/* "-"被用于分隔命名空间和工具名，且在定义工具时已经转义，所以这里就换回来 *//-/, ':')}(${JSON.stringify(t.input ?? {})})`)
       .join('; ');
     getLogger().tool.info(`${SESSION_ID} ◉ ${provider.name} 调用工具: ${summary.replace(/\n/g, "\\n")}`);
     const toolResults = await (result.toolResults ?? []);
@@ -555,78 +555,6 @@ function findTool(ref) {
 function findProvider(name) {
   return neonaicConfManager.getConfig(neonaicConfManager.CONFIG_PATHS.secret).getList('oai').find((p) => p?.name === name) ?? null;
 }
-
-// ---- ai 基础工具 ----
-
-registerAITool('neonaic', 'webfetch', {
-  description: "从指定地址获取Web内容",
-  inputSchema: z.object({
-    address: z.string().describe("目标 URI，协议头缺失时视作http。"),
-    timeout: z.int().describe("可接受的超时时间，不得超过5000ms，默认5000ms。"),
-  }),
-  execute: async ({ address, timeout }) => {
-    try {
-      // 请求
-      const result = await neonaicNetwork.fetch(
-        await NeonaicUriMeta.resolve(address, {}),
-        neonaicMath.clamp(neonaicMath.assertNoNaNOrElse(neonaicMath.toNumber(timeout), 5000), 1, 5000),
-        { allow_lan: false }
-      );
-
-      // 判断内置阻止
-      const neonaicTag = result.headers.get("x-neonaic-status");
-      if (neonaicTag == 'aborted:intranet') throw new NeonaicNetworkError("试图访问内网", result);
-      if (neonaicTag == 'aborted:filter') throw new NeonaicNetworkError("安全原因不得访问该地址", result);
-
-      // 处理结果
-      if (result.ok) {
-        return `<${result.type.toString()}>${await result.text()}</>`;
-      } else {
-        throw new NeonaicNetworkError(`远程返回HTTP代码${result.status}`, result);
-      }
-    } catch (error) {
-      return `未能获取目标地址内容：${error?.message || "未知原因"}`;
-    }
-  },
-});
-
-registerAITool('neonaic', 'time', {
-  description: "获取指定时区的时间信息",
-  inputSchema: z.object({
-    country: z.string().describe("目标时区的ISO国家代码，用于文本格式化；传空值为默认，可以假定与用户时区相同"),
-    tz: z.string().describe("目标时区的偏移量，如\"+8\"和\"-4\"；传空值为默认，可以假定与用户时区相同；无偏移需传\"UTC\""),
-  }),
-  execute: async ({ country, tz }) => {
-    const d = new Date();
-    return d.toLocaleString([parseString(country), "zh-CN"], { timeZone: (tz || "+8") });
-  },
-});
-
-registerAITool('neonaic', 'stringlength', {
-  description: "获取输入文本的长度",
-  inputSchema: z.object({
-    text: z.string().describe("待判断文本"),
-  }),
-  execute: async ({ text }) => parseString(text).length,
-});
-
-registerAITool('neonaic', 'calc', {
-  description: '计算指定的算式',
-  inputSchema: z.object({
-    expression: z.string().describe('一个算式，例如 "1+2*3-4"。可以使用+-*/^%()√∛这些运算符。^n√表示 n 次方根。'),
-  }).describe('要计算的算式'),
-  execute: ({ expression }) => {
-    try {
-      return neonaicMath.calc(expression, {
-        mod: true,
-        power: true,
-        root: true,
-      });
-    } catch (error) {
-      return "无法计算。可能存在算数错误，例如 0 作分母、对负数开偶次方根……";
-    }
-  },
-});
 
 // ---- ai 命令 ----
 

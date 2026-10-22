@@ -1,28 +1,832 @@
 import { NeonaicArithmeticError, NeonaicIllegalArgumentError } from "./NeonaicNewableError.js";
 import { parseString } from "./chore.js";
+// ⚠️ 这个 import 必须放在前两者之后：NeonaicNewableClass ↔ NeonaicNewableError ↔ chore →
+// confManager → NeonaicConfig → NeonaicNewableClass 之间存在既有的 ESM 环，环的求值顺序
+// 决定了 NeonaicConfig 定义类时基类是否已就绪。若本文件从基类开始求值（写成第一行），
+// NeonaicConfig 会读到尚未初始化的 NeonaicNewable 并抛 TDZ 错误（直接 import 本文件即可复现）。
+import { NeonaicNewable } from "./NeonaicNewableClass.js";
+
+// --- 表格 ---
+
+/**
+ * 断言遍历方向合法
+ * @param {string} direction 遍历方向
+ * @param {boolean} [onlyLine=false] 是否只允许 row/col
+ * @returns {'row'|'col'|'cell'} 合法方向
+ */
+function assertTableDirection(direction, onlyLine = false) {
+  const allow = onlyLine ? ['row', 'col'] : NeonaicTable.TABLE_DIRECTIONS;
+  if (!allow.includes(direction)) {
+    throw new NeonaicIllegalArgumentError(`direction must be one of ${allow.join(', ')}, got ${parseString(direction)}`);
+  }
+  return direction;
+}
+
+/**
+ * 解析 CSV 文本为二维数组（支持双引号包裹、转义双引号与换行）
+ * @param {string} text CSV 文本
+ * @returns {string[][]} 二维数组
+ */
+function splitCsv(text) {
+  const s = parseString(text).replace(/\r\n?/g, '\n');
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuote = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inQuote) {
+      if (ch === '"') {
+        if (s[i + 1] === '"') { field += '"'; i++; } else { inQuote = false; }
+      } else {
+        field += ch;
+      }
+      continue;
+    }
+    if (ch === '"') inQuote = true;
+    else if (ch === ',') { row.push(field); field = ''; }
+    else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+    else field += ch;
+  }
+  row.push(field);
+  rows.push(row);
+  // 丢弃文末的空行（尾部换行导致）
+  const last = rows[rows.length - 1];
+  if (last && last.length === 1 && last[0] === '') rows.pop();
+  return rows;
+}
+
+/**
+ * 解析 Markdown 表格文本（忽略对齐分隔行，支持转义竖线）
+ *
+ * 「有没有表头」在 Markdown 里是可以可靠推断的：GFM 规定表头行必须**紧邻**分隔行，
+ * 因此只有当分隔行位于第二行时，第一行才是表头。分隔行出现在其它位置时仅被丢弃，
+ * 不影响数据（此时视为没有表头）。
+ * @param {string} text Markdown 文本
+ * @returns {{rows: string[][], headerDetected: boolean}} 二维数组，以及「首行是否为表头」的推断结果
+ */
+function splitMarkdownTable(text) {
+  const s = parseString(text).replace(/\r\n?/g, '\n');
+  const isSeparator = (line) => /^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?$/.test(line);
+  const rows = [];
+  /** 首个分隔行出现时，已经收集到的数据行数；-1 表示没有分隔行 */
+  let separatorAfter = -1;
+  for (const rawLine of s.split('\n')) {
+    const line = rawLine.trim();
+    if (!line || !line.includes('|')) continue;
+    if (isSeparator(line)) {
+      if (separatorAfter < 0) separatorAfter = rows.length;
+      continue;
+    }
+    let body = line;
+    if (body.startsWith('|')) body = body.slice(1);
+    if (body.endsWith('|') && !body.endsWith('\\|')) body = body.slice(0, -1);
+    const row = [];
+    let field = '';
+    for (let i = 0; i < body.length; i++) {
+      const ch = body[i];
+      if (ch === '\\' && body[i + 1] === '|') { field += '|'; i++; }
+      else if (ch === '|') { row.push(field.trim()); field = ''; }
+      else field += ch;
+    }
+    row.push(field.trim());
+    rows.push(row);
+  }
+  // 分隔行前恰好一行 ⇒ 那一行就是表头；前 0 行（分隔行打头）或前多行都不视为表头
+  return { rows, headerDetected: separatorAfter === 1 };
+}
+
+/**
+ * 把标题入参规整为数组副本；null / undefined 表示「未提供标题」。
+ * 数组直接复制，单值包成单元素数组（避免 `colTitle: 'A'` 被静默丢弃）。
+ * @param {any} v 标题入参
+ * @returns {any[]|null} 副本，未提供时为 null
+ */
+function titleList(v) {
+  if (v === null || v === undefined) return null;
+  return Array.isArray(v) ? v.slice() : [v];
+}
+
+/**
+ * 判定数据源首行是否为表头行（`option.header` 的求值）。
+ *
+ * 三种取值：`true` / `false` / `'auto'`（默认）。
+ * `'auto'` 只在 Markdown 上能可靠推断（依据分隔行），CSV 与 array[] 一律视为无表头 ——
+ * CSV 的首行究竟是标题还是数据没有任何语法线索，猜错会把一整行真实数据变成标题，
+ * 因此宁可保守，需要时必须显式传 `header: true`。
+ * @param {'csv'|'markdown'|'array[]'} type 数据源类型
+ * @param {boolean|'auto'|undefined|null} option `option.header` 的原值
+ * @param {boolean} autoDetected 文本结构推断出的结果
+ * @returns {boolean} 首行是否为表头行
+ * @throws {NeonaicIllegalArgumentError} `option.header` 取值非法
+ */
+function resolveTableHeader(type, option, autoDetected) {
+  if (option === undefined || option === null || option === 'auto') {
+    return type === 'markdown' ? autoDetected : false;
+  }
+  if (typeof option === 'boolean') return option;
+  throw new NeonaicIllegalArgumentError(`option.header must be true, false or "auto", got ${parseString(option)}`);
+}
+
+/**
+ * 将标题数组规整到指定长度
+ * @param {any[]|null} titles 原始标题
+ * @param {number} size 目标长度
+ * @returns {string[]|null} 规整后的标题，原为 null 时返回 null
+ */
+function normalizeTitles(titles, size) {
+  if (titles === null || titles === undefined) return null;
+  const list = Array.isArray(titles) ? titles : [titles];
+  const out = [];
+  for (let i = 0; i < size; i++) {
+    out.push(i < list.length ? tableCellText(list[i]) : '');
+  }
+  return out;
+}
+
+/**
+ * 将任意单元格值转为文本
+ * @param {any} v 单元格值
+ * @returns {string} 文本
+ */
+function tableCellText(v) {
+  return (v === null || v === undefined) ? '' : parseString(v);
+}
+
+/**
+ * 保留单元格值的类型；仅将空单元格规整为默认填充值。
+ * @template T
+ * @param {T|null|undefined} v 单元格值
+ * @returns {T|string} 单元格值
+ */
+function tableCellValue(v) {
+  return (v === null || v === undefined) ? '' : v;
+}
+
+/**
+ * 归一化表格数据承载器
+ * @template T 数据内容
+ */
+export class NeonaicTable extends NeonaicNewable {
+  #payload;
+
+  /** 支持的表格数据源类型 */
+  static get TABLE_SOURCE_TYPES() {
+    return Object.freeze(['object-row', 'object-col', 'csv', 'array[]', 'markdown']);
+  }
+  /** 支持的遍历方向 */
+  static get TABLE_DIRECTIONS() {
+    return Object.freeze(['row', 'col', 'cell']);
+  }
+
+  /**
+   * 新建或解析一个表格
+   *
+   * 标题冲突的裁决规则：**option 优先**。数据源自带的标题（object 的键、文本的表头行）
+   * 只在 option 未给出对应标题时才使用；两者同时存在时以 option 的内容为准。
+   * 其中 object 源存在「键 → 顺序」的映射，原始数据会被重排以对齐 option 的顺序；
+   * 文本源的标题是位置性的，无法重排，只能被 option 的标题整体覆盖。
+   *
+   * `option.rows` / `option.cols` 与数据实际尺寸冲突时同样**按 option 来**：
+   * 小于实际值则截断，大于则以空文本补齐。
+   *
+   * @template T
+   * @param {Record<string, T>[]|T[][]|string|NeonaicTable} data 数据源
+   * @param {'object-row'|'object-col'|'csv'|'array[]'|'markdown'} type 数据源类型
+   * @param {object} [option] 配置
+   * @param {number} [option.cols] 允许列数，不存在自动大小；小于实际列数时将被截断，大于时以空文本补齐
+   * @param {string[]|string|undefined|null} [option.colTitle=null] 列标题，优先于数据源自带的表头
+   * @param {boolean|'auto'} [option.header='auto'] 数据源首行是否为表头行，仅对 csv / markdown / array[] 生效。
+   *   `'auto'`（默认）：Markdown 依据分隔行推断（分隔行紧跟在首行之后 ⇒ 首行是表头），
+   *   CSV 与 array[] 一律视为无表头（CSV 首行是标题还是数据没有语法线索，猜错会吞掉真实数据）；
+   *   `true`：首行作为列标题；此时若 `option.colTitle` 也已给出，则以 option 为准、首行仅被移除
+   * @param {number} [option.rows] 允许行数，不存在自动大小；小于实际行数时将被截断，大于时以空文本补齐
+   * @param {string[]|string|undefined|null} [option.rowTitle=null] 行名称，优先于数据源自带的键
+   * @throws {NeonaicIllegalArgumentError} 数据源类型、数据格式或 option 取值不合法
+   * @apiNote 表头行计数在 `option.rows` **之前**生效：`rows` 指的是数据行数，不含表头。
+   */
+  constructor(data, type, option = {}) {
+    super();
+    if (!NeonaicTable.TABLE_SOURCE_TYPES.includes(type)) {
+      throw new NeonaicIllegalArgumentError(`type must be one of ${NeonaicTable.TABLE_SOURCE_TYPES.join(', ')}, got ${parseString(type)}`);
+    }
+    const opt = (option !== null && typeof option === 'object') ? option : {};
+    let cells = [];
+    // option 给出的标题优先；数组与单值都接受（单值会被包成单元素标题列表）
+    let colTitle = titleList(opt.colTitle);
+    let rowTitle = titleList(opt.rowTitle);
+    /** 数据源是否可能有「表头行」：只有逐行排列、且不是复制已有表格时才有这个概念 */
+    const mayHaveHeaderRow = !(data instanceof NeonaicTable)
+      && (type === 'csv' || type === 'markdown' || type === 'array[]');
+    /** Markdown 依据分隔行推断出的「首行是表头」结果 */
+    let detectedHeader = false;
+
+    if (data instanceof NeonaicTable) {
+      cells = data.matrix;
+      if (colTitle === null) colTitle = data.colTitle;
+      if (rowTitle === null) rowTitle = data.rowTitle;
+    } else if (type === 'csv') {
+      const lines = splitCsv(data);
+      cells = lines.map((line) => line.map(tableCellValue));
+    } else if (type === 'markdown') {
+      const parsed = splitMarkdownTable(data);
+      cells = parsed.rows.map((line) => line.map(tableCellValue));
+      detectedHeader = parsed.headerDetected;
+    } else if (type === 'array[]') {
+      if (!Array.isArray(data)) throw new NeonaicIllegalArgumentError('data must be an array of arrays when type is "array[]"');
+      cells = data.map((line) => Array.isArray(line) ? line.map(tableCellValue) : [tableCellValue(line)]);
+    } else if (type === 'object-row') {
+      if (!Array.isArray(data)) throw new NeonaicIllegalArgumentError('data must be an array of objects when type is "object-row"');
+      const objects = data.map((v) => (v !== null && typeof v === 'object') ? v : {});
+      const keys = [];
+      for (const o of objects) for (const k of Object.keys(o)) if (!keys.includes(k)) keys.push(k);
+      const order = colTitle === null ? keys : colTitle.slice();
+      colTitle = order;
+      cells = objects.map((o) => order.map((k) => tableCellValue(o[k])));
+    } else {
+      // object-col
+      if (Array.isArray(data)) {
+        // 数组元素依次视为一列
+        const objects = data.map((v) => (v !== null && typeof v === 'object') ? v : {});
+        const keys = [];
+        for (const o of objects) for (const k of Object.keys(o)) if (!keys.includes(k)) keys.push(k);
+        const order = rowTitle === null ? keys : rowTitle.slice();
+        rowTitle = order;
+        cells = order.map((k) => objects.map((o) => tableCellValue(o[k])));
+      } else if (data !== null && typeof data === 'object') {
+        // 键为列标题，值为该列数据
+        const order = colTitle === null ? Object.keys(data) : colTitle.slice();
+        colTitle = order;
+        const columns = order.map((k) => Array.isArray(data[k]) ? data[k] : [data[k]]);
+        const rowCount = columns.reduce((m, c) => Math.max(m, c.length), 0);
+        cells = [];
+        for (let r = 0; r < rowCount; r++) cells.push(columns.map((c) => tableCellValue(c[r])));
+      } else {
+        throw new NeonaicIllegalArgumentError('data must be an object or an array of objects when type is "object-col"');
+      }
+    }
+
+    // 表头行：option.header 显式指定优先，'auto' 时只有 Markdown 能依据分隔行可靠推断。
+    // 冲突裁决：option.colTitle 已给出时以 option 为准，但表头行**仍然**从数据中移除 ——
+    // 否则同一份标题会同时出现在「列标题」和「首行数据」里。
+    /** 被识别为表头的那一行的列数；用于「只有表头、没有数据行」时推断列数 */
+    let headerWidth = 0;
+    if (mayHaveHeaderRow && resolveTableHeader(type, opt.header, detectedHeader) && cells.length > 0) {
+      headerWidth = cells[0].length;
+      if (colTitle === null) colTitle = cells[0].map(tableCellText);
+      cells = cells.slice(1);
+    }
+
+    const needRows = cells.length;
+    // 列数取「数据行最大宽度」与「表头行宽度」的较大者：否则只有表头的表会被判成 0 列，
+    // 连列标题都会被 normalizeTitles 截成空数组。
+    const needCols = cells.reduce((m, line) => Math.max(m, line.length), headerWidth);
+    const rows = (opt.rows === undefined || opt.rows === null) ? needRows : opt.rows;
+    const cols = (opt.cols === undefined || opt.cols === null) ? needCols : opt.cols;
+    if (!Number.isInteger(rows) || rows < 0) throw new NeonaicIllegalArgumentError(`option.rows must be a non-negative integer, got ${parseString(rows)}`);
+    if (!Number.isInteger(cols) || cols < 0) throw new NeonaicIllegalArgumentError(`option.cols must be a non-negative integer, got ${parseString(cols)}`);
+
+    const matrix = [];
+    for (let r = 0; r < rows; r++) {
+      const line = [];
+      for (let c = 0; c < cols; c++) line.push(cells[r]?.[c] ?? '');
+      matrix.push(line);
+    }
+
+    this.#payload = {
+      cells: matrix,
+      rows,
+      cols,
+      colTitle: normalizeTitles(colTitle, cols),
+      rowTitle: normalizeTitles(rowTitle, rows),
+    };
+  }
+
+  /** @returns {number} 行数 */
+  get rows() { return this.#payload.rows; }
+  /** @returns {number} 列数 */
+  get cols() { return this.#payload.cols; }
+  /** @returns {string[]|null} 列标题副本 */
+  get colTitle() { return this.#payload.colTitle ? this.#payload.colTitle.slice() : null; }
+  /** @returns {string[]|null} 行标题副本 */
+  get rowTitle() { return this.#payload.rowTitle ? this.#payload.rowTitle.slice() : null; }
+  /** @returns {T[][]} 全部单元格副本 */
+  get matrix() { return this.#payload.cells.map((line) => line.slice()); }
+
+  /**
+   * 解析单个行列下标（支持负数与标题）
+   * @param {number|string} v 行/列下标或标题
+   * @param {number} size 该维度长度
+   * @param {string[]|null} titles 该维度标题
+   * @param {string} what 维度名称
+   * @returns {number} 规整后的下标
+   */
+  #index(v, size, titles, what) {
+    if (typeof v === 'string' && titles) {
+      const hit = titles.indexOf(v);
+      if (hit < 0) throw new NeonaicIllegalArgumentError(`${what} title not found: ${parseString(v)}`);
+      return hit;
+    }
+    if (!Number.isInteger(v)) throw new NeonaicIllegalArgumentError(`${what} must be an integer or a known title, got ${parseString(v)}`);
+    const real = v < 0 ? size + v : v;
+    if (real < 0 || real >= size) throw new NeonaicIllegalArgumentError(`${what} index out of range: ${v} (size ${size})`);
+    return real;
+  }
+
+  /**
+   * 解析单个或多个行列下标
+   * @param {number|string|(number|string)[]} v 下标或标题
+   * @param {number} size 该维度长度
+   * @param {string[]|null} titles 该维度标题
+   * @param {string} what 维度名称
+   * @returns {number[]} 规整后的下标数组
+   */
+  #indices(v, size, titles, what) {
+    return (Array.isArray(v) ? v : [v]).map((i) => this.#index(i, size, titles, what));
+  }
+
+  /**
+   * 获取单元格内容
+   * @param {number|string} row 行下标（负数自末尾计）或行标题
+   * @param {number|string} col 列下标（负数自末尾计）或列标题
+   * @returns {T} 内容
+   */
+  getCell(row, col) {
+    const r = this.#index(row, this.#payload.rows, this.#payload.rowTitle, 'row');
+    const c = this.#index(col, this.#payload.cols, this.#payload.colTitle, 'col');
+    return this.#payload.cells[r][c];
+  }
+
+  /**
+   * 获取指定行列范围的单元格
+   * @param {number|string|(number|string)[]} rows 行下标/标题
+   * @param {number|string|(number|string)[]|undefined} [cols] 列下标/标题，省略时为全部列
+   * @returns {T[][]} 二维单元格文本，外层为行
+   */
+  getCells(rows, cols = undefined) {
+    const rs = this.#indices(rows, this.#payload.rows, this.#payload.rowTitle, 'row');
+    const cs = cols === undefined
+      ? Array.from({ length: this.#payload.cols }, (_, i) => i)
+      : this.#indices(cols, this.#payload.cols, this.#payload.colTitle, 'col');
+    return rs.map((r) => cs.map((c) => this.#payload.cells[r][c]));
+  }
+
+  /**
+   * 获取一行
+   * @param {number|string} row 行下标或行标题
+   * @returns {T[]} 该行单元格副本
+   */
+  getRow(row) {
+    const r = this.#index(row, this.#payload.rows, this.#payload.rowTitle, 'row');
+    return this.#payload.cells[r].slice();
+  }
+
+  /**
+   * 获取多行
+   * @param {number|string|(number|string)[]} rows 行下标或行标题
+   * @returns {T[][]} 多行单元格副本
+   */
+  getRows(rows) {
+    return this.#indices(rows, this.#payload.rows, this.#payload.rowTitle, 'row').map((r) => this.#payload.cells[r].slice());
+  }
+
+  /**
+   * 获取一列
+   * @param {number|string} col 列下标或列标题
+   * @returns {T[]} 该列单元格副本
+   */
+  getCol(col) {
+    const c = this.#index(col, this.#payload.cols, this.#payload.colTitle, 'col');
+    return this.#payload.cells.map((line) => line[c]);
+  }
+
+  /**
+   * 获取多列
+   * @param {number|string|(number|string)[]} cols 列下标或列标题
+   * @returns {T[][]} 多列单元格副本，外层为列
+   */
+  getCols(cols) {
+    const cs = this.#indices(cols, this.#payload.cols, this.#payload.colTitle, 'col');
+    return cs.map((c) => this.#payload.cells.map((line) => line[c]));
+  }
+
+  /**
+   * 替换单元格内容
+   * @param {number|string|(number|string)[]} row 行下标/标题，传入数组时将写入多行
+   * @param {number|string|(number|string)[]} col 列下标/标题，传入数组时将写入多列
+   * @param {T} value 新内容；行列均为数组时可为二维数组，否则按标量广播
+   * @returns {this} 本实例，便于链式调用
+   */
+  setCell(row, col, value) {
+    const rs = this.#indices(row, this.#payload.rows, this.#payload.rowTitle, 'row');
+    const cs = this.#indices(col, this.#payload.cols, this.#payload.colTitle, 'col');
+    const isMatrix = Array.isArray(value) && value.some((v) => Array.isArray(v));
+    for (let i = 0; i < rs.length; i++) {
+      for (let j = 0; j < cs.length; j++) {
+        const v = isMatrix ? value[i]?.[j] : (Array.isArray(value) && value.length !== 0 && rs.length * cs.length > 1 ? value[i * cs.length + j] : value);
+        this.#payload.cells[rs[i]][cs[j]] = tableCellValue(v);
+      }
+    }
+    return this;
+  }
+
+  /**
+   * 快速替换整行
+   * @param {number|string} row 行下标或行标题
+   * @param {T[]} values 新行内容，长度不足时保留原值，超出部分忽略
+   * @returns {this} 本实例，便于链式调用
+   */
+  setRow(row, values) {
+    const r = this.#index(row, this.#payload.rows, this.#payload.rowTitle, 'row');
+    if (!Array.isArray(values)) throw new NeonaicIllegalArgumentError(`values must be an array, got ${parseString(values)}`);
+    for (let c = 0; c < Math.min(values.length, this.#payload.cols); c++) {
+      this.#payload.cells[r][c] = tableCellValue(values[c]);
+    }
+    return this;
+  }
+
+  /**
+   * 快速替换整列
+   * @param {number|string} col 列下标或列标题
+   * @param {T[]} values 新列内容，长度不足时保留原值，超出部分忽略
+   * @returns {this} 本实例，便于链式调用
+   */
+  setCol(col, values) {
+    const c = this.#index(col, this.#payload.cols, this.#payload.colTitle, 'col');
+    if (!Array.isArray(values)) throw new NeonaicIllegalArgumentError(`values must be an array, got ${parseString(values)}`);
+    for (let r = 0; r < Math.min(values.length, this.#payload.rows); r++) {
+      this.#payload.cells[r][c] = tableCellValue(values[r]);
+    }
+    return this;
+  }
+
+  /**
+   * 按方向遍历表格
+   * @param {(value: T, row: number, col: number, table: NeonaicTable<T>) => void} callback 处理函数；方向为 row 时 value 为整行副本、col 为列下标，方向为 col 时 value 为整列副本、row 为行下标，方向为 cell 时为单元格文本
+   * @param {'row'|'col'|'cell'} [direction='row'] 遍历方向
+   * @param {any} [thisArg] 可选的 this 值，默认为本实例
+   * @returns {void}
+   * @throws {NeonaicIllegalArgumentError} callback 不是函数或方向不合法
+   */
+  forEach(callback, direction = 'row', thisArg = this) {
+    if (typeof callback !== 'function') throw new NeonaicIllegalArgumentError('callback must be a function');
+    const d = assertTableDirection(direction);
+    const { cells, rows, cols } = this.#payload;
+    if (d === 'row') {
+      for (let r = 0; r < rows; r++) callback.call(thisArg, cells[r].slice(), r, undefined, this);
+    } else if (d === 'col') {
+      for (let c = 0; c < cols; c++) callback.call(thisArg, this.getCol(c), undefined, c, this);
+    } else {
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) callback.call(thisArg, cells[r][c], r, c, this);
+      }
+    }
+  }
+
+  /**
+   * 按方向遍历表格并收集返回值
+   * @template T
+   * @param {(value: T, row: number, col: number, table: NeonaicTable<T>) => T} callback 处理函数，参数含义同 {@link NeonaicTable#forEach}
+   * @param {'row'|'col'|'cell'} [direction='row'] 遍历方向；`cell` 时逐格映射，输出尺寸不变
+   * @param {any} [thisArg] 可选的 this 值，默认为本实例
+  * @returns {NeonaicTable<T>} 映射后的新表格
+   * @throws {NeonaicIllegalArgumentError} callback 不是函数或方向不合法
+   */
+  map(callback, direction = 'row', thisArg = this) {
+    if (typeof callback !== 'function') throw new NeonaicIllegalArgumentError('callback must be a function');
+    const d = assertTableDirection(direction);
+    const { cells, rows, cols, colTitle, rowTitle } = this.#payload;
+    const options = {
+      colTitle: colTitle ? colTitle.slice() : null,
+      rowTitle: rowTitle ? rowTitle.slice() : null,
+    };
+    if (d === 'row') {
+      return new NeonaicTable(cells.map((line, r) => callback.call(thisArg, line.slice(), r, undefined, this)), 'array[]', {
+        ...options,
+        rows,
+        cols,
+      });
+    }
+    if (d === 'col') {
+      const mapped = [];
+      for (let c = 0; c < cols; c++) mapped.push(callback.call(thisArg, this.getCol(c), undefined, c, this));
+      return new NeonaicTable(Array.from({ length: rows }, (_, r) => mapped.map((line) => line[r])), 'array[]', {
+        ...options,
+        rows,
+        cols,
+      });
+    }
+    return new NeonaicTable(cells.map((line, r) => line.map((value, c) => callback.call(thisArg, value, r, c, this))), 'array[]', {
+      ...options,
+      rows,
+      cols,
+    });
+  }
+
+  /**
+   * 按方向遍历表格并收集返回值
+   * @template T
+   * @param {(value: T, row: number, col: number, table: NeonaicTable<T>) => T} callback 处理函数，参数含义同 {@link NeonaicTable#forEach}
+   * @param {'row'|'col'|'cell'} [direction='row'] 遍历方向
+   * @param {any} [thisArg] 可选的 this 值，默认为本实例
+   * @returns {T[]} 方向为 row/col 时为每行/每列的返回值，方向为 cell 时为每个单元格的返回值
+   * @throws {NeonaicIllegalArgumentError} callback 不是函数或方向不合法
+   */
+  mapThenCollect(callback, direction = 'row', thisArg = this) {
+    if (typeof callback !== 'function') throw new NeonaicIllegalArgumentError('callback must be a function');
+    const out = [];
+    this.forEach((value, r, c) => { out.push(callback.call(thisArg, value, r, c, this)); }, direction, thisArg);
+    return out;
+  }
+
+  /**
+   * 按方向筛选表格，保留回调为真的行或列
+   * @param {(value: T, row: number, col: number, table: NeonaicTable<T>) => boolean} predicate 判定函数，参数含义同 {@link NeonaicTable#forEach}
+   * @param {'row'|'col'} [direction='row'] 筛选方向
+   * @param {any} [thisArg] 可选的 this 值，默认为本实例
+   * @returns {NeonaicTable<T>} 新表格，标题随之保留
+   * @throws {NeonaicIllegalArgumentError} predicate 不是函数或方向不合法
+   */
+  filter(predicate, direction = 'row', thisArg = this) {
+    if (typeof predicate !== 'function') throw new NeonaicIllegalArgumentError('predicate must be a function');
+    const d = assertTableDirection(direction, true);
+    const { cells, rows, cols, colTitle, rowTitle } = this.#payload;
+    const keep = [];
+    if (d === 'row') {
+      for (let r = 0; r < rows; r++) if (predicate.call(thisArg, cells[r].slice(), r, undefined, this)) keep.push(r);
+      return new NeonaicTable(keep.map((r) => cells[r].slice()), 'array[]', {
+        rows: keep.length,
+        cols,
+        colTitle: colTitle ? colTitle.slice() : null,
+        rowTitle: rowTitle ? keep.map((r) => rowTitle[r]) : null,
+      });
+    }
+    for (let c = 0; c < cols; c++) if (predicate.call(thisArg, this.getCol(c), undefined, c, this)) keep.push(c);
+    return new NeonaicTable(cells.map((line) => keep.map((c) => line[c])), 'array[]', {
+      rows,
+      cols: keep.length,
+      colTitle: colTitle ? keep.map((c) => colTitle[c]) : null,
+      rowTitle: rowTitle ? rowTitle.slice() : null,
+    });
+  }
+
+  /**
+   * 转置表格，行列标题互换
+   * @returns {NeonaicTable<T>} 转置后的新表格
+   */
+  transpose() {
+    const { cells, rows, cols, colTitle, rowTitle } = this.#payload;
+    const matrix = [];
+    for (let c = 0; c < cols; c++) matrix.push(cells.map((line) => line[c]));
+    return new NeonaicTable(matrix, 'array[]', {
+      rows: cols,
+      cols: rows,
+      colTitle: rowTitle ? rowTitle.slice() : null,
+      rowTitle: colTitle ? colTitle.slice() : null,
+    });
+  }
+
+  /**
+   * 导出为二维数组
+   * @returns {T[][]} 单元格副本
+   */
+  toArray() { return this.matrix; }
+
+  /**
+   * 导出为 CSV 文本
+   * @returns {string} CSV 文本，含列标题行（标题全空时省略）
+   * @apiNote 因为 CSV 的首行没有语法标记，本方法输出标题行后，重新解析时**必须**显式传
+   *          `option.header: true`，否则标题行会被当成一行数据。
+   */
+  toCsv() {
+    const esc = (v) => parseString(v ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
+    const lines = [];
+    const { colTitle, cells } = this.#payload;
+    if (colTitle && colTitle.some((v) => v !== '')) lines.push(colTitle.map(esc).join(','));
+    for (const line of cells) lines.push(line.map(esc).join(','));
+    return lines.join('\n');
+  }
+
+  /**
+   * 导出为 Markdown 表格
+   * @returns {string} Markdown 表格文本
+   */
+  get markdown() {
+    const { cells, rows, cols, colTitle, rowTitle } = this.#payload;
+
+    // 没有列，Markdown 表格无法成立（至少需要表头和分隔行）
+    if (cols === 0) return '';
+
+    // Markdown 表格用 | 分隔单元格，内容里的 | 必须转义；
+    // 真实换行会终止表格行，必须替换成空格（GFM 不支持单元格内换行）。
+    const esc = (v) => parseString(v ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
+
+    // 是否存在行标题列。用 length 判断，避免空数组 [] 被当成 truthy，
+    // 导致表头多一列但数据行取不到值。
+    const hasRowTitle = Array.isArray(rowTitle) && rowTitle.length > 0;
+
+    // 构建表头单元格数组。
+    // 有行标题列时，第一列是行标题列的表头，留空。
+    const head = [];
+    if (hasRowTitle) head.push('');
+    for (let c = 0; c < cols; c++) {
+      // colTitle 可能比 cols 短，用 ?? '' 兜底，避免 esc(undefined)。
+      head.push(esc(colTitle?.[c] ?? ''));
+    }
+
+    // Markdown 表格前两行：表头行 + 分隔行。
+    // 分隔行的数量必须和表头单元格数量一致，否则表格结构会错位。
+    const lines = [
+      `| ${head.join(' | ')} |`,
+      `| ${head.map(() => '---').join(' | ')} |`,
+    ];
+
+    // 逐行构建数据行。
+    for (let r = 0; r < rows; r++) {
+      const line = [];
+      // 有行标题列时，先放行标题。
+      if (hasRowTitle) line.push(esc(rowTitle[r]));
+      for (let c = 0; c < cols; c++) {
+        // cells[r] 或 cells[r][c] 可能缺失，用 ?? '' 兜底。
+        line.push(esc(cells?.[r]?.[c] ?? ''));
+      }
+      lines.push(`| ${line.join(' | ')} |`);
+    }
+
+    // 所有行用换行符连接，返回完整 Markdown 表格。
+    return lines.join('\n');
+  }
+
+  /** @returns {string} Markdown 表格文本 */
+  toString() { return this.markdown; }
+}
+
+/**
+ * @extends {NeonaicTable<number>} 数学矩阵，但每个单元格必须是数字
+ */
+export class NeonaicMatrix extends NeonaicTable {
+  /**
+   * 新建或解析一个矩阵
+   * @param {number[][]|string} data 数据源
+   * @param {'array[]'|'csv'|'markdown'} type 数据源类型
+   * @param {object} [option] 配置
+   * @param {number} [option.cols] 允许列数，不存在自动大小；小于实际列数时将被截断，大于时以 0 补齐
+   * @param {number} [option.rows] 允许行数，不存在自动大小；小于实际行数时将被截断，大于时以 0 补齐
+   * @throws {NeonaicIllegalArgumentError} 数据源类型或数据格式不合法；参数不合法
+   * @throws {NeonaicArithmeticError} 矩阵单元格中存在 NaN
+   */
+  constructor(data, type, option = {}) {
+    if (option === null || typeof option !== 'object') throw new NeonaicIllegalArgumentError(`option must be an object, got ${parseString(option)}`);
+    super(data, type, {...option, header: false});
+    // 检查所有单元格是否为 NaN，非数字的解析为数字
+    this.forEach((value, r, c) => {
+      neonaicMath.assertNoNaN(value, `matrix cell at row ${r}, col ${c} is NaN`);
+      this.setCell(r, c, neonaicMath.toNumber(value, false));
+    }, 'cell');
+  }
+
+  /**
+   * 获取矩阵的转置
+   * @returns {NeonaicMatrix} 转置后的矩阵
+   */
+  transpose() {
+    const transposed = new NeonaicMatrix(Array.from({ length: this.cols }, (_, c) => Array.from({ length: this.rows }, (_, r) => this.getCell(r, c))), 'array[]');
+    return transposed;
+  }
+
+  /** 判断矩阵是否为方阵 */
+  get squared() {
+    return this.rows === this.cols;
+  }
+
+  /**
+   * 判断方阵是否奇异
+   * @returns {boolean} true 表示奇异矩阵，false 表示非奇异矩阵或不是方阵
+   */
+  get singular() {
+    return this.squared && this.det() === 0;
+  }
+
+  setCell(row, col, value) { return super.setCell(row, col, neonaicMath.toNumber(value)); }
+  setRow(row, values) { return super.setRow(row, values.map(neonaicMath.toNumber)); }
+  setCol(col, values) { return super.setCol(col, values.map(neonaicMath.toNumber)); }
+
+  /**
+   * 计算矩阵的行列式
+   * @returns {number} 行列式的值
+   * @throws {NeonaicIllegalArgumentError} 矩阵必须是方阵才能计算行列式
+   */
+  det() {
+    if (!this.squared) throw new NeonaicIllegalArgumentError(`matrix must be square to calculate determinant, got ${this.rows}x${this.cols}`);
+    const n = this.rows;
+    if (n === 0) return 1; // 0x0 矩阵的行列式定义为 1
+    if (n === 1) return this.getCell(0, 0);
+    if (n === 2) return this.getCell(0, 0) * this.getCell(1, 1) - this.getCell(0, 1) * this.getCell(1, 0);
+    if (n === 3) {
+      const a = this.getCell(0, 0), b = this.getCell(0, 1), c = this.getCell(0, 2);
+      const d = this.getCell(1, 0), e = this.getCell(1, 1), f = this.getCell(1, 2);
+      const g = this.getCell(2, 0), h = this.getCell(2, 1), i = this.getCell(2, 2);
+      return a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+    }
+    // n > 3 时使用递归展开
+    let det = 0;
+    for (let c = 0; c < n; c++) {
+      const subMatrix = new NeonaicMatrix(this.getCells(Array.from({ length: n - 1 }, (_, r) => r + 1), Array.from({ length: n }, (_, col) => col !== c ? col : null).filter((col) => col !== null)), 'array[]');
+      det += ((c % 2 === 0 ? 1 : -1) * this.getCell(0, c) * subMatrix.det());
+    }
+    return det;
+  }
+
+  /**
+   * 计算矩阵的逆矩阵
+   * @returns {NeonaicMatrix|NaN} 逆矩阵；若不可求逆则为 NaN
+   * @throws {NeonaicIllegalArgumentError} 矩阵必须是方阵才能计算逆矩阵
+   */
+  inverse() {
+    if (!this.squared) throw new NeonaicIllegalArgumentError(`matrix must be square to calculate inverse, got ${this.rows}x${this.cols}`);
+    const n = this.rows;
+    const det = this.det();
+    if (det === 0) return NaN; // 奇异矩阵无法求逆
+    const adjugate = new NeonaicMatrix(Array.from({ length: n }, (_, r) => Array.from({ length: n }, (_, c) => {
+      const subMatrix = new NeonaicMatrix(this.getCells(Array.from({ length: n }, (_, row) => row !== r ? row : null).filter((row) => row !== null), Array.from({ length: n }, (_, col) => col !== c ? col : null).filter((col) => col !== null)), 'array[]');
+      return ((r + c) % 2 === 0 ? 1 : -1) * subMatrix.det();
+    })), 'array[]');
+    // 逐格除以行列式。这里直接构造 NeonaicMatrix，而不是走 map：基类的 map 返回的是
+    // 普通 NeonaicTable，会把 det()/inverse()/squared 这些矩形能力丢掉。
+    return new NeonaicMatrix(
+      adjugate.transpose().matrix.map((line) => line.map((v) => v / det)),
+      'array[]',
+    );
+  }
+
+  /** 判断矩阵是否满秩 */
+  get fullrank() {
+    return this.rank === Math.min(this.rows, this.cols);
+  }
+
+  /**
+   * 获取矩阵的秩（高斯消元化成行阶梯形，按列选绝对值最大的主元以抑制浮点误差）
+   * @returns {number} 矩阵的秩
+   */
+  get rank() {
+    // this.matrix 本身就是副本，可以就地消元
+    const matrix = this.matrix;
+    const rowCount = matrix.length;
+    const colCount = rowCount === 0 ? 0 : matrix[0].length;
+    // 容差按元素最大绝对值缩放：既不把「本来就很小的数」当成 0，也不会被浮点残差骗到
+    const scale = matrix.reduce((m, line) => line.reduce((n, v) => Math.max(n, Math.abs(v)), m), 0);
+    const eps = scale === 0 ? 0 : scale * 1e-9;
+
+    let rank = 0;
+    for (let c = 0; c < colCount && rank < rowCount; c++) {
+      // 部分主元法：在当前列剩余行里挑绝对值最大的一行
+      let pivot = rank;
+      for (let r = rank + 1; r < rowCount; r++) {
+        if (Math.abs(matrix[r][c]) > Math.abs(matrix[pivot][c])) pivot = r;
+      }
+      if (Math.abs(matrix[pivot][c]) <= eps) continue; // 该列剩余部分全为 0
+      [matrix[rank], matrix[pivot]] = [matrix[pivot], matrix[rank]];
+      for (let r = rank + 1; r < rowCount; r++) {
+        const factor = matrix[r][c] / matrix[rank][c];
+        if (factor === 0) continue;
+        for (let k = c; k < colCount; k++) matrix[r][k] -= factor * matrix[rank][k];
+      }
+      rank++;
+    }
+    return rank;
+  }
+}
+
+// --- 其他 ---
 
 function getNaNException(where) {
   return new NeonaicArithmeticError(where ? `在${parseString(where)}发现意外的 NaN` : '发现意外的 NaN', where ? where : null);
 }
 
+// --- 导出 ---
+
 export const neonaicMath = Object.freeze({
   /**
    * 将传入值尽可能地转为数字，遇到多个小数点时只保留第一个
-   * @implNote 先强转为文本，再删除非数字部分，最后得到结果
+   * @implNote 先强转为文本，删除非数字部分（**保留前导正负号**），最后得到结果。
+   *           正负号必须单独处理：否则 `-1` 里的 `-` 会被一起删掉，负数静默变成正数。
    * @param {any} v 传入值
    * @param {boolean} allowNaN 是否接受返回 NaN，为 false 时返回 0
    * @returns {number|NaN} 结果，当转出字符串不含数字时为 NaN
    */
   toNumber: (v, allowNaN = true) => {
     if (typeof v === 'number') return v;
+    const text = parseString(v).trim();
+    // 前导负号（含 U+2212 减号）单独记下来，不要参与「只保留数字和点」的清洗
+    const sign = (text.startsWith('-') || text.startsWith('−')) ? -1 : 1;
     // 只保留数字和点
-    const s = parseString(v).replace(/[^0-9.]/g, '');
+    const s = text.replace(/[^0-9.]/g, '');
     // 拆出整数部分 + 其余全部当小数
     const parts = s.split('.');
     const int = parts[0];
     const dec = parts.slice(1).join('');   // 去掉后面多余的点
     if (int === "") return allowNaN ? NaN : 0;
-    return Number(`${int}.${dec}`);
+    return sign * Number(`${int}.${dec}`);
   },
 
   /**

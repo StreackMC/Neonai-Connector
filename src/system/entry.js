@@ -27,6 +27,7 @@ import { neonaicMessageIn } from '../message/messageIn.js';
 import { neonaicChore } from '../utils/chore.js';
 import { neonaicEventBus } from '../event/neonaicEventBus.js';
 import { NeonaicLoadedEvent } from '../event/neonaicEventInterface.js';
+import { neonaicUtilsSupport } from '../utils/registerUtilsSupport.js';
 
 // ---- 常量 ----
 
@@ -163,6 +164,12 @@ async function bootstrap() {
   neonaicPidManager.acquirePidLock(PID_FILE_PATH, getLogger());
   getLogger().main.info(`正在启动 ${APP_NAME} v${APP_VERSION}`);
 
+  // 监听 SIGNAL 等
+  getLogger().main.debug(`初始化 SIGNAL 监听`);
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('exit', () => neonaicPidManager.releasePidLock(PID_FILE_PATH));
+
   // 调试模式分支
   if (DEBUGING) {
     // 调试模式：console 走原生输出，设置全局标志位，启用 $()
@@ -209,15 +216,13 @@ async function bootstrap() {
   neonaicPermissionServer.installPermissionCommands(neonaicCommandServer.registerCommand);
   neonaicConfManager.installConfigCommands(neonaicCommandServer.registerCommand);
 
+  // 安装未分类的命令或AI工具
+  getLogger().cmd.debug(`注册内置增强型命令或AI工具`);
+  neonaicUtilsSupport.register();
+
   // 按配置启动已启用的平台
   getLogger().platM.info(`正在加载 Platform Profile`);
   PlatformManager.instance.loadEnabled();
-
-  // 监听 SIGNAL 等
-  getLogger().main.debug(`初始化 SIGNAL 监听`);
-  process.on('SIGINT', () => shutdown('SIGINT'));
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
-  process.on('exit', () => neonaicPidManager.releasePidLock(PID_FILE_PATH));
 
   // 顶层未捕获异常：写崩溃报告后走安全关闭流程
   process.on('uncaughtException', (err) => {

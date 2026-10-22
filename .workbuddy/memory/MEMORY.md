@@ -22,6 +22,17 @@
 - **两套语义正交**：`load`/`unload` 只管运行期；`enable`/`disable` 只管 `ext.json` 开关。⚠️ **`load` 会吞掉 onEnable 异常并返回 `status:'failed'`**（不 throw）⇒ 验证 onEnable 必须**检查返回值**或直接调 `entry.onEnable()`。
 - 布局：`extensions/<name>/src/*.js` + 同级 `manifest.json`（`entry` 写 `./src/entry.js`）；`meta.id` 须匹配 `^[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*$`（**不能带连字符**，目录名可以）；拓展内导入内核用 `../../../src/...`。`enable()` 要求入口同时导出 `onEnable`/`onDisable`。会话式拓展模板：私有 `Map` + 超时清理器 + 魔术 token。
 
+## 表格 / 矩阵（`utils/math.js` 的 `NeonaicTable` / `NeonaicMatrix`）
+- 五种数据源：`object-row`（对象数组，键＝列名）、`object-col`（列对象 / 对象数组，键＝行名）、`csv`、`markdown`、`array[]`。`option.rows/cols` 与数据冲突时**按 option 来**（小则截断、大则补空；矩阵补 0）。
+- **表头**：`option.header` ∈ `true|false|'auto'`（默认 `auto`），只对 `csv`/`markdown`/`array[]` 生效。**`auto` 只在 Markdown 上推断**——分隔行紧跟首行 ⇒ 首行是表头；CSV 首行没有任何语法线索，一律视为数据（猜错会吞掉一整行真实数据），需要时必须显式 `header: true`。
+- **冲突裁决：option 优先**。文本源自带表头 + `option.colTitle` ⇒ 标题用 option，表头行**仍然从数据中移除**（否则同一份标题出现两次）。object 源的键序与 option 标题序冲突 ⇒ **按 option 重排原始数据**（键→列有映射）；文本源标题是位置性的，只能整体覆盖、无法重排。
+- 列数取「数据最大宽度」与「表头行宽度」的较大者（否则只有表头的表会被判成 0 列、标题被 `normalizeTitles` 截成空数组）。`colTitle`/`rowTitle` 接受数组或单值（单值曾被 `Array.isArray` 静默丢弃）。
+- ⚠️ **`math.js` 的 import 顺序有讲究**：`NeonaicNewable` 必须写在 `NeonaicNewableError`/`chore` **之后**，否则本文件成了既有环（NewableClass ↔ Error ↔ chore → confManager → NeonaicConfig → NewableClass）的入口，直接 `import` 即 TDZ。
+- ⚠️ `toCsv()` 的转义是错的（转义 `|` 而非 `,`/`"`），含逗号的单元格导出后无法原样解析；且 `toCsv` 写出标题行后，重新解析**必须**显式传 `header: true`。
+- `NeonaicMatrix`：`rank` 已实现（高斯消元 + 部分主元，容差按元素最大绝对值 ×1e-9 缩放；`this.matrix` 本身是副本，可原地消元）。`inverse()` **直接构造 `NeonaicMatrix`**，不要走 `map` —— 基类 `map` 返回普通 `NeonaicTable`，会把 `det()`/`squared`/`inverse()` 丢掉。`map` 第三态 `'cell'` 原先被 `assertTableDirection(…, true)` 挡住（分支成了死代码），现已放开。
+- ⚠️ **`neonaicMath.toNumber` 原先会删掉负号**（`'-1'` → `1`），矩阵里就是静默算错；现已单独处理前导 `-` / `−`（U+2212）。下游（`calc`/`solve24`/`parseStorageText`/`timeout`）均已回归。
+- `neonaic:matrix` 工具（`utils/registerUtilsSupport.js`）：行分隔容忍换行与分号；**先校验形状与单元格是否可解析为数字**再建矩阵（`NeonaicTable` 对不齐数据是截断/补空，不校验会算出「看起来正常的错答案」）；输出字段 `singular`（布尔，原 `signature` 是不存在的方法）；奇异矩阵**不返回** `inverse`；`rank/fullrank/squared` 在 schema 里改为可选，失败只回 `info`。
+
 ## Joyous 桥接拓展（`extensions/joyous/`）
 与 Java 插件 [StreackMC/Joyous](https://github.com/StreackMC/Joyous) 协作的双通道桥接。**V1 见 `PROTOCOL.md`（§16 是 V2 落地说明）；V2 增量以 `PROTOCOL-V2.md` 为唯一约定来源，必需改动清单见 `NEONAIC-REQUIRED-CHANGES.md`**（后两份是对端 `docs/neonaic/` 的副本）。常量以 `src/protocol/constants.js` 为准，对端以 `Neonaic/bridge/BridgeProtocol.java` 为准，**自检解析该 Java 文件逐项比对**。
 - 分层：`src/entry.js` 组合根｜`config.js`｜`identity.js`｜`status.js`｜`protocol/`（`constants`/`codec`/`session`/`http`/`uds`/`dispatch`/`methods`）。**`protocol/` 下导入内核是 4 层** `../../../../src/...`。两个接缝：`dispatch.js` 认识命令系统、`methods.js` 认识平台/AI/身份，**都不认识具体传输**；http.js/uds.js 只认「handler + {method,payload}」。
@@ -62,4 +73,6 @@
 - **`commandServer.js` 的 `executeCommand`/`executeCommandSilent` 只拦同步异常**：`async` 处理器抛出的异常以 Promise 拒绝逸出、不会被包成 `NeonaicCommandError`（产生未处理拒绝）。joyous 的 `dispatch.classify` 兜住了这一类，**内核侧应单独修**。影响全项目所有 async 命令。
 - `extLoader.js`：`disable()` 无空守卫；`replaceAll('.', '\.')` 是空操作，且键名用 `.enabled` 而 `ext.json` 样例写的是 `enable`。
 - `ai.js` 的 `neonaic:webfetch` 是半成品（`uri = new URL(address)` 赋给未声明变量，严格模式必抛，被 catch 吞掉）。`entry.js` 的 `checkPermissionFromContext(this)` 只传 1 个参数，`systemLine` 永远为空。`NeonaicUriMeta.js:184` 的 `{@link resolveUri}` 悬空。
+- **`NeonaicTable.toCsv()` 应按 RFC4180 加引号**（内容含 `,`/`"`/换行时包双引号并双写内部引号），当前只会转义 `|`，往返即错。
+- `NeonaicMatrix` 的 `rank` 恒为 `NaN`；`registerUtilsSupport.js` 里 `inverse().toString('csv')` 的参数无效（应为 `toCsv()`），`matrix.signature()` 不存在（应为 `singular`）。
 - ✅ 已修：joyous `dispatch.js` 调不存在的 `checkCommandPerms`；`codec.js` 漏 `super()`；`JoyousUdsLink` 缺 `notify()`；`uds.js` 异步连接失败不发 `error`；`config.js` 的 `bridge.ai.AIlist` 缺省误报 issue。
