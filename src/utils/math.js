@@ -908,6 +908,21 @@ const PHYSICAL_CONSTANTS = Object.freeze({
 });
 
 /**
+ * 高精模式下数学常量的扩展位数。
+ *
+ * `number` 只有约 16 位有效数字，若直接升精度，后面会全是 0 —— 看着像 40 位精度，其实是假的。
+ * 这里给 π/e/φ 补一份十进制字面量，按 scale 截断（前 50 位，够 science ≤ 49 用）。
+ */
+const HP_PI = '3.14159265358979323846264338327950288419716939937510';
+const HP_E = '2.71828182845904523536028747135266249775724709369995';
+const HP_PHI = '1.61803398874989484820458683436563811772030917980576';
+const HIGH_PRECISION_MATH = Object.freeze({
+  'π': HP_PI, 'pi': HP_PI,
+  'e': HP_E,
+  'φ': HP_PHI, 'phi': HP_PHI,
+});
+
+/**
  * 按名字取常量。
  * @param {string} name 常量名（区分大小写）
  * @returns {number|Readonly<NeonaicTDecimalStore>|undefined} 未定义时为 undefined
@@ -927,6 +942,274 @@ function resolveConstant(name) {
  */
 function decimalToNumber(store) {
   return Number(store.mantissa) * (10 ** Number(store.exponent));
+}
+
+/**
+ * 把整指存储格式化成十进制文本（用于回话/工具输出）。
+ * @param {Readonly<NeonaicTDecimalStore>} store 整指存储
+ * @returns {string} 定点或科学记数法文本
+ */
+function decimalToString(store) {
+  const raw = BigInt(store.mantissa);
+  const exponent = Number(store.exponent);
+  const negative = raw < 0n;
+  const digits = (negative ? -raw : raw).toString();
+  let body;
+  if (exponent >= 0) {
+    body = digits + '0'.repeat(exponent);
+  } else {
+    const point = digits.length + exponent;
+    if (point > 0) body = `${digits.slice(0, point)}.${digits.slice(point)}`;
+    // 与 JS 的 Number#toString 对齐：小数点后超过 6 个 0 就用科学记数法
+    else if (point > -7) body = `0.${'0'.repeat(-point)}${digits}`;
+    else body = `${digits[0]}${digits.length > 1 ? `.${digits.slice(1)}` : ''}e${point - 1}`;
+  }
+  return negative ? `-${body}` : body;
+}
+
+// ---- 高精定点（science 模式）----
+// 约定：内部值 = 真实值 × 10^scale 的 BigInt，scale 在整条算式里固定不变。
+
+/** 10 的 n 次幂（n ≥ 0） @param {number} n @returns {BigInt} */
+function bigPow10(n) { return 10n ** BigInt(n); }
+
+/**
+ * 除数为「四舍五入」的整除（远离零取整），符号自动处理。
+ * @param {BigInt} a 被除数
+ * @param {BigInt} b 除数
+ * @returns {BigInt}
+ * @throws {NeonaicArithmeticError} 除数为零
+ */
+function bigRoundDiv(a, b) {
+  if (b === 0n) throw new NeonaicArithmeticError('除数不能为零');
+  const negative = (a < 0n) !== (b < 0n);
+  const absA = a < 0n ? -a : a;
+  const absB = b < 0n ? -b : b;
+  const q = (absA + absB / 2n) / absB;
+  return negative ? -q : q;
+}
+
+/**
+ * 数字字面量（如 `"2.5"`）→ 定点，按字符串移位，不经浮点。
+ * @param {string} text 字面量（`CALC_NUMBER` 已保证格式）
+ * @param {number} scale 小数位数
+ * @returns {BigInt}
+ */
+function scaledFromLiteral(text, scale) {
+  const matched = text.match(/^(\d*)(?:\.(\d*))?$/);
+  const digits = BigInt((matched?.[1] || '0') + (matched?.[2] || ''));
+  const shift = scale - (matched?.[2] || '').length;
+  return shift >= 0 ? digits * bigPow10(shift) : bigRoundDiv(digits, bigPow10(-shift));
+}
+
+/**
+ * `number` → 定点。按最短往返表示解析，**不做乘法**，避免 `n * 10^scale` 的浮点误差与溢出。
+ * @param {number} n 数值
+ * @param {number} scale 小数位数
+ * @returns {BigInt}
+ * @throws {NeonaicArithmeticError} 传入 NaN/Infinity
+ */
+function scaledFromNumber(n, scale) {
+  if (!Number.isFinite(n)) throw new NeonaicArithmeticError(`无法把 ${String(n)} 表示为高精数值`);
+  const matched = String(n).match(/^(-?)(\d*)(?:\.(\d*))?(?:e([+-]?\d+))?$/i);
+  if (!matched) throw new NeonaicIllegalArgumentError(`无法解析的数字：${String(n)}`);
+  const sign = matched[1] === '-' ? -1n : 1n;
+  const digits = BigInt((matched[2] || '0') + (matched[3] || ''));
+  const shift = (matched[4] ? Number(matched[4]) : 0) - (matched[3] || '').length + scale;
+  return shift >= 0 ? sign * digits * bigPow10(shift) : sign * bigRoundDiv(digits, bigPow10(-shift));
+}
+
+/**
+ * 整指存储 → 定点。`mantissa` 是整数，按 `exponent` 移位，scale 足够时**精确无损**。
+ * @param {Readonly<NeonaicTDecimalStore>} store 整指存储
+ * @param {number} scale 小数位数
+ * @returns {BigInt}
+ */
+function scaledFromStore(store, scale) {
+  const mantissa = BigInt(store.mantissa);
+  const shift = Number(store.exponent) + scale;
+  return shift >= 0 ? mantissa * bigPow10(shift) : bigRoundDiv(mantissa, bigPow10(-shift));
+}
+
+/**
+ * 定点 → 整指存储（去掉尾随零后返回最小表示）。
+ * @param {BigInt} value 定点值
+ * @param {number} scale 小数位数
+ * @returns {NeonaicTDecimalStore} `mantissa` 能放进安全整数时用 number，否则保留 BigInt
+ */
+function scaledToStore(value, scale) {
+  if (value === 0n) return { mantissa: 0, exponent: 0 };
+  let mantissa = value;
+  let exponent = -scale;
+  while (mantissa % 10n === 0n) { mantissa /= 10n; exponent++; }
+  const asNumber = Number(mantissa);
+  return { mantissa: Number.isSafeInteger(asNumber) ? asNumber : mantissa, exponent };
+}
+
+/** 定点乘法 @returns {BigInt} */
+function decMul(a, b, scale) { return bigRoundDiv(a * b, bigPow10(scale)); }
+
+/** 定点除法 @returns {BigInt} */
+function decDiv(a, b, scale) {
+  if (b === 0n) throw new NeonaicArithmeticError('除数不能为零');
+  return bigRoundDiv(a * bigPow10(scale), b);
+}
+
+/** 定点取模（a - trunc(a/b)·b） @returns {BigInt} */
+function decMod(a, b, scale) {
+  if (b === 0n) throw new NeonaicArithmeticError('取模的除数不能为零');
+  // 两个操作数同 scale，比值就是 a/b；BigInt 除法本身就是向零截断，直接还原余数即精确
+  return a - (a / b) * b;
+}
+
+/**
+ * 定点整数次幂（快速幂，每步按 scale 舍入）。
+ * @param {BigInt} a 底数（定点）
+ * @param {BigInt} exponent 指数（**已经是整数**，非定点）
+ * @param {number} scale 小数位数
+ * @returns {BigInt}
+ */
+function decPow(a, exponent, scale) {
+  const one = bigPow10(scale);
+  if (exponent === 0n) return one;
+  const negative = exponent < 0n;
+  if (negative && a === 0n) throw new NeonaicArithmeticError('0 的负数次幂无意义');
+  let k = negative ? -exponent : exponent;
+  let base = a;
+  let result = one;
+  while (k > 0n) {
+    if ((k & 1n) === 1n) result = decMul(result, base, scale);
+    k >>= 1n;
+    if (k > 0n) base = decMul(base, base, scale);
+  }
+  return negative ? decDiv(one, result, scale) : result;
+}
+
+/**
+ * 整数 n 次根（牛顿迭代 + 末位修正）。
+ * @param {BigInt} A 被开方数
+ * @param {number} n 次数（≥ 1 的整数）
+ * @returns {BigInt} floor(A^(1/n))
+ */
+function integerRoot(A, n) {
+  if (A < 0n) throw new NeonaicArithmeticError('负数在实数域内没有偶次方根');
+  if (n === 1 || A < 2n) return A;
+  const times = BigInt(n);
+  const bits = A.toString(2).length;
+  let x = 1n << BigInt(Math.ceil(bits / n) + 1);
+  for (;;) {
+    const next = ((times - 1n) * x + A / (x ** (times - 1n))) / times;
+    if (next >= x) break;
+    x = next;
+  }
+  while (x ** times > A) x -= 1n;
+  return x;
+}
+
+/**
+ * 定点 n 次根。
+ * @param {BigInt} a 被开方数（定点）
+ * @param {number} n 次数
+ * @param {number} scale 小数位数
+ * @returns {BigInt}
+ */
+function decRoot(a, n, scale) {
+  const negative = a < 0n;
+  if (negative && n % 2 === 0) throw new NeonaicArithmeticError('负数在实数域内没有偶次方根');
+  const abs = negative ? -a : a;
+  // 多算一位再四舍五入：整数根只能取 floor，直接用它会让末位总是偏小。
+  // 记 R 为 10^scale 缩放的根，则 R^n = a·10^(scale(n-1))；多要一位就把指数补 n：
+  // R'^n = a·10^(scale(n-1)+n)，R' = 10R。
+  const root = integerRoot(abs * bigPow10(scale * (n - 1) + n), n);
+  const rounded = bigRoundDiv(root, 10n);
+  return negative ? -rounded : rounded;
+}
+
+/** ln 级数与常数缓存：键为工作精度 W @type {Map<number, {ln2: BigInt, ln10: BigInt}>} */
+const LN_CACHE = new Map();
+
+/**
+ * ln(m)，要求 `m/10^W` ∈ [1, 2]（越界会慢但结果仍正确）。
+ * 用 `ln m = 2·atanh((m-1)/(m+1))` 的级数，y ≤ 1/3 时每项缩到 1/9，收敛很快。
+ * @param {BigInt} m 定点（W 位小数）
+ * @param {number} W 工作精度
+ * @returns {BigInt} ln 值（W 位小数）
+ */
+function lnNearOne(m, W) {
+  const one = bigPow10(W);
+  const y = bigRoundDiv((m - one) * one, m + one);
+  const y2 = bigRoundDiv(y * y, one);
+  let sum = y;
+  let term = y;
+  for (let k = 1n; k <= 100000n; k++) {
+    term = bigRoundDiv(term * y2, one);
+    if (term === 0n) break;
+    sum += bigRoundDiv(term, 2n * k + 1n);
+  }
+  return 2n * sum;
+}
+
+/** 取（并缓存）W 位精度下的 ln2 与 ln10 @returns {{ln2: BigInt, ln10: BigInt}} */
+function lnConstants(W) {
+  let cached = LN_CACHE.get(W);
+  if (!cached) {
+    const one = bigPow10(W);
+    const ln2 = lnNearOne(2n * one, W);            // y = 1/3
+    const ln10 = 3n * ln2 + lnNearOne(bigRoundDiv(125n * one, 100n), W); // ln10 = 3ln2 + ln(5/4)
+    cached = { ln2, ln10 };
+    LN_CACHE.set(W, cached);
+  }
+  return cached;
+}
+
+/**
+ * 定点自然对数的内部实现：在 W 位工作精度下求值，**不做最终舍入**。
+ * 先把值归一化到 [1,10)，再用 ln(x) = ln(m) + k·ln2 + e·ln10。
+ * @param {BigInt} a 真数（定点，须 > 0）
+ * @param {number} scale 调用方的小数位数
+ * @param {number} W 工作精度（W ≥ scale）
+ * @returns {BigInt} W 位小数下的 ln 值
+ * @throws {NeonaicArithmeticError} 真数非正
+ */
+function lnAtPrecision(a, scale, W) {
+  if (a <= 0n) throw new NeonaicArithmeticError('对数的真数必须为正');
+  const one = bigPow10(W);
+  const { ln2, ln10 } = lnConstants(W);
+  const x = a * bigPow10(W - scale);          // 升精度
+  const decimalExponent = x.toString().length - 1 - W;
+  let m = decimalExponent >= 0
+    ? bigRoundDiv(x, bigPow10(decimalExponent))
+    : x * bigPow10(-decimalExponent);
+  let halvings = 0n;
+  while (m >= 2n * one) { m = bigRoundDiv(m, 2n); halvings++; }
+  return lnNearOne(m, W) + halvings * ln2 + BigInt(decimalExponent) * ln10;
+}
+
+/**
+ * 定点自然对数。工作精度多留 12 位吸收级数截断误差，只在最后舍入一次。
+ * @param {BigInt} a 真数（定点，须 > 0）
+ * @param {number} scale 小数位数
+ * @returns {BigInt}
+ */
+function decLn(a, scale) {
+  const W = scale + 12;
+  return bigRoundDiv(lnAtPrecision(a, scale, W), bigPow10(W - scale));
+}
+
+/**
+ * 定点常用对数（换底）。分子分母都取到工作精度再相除，避免「先各自舍入再相除」
+ * 让商在末位漂移（否则 `lg8/lg2` 会得到 3.00000000000000000003）。
+ * @param {BigInt} a 真数（定点，须 > 0）
+ * @param {number} scale 小数位数
+ * @returns {BigInt}
+ */
+function decLg(a, scale) {
+  const W = scale + 12;
+  const lnW = lnAtPrecision(a, scale, W);
+  const ln10W = lnConstants(W).ln10;
+  // (lnW/10^W) ÷ (ln10W/10^W) 再缩放到 W 位
+  const ratio = bigRoundDiv(lnW * bigPow10(W), ln10W);
+  return bigRoundDiv(ratio, bigPow10(W - scale));
 }
 
 // --- 导出 ---
@@ -1121,16 +1404,20 @@ export const neonaicMath = Object.freeze({
    *           隐式乘法支持 `2π`、`3(1+2)`、`(1+2)(3+4)`；但 `2 3` 仍视为错误（不猜）。
    * @implNote 除号 `/` 与 `÷` 等价，乘号还额外接受 `×` 与 `·`，全角符号会被自动折算。
    * @param {String} expr 算式文本，例如 `(13-9)*7-4`
-   * @param {{power?: boolean, root?: boolean, mod?: boolean, log?: boolean, basicConstant?: boolean}} [options] 可选开启的特性
+   * @param {{power?: boolean, root?: boolean, mod?: boolean, log?: boolean, basicConstant?: boolean, science?: number}} [options] 可选开启的特性
    *        `power` 开启 `^` 与 `**`；`root` 开启 `√`、`∛`、`3√8`、`³√8`、`^3√8`；`mod` 开启 `%`；
    *        `log` 开启 `ln`/`lg`（自定义底用换底公式，如 `lg8/lg2`）。
    *        以上四项默认 false，即默认只解析四则运算。
-   *        `basicConstant` 默认 **true**，控制是否解析 {@link neonaicMath.constants} 里能用浮点精确表示的常量
-   *        （π/pi、e、φ/phi、c、R、F、α…）。
-   *        整指存储的高精常量（NA、h、ε0…）需要高精模式，**当前尚未实现**——传入非 0 的 `science` 会直接抛错，
-   *        而不是悄悄降级成浮点。
-   * @returns {number} 计算结果
-   * @throws {NeonaicIllegalArgumentError} 算式语法错误、使用了未开启的运算符、未知常量，或要求了尚未实现的高精模式
+   *        `basicConstant` 默认 **true**，控制是否解析 {@link neonaicMath.constants} 里的常量。
+   *        `science` 设为 1..200 的整数即启用**高精定点模式**，该数字是**小数位数**：
+   *        运算改用 BigInt 定点（`+ - * /`、整数次幂、n 次根、`ln`/`lg`），整指存储的高精常量
+   *        （NA、h、ε0…）也可解析，返回值变为 {@link NeonaicTDecimalStore}。
+   *        代价是慢，且只支持整数指数（非整数指数会明确报错）。
+   *        每一步运算都会按 `scale` 舍入，长链运算（尤其连续除法/换底）末位可能累积 1 ulp——
+   *        例如 `lg8/lg2` 会得到 `3.00000000000000000003` 而不是精确的 3，这是定点的固有行为。
+   *        不传（或 0）走浮点路径，返回 `number`；此时整指存储的常量会明确报错，不偷偷降级。
+   * @returns {number|NeonaicTDecimalStore} 浮点模式返回 number；高精模式返回整指存储
+   * @throws {NeonaicIllegalArgumentError} 算式语法错误、使用了未开启的运算符、未知常量、`science` 取值非法
    * @throws {NeonaicArithmeticError} 除数为零、负数开偶次方、对数的真数非正等
    */
   calc: calcExpression,
@@ -1141,6 +1428,13 @@ export const neonaicMath = Object.freeze({
    * @returns {number} 浮点近似值（精度受 Number 限制，这是**显式**的降级）
    */
   decimalToNumber: decimalToNumber,
+
+  /**
+   * 把整指存储格式化成十进制文本（|值| 极小或极大时用科学记数法）。
+   * @param {Readonly<NeonaicTDecimalStore>} store 整指存储
+   * @returns {string} 如 `"1.5"`、`"5.059824e-27"`
+   */
+  decimalToString: decimalToString,
 
   /** 科学常量表（只读），键为可用名字；值的两种形态见 {@link PHYSICAL_CONSTANTS} 的说明 */
   constants: PHYSICAL_CONSTANTS,
@@ -1325,10 +1619,12 @@ function calcExpression(expr, options) {
     throw new NeonaicIllegalArgumentError(`算式的选项应该是一个对象或留空：${parseString(options)}`);
   }
   const { power = false, root = false, mod = false, log = false, basicConstant = true, science } = options ?? {};
-  // 高精模式（定点运算 + 整指存储常量）尚未实现：宁可明确拒绝，也不要假装精确
-  if (science !== undefined && science !== null && science !== 0 && science !== false) {
-    throw new NeonaicIllegalArgumentError(`高精模式（science）尚未实现：${parseString(science)}`);
+  // science = 小数位数；null 表示走原来的浮点路径
+  const scale = (science === undefined || science === null || science === 0 || science === false) ? null : science;
+  if (scale !== null && (!Number.isInteger(scale) || scale < 1 || scale > 200)) {
+    throw new NeonaicIllegalArgumentError(`option.science 必须是 1..200 的整数（小数位数）：${parseString(science)}`);
   }
+  const high = scale !== null;
 
   // 归一化：折算全角与数学符号，`**` 与 `^` 等价
   const source = parseString(expr);
@@ -1342,6 +1638,22 @@ function calcExpression(expr, options) {
   /** 造一个语法错误，附带出错位置；提示里同时给出归一化后的文本便于对照 */
   const fail = (why) => new NeonaicIllegalArgumentError(`${why}（第 ${at + 1} 个字符处）：${parseString(source)}`);
   const requireRoot = () => { if (!root) throw fail('未启用根号解析，无法使用“√”“∛”或带次数的根号'); };
+
+  /** 高精模式下「1」的定点表示 */
+  const one = high ? bigPow10(scale) : 1;
+  // 两套算子：语法完全一致，只有数值语义不同（高精走 BigInt 定点）
+  const mul = high ? (a, b) => decMul(a, b, scale) : (a, b) => a * b;
+  const div = high ? (a, b) => decDiv(a, b, scale) : safeDivide;
+  const modulo = high ? (a, b) => decMod(a, b, scale) : safeModulo;
+  const rootOf = high ? (a, n) => decRoot(a, n, scale) : nthRootOf;
+  const lnOf = high ? (a) => decLn(a, scale) : (a) => {
+    if (!(a > 0)) throw new NeonaicArithmeticError(`对数的真数必须为正：${parseString(source)}`);
+    return Math.log(a);
+  };
+  const lgOf = high ? (a) => decLg(a, scale) : (a) => {
+    if (!(a > 0)) throw new NeonaicArithmeticError(`对数的真数必须为正：${parseString(source)}`);
+    return Math.log10(a);
+  };
 
   /** 括号、数字或科学常量 */
   function parsePrimary() {
@@ -1357,7 +1669,7 @@ function calcExpression(expr, options) {
     const matched = text.slice(at).match(CALC_NUMBER);
     if (matched) {
       at += matched[0].length;
-      return Number(matched[0]);
+      return high ? scaledFromLiteral(matched[0], scale) : Number(matched[0]);
     }
     // 科学常量：整段标识符作为名字去查表（这样 ε0 / N_A / muB 不会被拆错）
     const name = text.slice(at).match(CALC_CONSTANT_NAME);
@@ -1365,11 +1677,17 @@ function calcExpression(expr, options) {
     const value = resolveConstant(name[0]);
     if (value === undefined) throw fail(`未知的常量“${name[0]}”（可用名字见 neonaicMath.constants）`);
     if (!basicConstant) throw fail(`未启用科学常量解析，无法使用“${name[0]}”`);
+    at += name[0].length;
+    if (high) {
+      // 数学常量用扩展位数：直接从 number 升精度会「后面补零」，看着像高精其实是假的
+      const extended = HIGH_PRECISION_MATH[name[0]];
+      if (extended !== undefined) return scaledFromLiteral(extended, scale);
+      return typeof value === 'number' ? scaledFromNumber(value, scale) : scaledFromStore(value, scale);
+    }
     if (typeof value !== 'number') {
       // 整指存储只在高精模式下有意义；浮点算式里用它会悄悄丢掉精度
       throw fail(`常量“${name[0]}”是高精常量（整指存储），需要 science 高精模式才能使用`);
     }
-    at += name[0].length;
     return value;
   }
 
@@ -1385,8 +1703,8 @@ function calcExpression(expr, options) {
     at += matched[0].length;
     skipSpace();
     const operand = (text[at] === '(') ? parsePrimary() : parseUnary();
-    if (!(operand > 0)) throw new NeonaicArithmeticError(`对数的真数必须为正：${parseString(source)}`);
-    return matched[1] === 'ln' ? Math.log(operand) : Math.log10(operand);
+    if (!high && !(operand > 0)) throw new NeonaicArithmeticError(`对数的真数必须为正：${parseString(source)}`);
+    return matched[1] === 'ln' ? lnOf(operand) : lgOf(operand);
   }
 
   /** 根号：`√9`、`∛8`、`3√8`、`³√8`、`^3√8` */
@@ -1398,7 +1716,7 @@ function calcExpression(expr, options) {
       requireRoot();
       at++;
       // 操作数取一元表达式，于是 `∛-27` 也能解析（负数只允许开奇次方）
-      return nthRootOf(parseUnary(), CALC_RADICALS[ch]);
+      return rootOf(parseUnary(), CALC_RADICALS[ch]);
     }
     // 带次数的根号。注意 `^3√8` 里的 `^` 是根号次数，不是幂运算符
     const indexed = text.slice(at).match(CALC_INDEXED_RADICAL);
@@ -1406,7 +1724,7 @@ function calcExpression(expr, options) {
       requireRoot();
       const times = Number([...indexed[1]].map((c) => CALC_SUPERSCRIPTS[c] ?? c).join(''));
       at += indexed[0].length;
-      return nthRootOf(parseUnary(), times);
+      return rootOf(parseUnary(), times);
     }
     return parseLog();
   }
@@ -1418,7 +1736,11 @@ function calcExpression(expr, options) {
     if (text[at] === '^') {
       if (!power) throw fail('未启用幂运算解析，无法使用“^”或“**”');
       at++;
-      return Math.pow(base, parseUnary());
+      const exponent = parseUnary();
+      if (!high) return Math.pow(base, exponent);
+      // 高精模式只做整数次幂：非整数指数要走 exp(y·ln x)，尚未实现
+      if (exponent % one !== 0n) throw fail('高精模式（science）暂不支持非整数指数');
+      return decPow(base, exponent / one, scale);
     }
     return base;
   }
@@ -1451,20 +1773,20 @@ function calcExpression(expr, options) {
     for (;;) {
       skipSpace();
       const ch = text[at];
-      if (ch === '*') { at++; v *= parseUnary(); }
-      else if (ch === '/') { at++; v = safeDivide(v, parseUnary()); }
+      if (ch === '*') { at++; v = mul(v, parseUnary()); }
+      else if (ch === '/') { at++; v = div(v, parseUnary()); }
       else if (ch === '%') {
         if (!mod) throw fail('未启用模运算解析，无法使用“%”');
         at++;
-        v = safeModulo(v, parseUnary());
+        v = modulo(v, parseUnary());
       }
-      else if (startsImplicitFactor()) { v *= parseUnary(); }
+      else if (startsImplicitFactor()) { v = mul(v, parseUnary()); }
       else break;
     }
     return v;
   }
 
-  /** 加、减 */
+  /** 加、减（BigInt 与 number 的加减写法一致，无需分派） */
   function parseAdditive() {
     let v = parseMultiplicative();
     for (;;) {
@@ -1480,6 +1802,7 @@ function calcExpression(expr, options) {
   const result = parseAdditive();
   skipSpace();
   if (at < text.length) throw fail(`无法识别的字符“${text[at]}”`);
+  if (high) return scaledToStore(result, scale);
   if (!Number.isFinite(result)) throw new NeonaicArithmeticError(`算式的结果不是有限数：${parseString(source)}`);
   return result;
 }

@@ -69,17 +69,24 @@ const ai = () => {
         + '运算符：+ - * / ^ % ( )；√/∛ 表示平方根/立方根（^n√ 或 ³√ 表示 n 次方根）；'
         + 'ln/lg 表示自然对数/常用对数（如 ln2；换底写 lg8/lg2）。'
         + '常量区分大小写：π/pi、e、φ/phi、c（光速）、R、F、α、mppme 等，完整列表见 neonaicMath.constants；'
-        + '整指存储的高精常量（NA、h、ε0…）暂不支持。'
+        + '高精常量（NA、h、ε0…）只有在传了 precision 时才可用。'
+      ),
+      precision: z.int().optional().describe(
+        '可选：高精模式的小数位数（1..200）。传了就用 BigInt 定点运算并返回十进制字符串，'
+        + '可解析 NA、h、ε0 等整指存储常量，但只支持整数指数；不传则用浮点（约 15 位有效数字）'
       ),
     }).describe('要计算的算式'),
-    execute: ({ expression }) => {
+    execute: ({ expression, precision }) => {
       try {
-        return neonaicMath.calc(expression, {
+        const result = neonaicMath.calc(expression, {
           mod: true,
           power: true,
           root: true,
           log: true,
+          science: precision,
         });
+        // 高精模式返回整指存储，转成十进制文本；浮点模式直接用 number
+        return typeof result === 'number' ? result : neonaicMath.decimalToString(result);
       } catch (error) {
         // 把具体原因回给模型，它才有机会自己改正（"未知的常量 xyz" 比笼统的"无法计算"有用）
         return `无法计算：${error?.message || '未知原因'}`;
