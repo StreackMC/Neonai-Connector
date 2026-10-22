@@ -33,6 +33,13 @@
 - ⚠️ **`neonaicMath.toNumber` 原先会删掉负号**（`'-1'` → `1`），矩阵里就是静默算错；现已单独处理前导 `-` / `−`（U+2212）。下游（`calc`/`solve24`/`parseStorageText`/`timeout`）均已回归。
 - `neonaic:matrix` 工具（`utils/registerUtilsSupport.js`）：行分隔容忍换行与分号；**先校验形状与单元格是否可解析为数字**再建矩阵（`NeonaicTable` 对不齐数据是截断/补空，不校验会算出「看起来正常的错答案」）；输出字段 `singular`（布尔，原 `signature` 是不存在的方法）；奇异矩阵**不返回** `inverse`；`rank/fullrank/squared` 在 schema 里改为可选，失败只回 `info`。
 
+## 科学常量与算式（同一文件的 `PHYSICAL_CONSTANTS` / `calcExpression`）
+- **两类常量，边界是「能否用 number 精确表示」**：`number` 型（π/pi、e、φ/phi、c、R、F、α、mppme、VM…）与 **{@link NeonaicTDecimalStore} 整指存储**（NA、k、u、me、mp、mn、epme、e0、ε0、μ0、μe、μp、α0、μB、μN、h、ħ；值是 `mantissa × 10^exponent`，mantissa 保持安全整数）。别名常见：`NA/Na/N_A/N_a`、`ε0/E0`、`μ0/mu0`、`α0/a0`、`μB/muB`、`ħ/hbar`。
+- **`toNumber` 只认 `number` 型常量**（整串匹配，允许前置 `-`），高精常量一律不转换（`'NA'` → NaN）——降级成浮点等于抹掉它存在的意义。查表用 `hasOwnProperty`，否则 `constructor`/`__proto__` 会被当成常量。
+- **`calc` 的新特性**：常量（`basicConstant` 默认 true）、隐式乘法（`2π`、`3(1+2)`、`(1+2)(3+4)`，但**不认数字**，`2 3` 仍报错）、对数（`log` 默认 false；`ln2`/`lg 100`，操作数取一元表达式，`lg8/lg2` 换底）。解析链：加减 → 乘除模(含隐式) → 一元 → 幂 → 根号 → **对数** → 常量/括号/数字。
+- ⚠️ **`science`（高精模式）尚未实现**：传入非 0 会直接抛 `NeonaicIllegalArgumentError`，而不是假装精确；整指存储常量在浮点算式里也明确报错。要做的是 BigInt 定点引擎（+-*/^√ 与级数 ln/lg），需先定「精确度 = 小数位数还是总位数」。
+- ⚠️ `µ`(U+00B5) 与 `μ`(U+03BC) 码位不同但长得一样，`CALC_SYMBOLS` 已把前者折成后者，否则 `µ0` 查不到常量。
+
 ## Joyous 桥接拓展（`extensions/joyous/`）
 与 Java 插件 [StreackMC/Joyous](https://github.com/StreackMC/Joyous) 协作的双通道桥接。**V1 见 `PROTOCOL.md`（§16 是 V2 落地说明）；V2 增量以 `PROTOCOL-V2.md` 为唯一约定来源，必需改动清单见 `NEONAIC-REQUIRED-CHANGES.md`**（后两份是对端 `docs/neonaic/` 的副本）。常量以 `src/protocol/constants.js` 为准，对端以 `Neonaic/bridge/BridgeProtocol.java` 为准，**自检解析该 Java 文件逐项比对**。
 - 分层：`src/entry.js` 组合根｜`config.js`｜`identity.js`｜`status.js`｜`protocol/`（`constants`/`codec`/`session`/`http`/`uds`/`dispatch`/`methods`）。**`protocol/` 下导入内核是 4 层** `../../../../src/...`。两个接缝：`dispatch.js` 认识命令系统、`methods.js` 认识平台/AI/身份，**都不认识具体传输**；http.js/uds.js 只认「handler + {method,payload}」。

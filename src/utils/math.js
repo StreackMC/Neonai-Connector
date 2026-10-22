@@ -803,13 +803,141 @@ function getNaNException(where) {
   return new NeonaicArithmeticError(where ? `在${parseString(where)}发现意外的 NaN` : '发现意外的 NaN', where ? where : null);
 }
 
+/**
+ * @typedef {Object} NeonaicTDecimalStore 防止浮点误差的整指存储
+ * @property {number|BigInt} mantissa 放缩出的整数部分
+ * @property {number|BigInt} exponent x10的指数部分。将整数乘以 10^exp 即得值。
+ */
+
+/**
+ * 常用科学常量。两类值泾渭分明：
+ *
+ * - **`number`**：可直接参与浮点运算的近似值；
+ * - **{@link NeonaicTDecimalStore}**（整指存储）：绝对值过大/过小、直接写成浮点会丢精度的常量。
+ *   约定：值是 `mantissa × 10^exponent`，`mantissa` 保持为整数。
+ *
+ * 用途边界：
+ *   - `toNumber` **只认 `number` 型常量**，高精常量一律不转换 —— 把它降级成浮点等于抹掉它存在的意义；
+ *   - `calc`/算式求值本身只有浮点精度，两类都接受，高精常量按浮点近似参与运算。
+ *
+ * 名称区分大小写；常用符号都配了 ASCII 别名（`π`/`pi`、`φ`/`phi`、`μ0`/`mu0`、`ħ`/`hbar`…）。
+ */
+const PHYSICAL_CONSTANTS = Object.freeze({
+  /** 圆周率常量 */
+  "π": Math.PI,
+  /** 圆周率常量 */
+  "pi": Math.PI,
+  /** 自然对数常量 */
+  "e": Math.E,
+  /** 黄金比例 */
+  "φ": (1 + Math.sqrt(5)) / 2,
+  /** 黄金比例 */
+  "phi": (1 + Math.sqrt(5)) / 2,
+  /** 光速 m/s */
+  "c": 299792458,
+  /** 阿伏加德罗(Avogadro)常数 mol/L @type {Readonly<NeonaicTDecimalStore>} */
+  "NA": Object.freeze({mantissa: 6022045, exponent: 17}),
+  /** 阿伏加德罗(Avogadro)常数 mol/L @type {Readonly<NeonaicTDecimalStore>} */
+  "Na": Object.freeze({ mantissa: 6022045, exponent: 17 }),
+  /** 阿伏加德罗(Avogadro)常数 mol/L @type {Readonly<NeonaicTDecimalStore>} */
+  "N_A": Object.freeze({ mantissa: 6022045, exponent: 17 }),
+  /** 阿伏加德罗(Avogadro)常数 mol/L @type {Readonly<NeonaicTDecimalStore>} */
+  "N_a": Object.freeze({ mantissa: 6022045, exponent: 17 }),
+  /** 普适气体常数 J/(mol*K) */
+  "R": 8.31441,
+  /** 玻尔兹曼(Boltzmann)常数 J/K @type {Readonly<NeonaicTDecimalStore>} */
+  "k": Object.freeze({ mantissa: 1380662, exponent: -29 }),
+  /** 标况理想气体摩尔体积 m^3/mol */
+  "VM": 22.41383e-3,
+  /** 标况理想气体摩尔体积 m^3/mol */
+  "Vm": 22.41383e-3,
+  /** 标况理想气体摩尔体积 m^3/mol */
+  "V_M": 22.41383e-3,
+  /** 标况理想气体摩尔体积 m^3/mol */
+  "V_m": 22.41383e-3,
+  /** 基本电荷(元电荷) C @type {Readonly<NeonaicTDecimalStore>} */
+  "e0": Object.freeze({ mantissa: -16021892, exponent: -26 }),
+  /** 原子质量单位 kg @type {Readonly<NeonaicTDecimalStore>} */
+  "u": Object.freeze({ mantissa: 16605655, exponent: -34 }),
+  /** 电子静止质量 kg @type {Readonly<NeonaicTDecimalStore>} */
+  "me": Object.freeze({ mantissa: 9109534, exponent: -37 }),
+  /** 电子荷质比 C/kg @type {Readonly<NeonaicTDecimalStore>} */
+  "epme": Object.freeze({ mantissa: 17588047, exponent: 4 }),
+  /** 质子静止质量 kg @type {Readonly<NeonaicTDecimalStore>} */
+  "mp": Object.freeze({ mantissa: 16726485 , exponent: -34 }),
+  /** 中子静止质量 kg @type {Readonly<NeonaicTDecimalStore>} */
+  "mn": Object.freeze({ mantissa: 16749543 , exponent: -34 }),
+  /** 法拉第常数 C/mol */
+  "F": 9.648456e4,
+  /** 真空电容率 F/m @type {Readonly<NeonaicTDecimalStore>} */
+  "ε0": Object.freeze({ mantissa: 8854187818, exponent: -21 }),
+  /** 真空电容率 F/m @type {Readonly<NeonaicTDecimalStore>} */
+  "E0": Object.freeze({ mantissa: 8854187818, exponent: -21 }),
+  /** 真空磁导率 N/A²（= 4π×10⁻⁷ ≈ 1.2566370614×10⁻⁶） */
+  "μ0": Object.freeze({ mantissa: 12566370614, exponent: -16 }),
+  /** 真空磁导率 N/A²（ASCII 别名） */
+  "mu0": Object.freeze({ mantissa: 12566370614, exponent: -16 }),
+  /** 电子磁矩 J/T */
+  "μe": Object.freeze({ mantissa: 9284832, exponent: -30 }),
+  /** 质子磁矩 J/T */
+  "μp": Object.freeze({ mantissa: 14106171, exponent: -30 }),
+  /** 玻尔(Bohr)半径 m */
+  "α0": Object.freeze({ mantissa: 52917706, exponent: -18 }),
+  /** 玻尔(Bohr)半径 m（ASCII 别名） */
+  "a0": Object.freeze({ mantissa: 52917706, exponent: -18 }),
+  /** 玻尔(Bohr)磁子 J/T */
+  "μB": Object.freeze({ mantissa: 9274078, exponent: -30 }),
+  /** 玻尔(Bohr)磁子 J/T（ASCII 别名） */
+  "muB": Object.freeze({ mantissa: 9274078, exponent: -30 }),
+  /** 核磁子 J/T */
+  "μN": Object.freeze({ mantissa: 5059824, exponent: -33 }),
+  /** 核磁子 J/T（ASCII 别名） */
+  "muN": Object.freeze({ mantissa: 5059824, exponent: -33 }),
+  /** 普朗克常数 J·s */
+  "h": Object.freeze({ mantissa: 6626176, exponent: -40 }),
+  /** 约化普朗克常数 J·s（h/2π） */
+  "ħ": Object.freeze({ mantissa: 1054571817, exponent: -43 }),
+  /** 约化普朗克常数 J·s（ASCII 别名） */
+  "hbar": Object.freeze({ mantissa: 1054571817, exponent: -43 }),
+  /** 精细结构常数 */
+  "α": 7.2973506e-3,
+  /** 精细结构常数 */
+  "a": 7.2973506e-3,
+  /** 质子电子质量比 */
+  "mppme": 1836.1515,
+});
+
+/**
+ * 按名字取常量。
+ * @param {string} name 常量名（区分大小写）
+ * @returns {number|Readonly<NeonaicTDecimalStore>|undefined} 未定义时为 undefined
+ * @apiNote 用 `hasOwnProperty` 而不是直接下标：否则 `constructor`、`toString`、`__proto__` 这类
+ *          原型链上的键会被当成「存在」并返回函数/对象，污染 `toNumber` 与算式求值。
+ */
+function resolveConstant(name) {
+  return Object.prototype.hasOwnProperty.call(PHYSICAL_CONSTANTS, name)
+    ? PHYSICAL_CONSTANTS[name]
+    : undefined;
+}
+
+/**
+ * 把整指存储换算成浮点数（显式的精度降级；求值/展示时才用，内部运算别悄悄调用）。
+ * @param {Readonly<NeonaicTDecimalStore>} store 整指存储
+ * @returns {number}
+ */
+function decimalToNumber(store) {
+  return Number(store.mantissa) * (10 ** Number(store.exponent));
+}
+
 // --- 导出 ---
 
 export const neonaicMath = Object.freeze({
   /**
    * 将传入值尽可能地转为数字，遇到多个小数点时只保留第一个
-   * @implNote 先强转为文本，删除非数字部分（**保留前导正负号**），最后得到结果。
-   *           正负号必须单独处理：否则 `-1` 里的 `-` 会被一起删掉，负数静默变成正数。
+   * @implNote 先强转为文本；**整串等于某个常量名时直接返回该常量**（允许前置负号，如 `"-π"`），
+   *           否则删掉非数字部分（保留前导正负号）再解析。
+   *           只认 `number` 型常量；高精常量（{@link NeonaicTDecimalStore}）**不转换** ——
+   *           把整指存储降级成浮点会抹掉它存在的意义。
    * @param {any} v 传入值
    * @param {boolean} allowNaN 是否接受返回 NaN，为 false 时返回 0
    * @returns {number|NaN} 结果，当转出字符串不含数字时为 NaN
@@ -819,6 +947,9 @@ export const neonaicMath = Object.freeze({
     const text = parseString(v).trim();
     // 前导负号（含 U+2212 减号）单独记下来，不要参与「只保留数字和点」的清洗
     const sign = (text.startsWith('-') || text.startsWith('−')) ? -1 : 1;
+    // 常量名要求**整串匹配**：否则 "help" 里的 "e" 会被误当成自然常数
+    const constant = resolveConstant(sign < 0 ? text.slice(1).trim() : text);
+    if (typeof constant === 'number') return sign * constant;
     // 只保留数字和点
     const s = text.replace(/[^0-9.]/g, '');
     // 拆出整数部分 + 其余全部当小数
@@ -985,18 +1116,34 @@ export const neonaicMath = Object.freeze({
 
   /**
    * 解析并计算一个算式。
-   * @implNote 递归下降，优先级由低到高为：加减 → 乘除模 → 一元正负 → 幂 → 根号 → 括号与数字。
+   * @implNote 递归下降，优先级由低到高为：加减 → 乘除模（含隐式乘法）→ 一元正负 → 幂 → 根号 → 对数 → 常量/括号/数字。
    *           `^` 右结合（`2^3^2` = 512），且比一元负号更紧（`-2^2` = -4），但指数位置上允许带符号（`2^-3`）。
+   *           隐式乘法支持 `2π`、`3(1+2)`、`(1+2)(3+4)`；但 `2 3` 仍视为错误（不猜）。
    * @implNote 除号 `/` 与 `÷` 等价，乘号还额外接受 `×` 与 `·`，全角符号会被自动折算。
    * @param {String} expr 算式文本，例如 `(13-9)*7-4`
-   * @param {{power?: boolean, root?: boolean, mod?: boolean}} [options] 可选开启的特性。
-   *        `power` 开启 `^` 与 `**`，`root` 开启 `√`、`∛`、`3√8`、`³√8`、`^3√8`，`mod` 开启 `%`。
-   *        三项默认都是 false，即默认只解析四则运算。
+   * @param {{power?: boolean, root?: boolean, mod?: boolean, log?: boolean, basicConstant?: boolean}} [options] 可选开启的特性
+   *        `power` 开启 `^` 与 `**`；`root` 开启 `√`、`∛`、`3√8`、`³√8`、`^3√8`；`mod` 开启 `%`；
+   *        `log` 开启 `ln`/`lg`（自定义底用换底公式，如 `lg8/lg2`）。
+   *        以上四项默认 false，即默认只解析四则运算。
+   *        `basicConstant` 默认 **true**，控制是否解析 {@link neonaicMath.constants} 里能用浮点精确表示的常量
+   *        （π/pi、e、φ/phi、c、R、F、α…）。
+   *        整指存储的高精常量（NA、h、ε0…）需要高精模式，**当前尚未实现**——传入非 0 的 `science` 会直接抛错，
+   *        而不是悄悄降级成浮点。
    * @returns {number} 计算结果
-   * @throws {NeonaicIllegalArgumentError} 算式语法错误，或使用了未开启的运算符
-   * @throws {NeonaicArithmeticError} 除数为零、负数开偶次方等在实数域无意义的情况
+   * @throws {NeonaicIllegalArgumentError} 算式语法错误、使用了未开启的运算符、未知常量，或要求了尚未实现的高精模式
+   * @throws {NeonaicArithmeticError} 除数为零、负数开偶次方、对数的真数非正等
    */
   calc: calcExpression,
+
+  /**
+   * 把整指存储（{@link NeonaicTDecimalStore}）换算成浮点数。
+   * @param {Readonly<NeonaicTDecimalStore>} store 整指存储
+   * @returns {number} 浮点近似值（精度受 Number 限制，这是**显式**的降级）
+   */
+  decimalToNumber: decimalToNumber,
+
+  /** 科学常量表（只读），键为可用名字；值的两种形态见 {@link PHYSICAL_CONSTANTS} 的说明 */
+  constants: PHYSICAL_CONSTANTS,
 
   solve24: dfs24solution,
 });
@@ -1097,6 +1244,8 @@ const CALC_SYMBOLS = Object.freeze({
   '（': '(', '）': ')', '＋': '+', '－': '-', '−': '-',
   '＊': '*', '×': '*', '·': '*', '／': '/', '÷': '/',
   '％': '%', '＾': '^',
+  // 微符号（U+00B5）与希腊字母 μ（U+03BC）外观相同、码位不同，统一折成后者，否则常量名查不到
+  'µ': 'μ',
   '０': '0', '１': '1', '２': '2', '３': '3', '４': '4',
   '５': '5', '６': '6', '７': '7', '８': '8', '９': '9', '．': '.',
 });
@@ -1118,6 +1267,15 @@ const CALC_INDEXED_RADICAL = new RegExp(`^\\^?([${CALC_INDEX_CHARS}]+)\\s*(√|�
 
 /** 数字字面量 */
 const CALC_NUMBER = /^(?:\d+(?:\.\d+)?|\.\d+)/;
+
+/**
+ * 科学常量的名字：字母（含希腊字母）或下划线开头，后续允许字母、数字、下划线。
+ * 覆盖 `π`、`ε0`、`N_A`、`muB`、`ħ` 这类写法；匹配是贪婪的，`ε0` 不会被拆成 `ε` + `0`。
+ */
+const CALC_CONSTANT_NAME = /^[\p{L}_][\p{L}\p{N}_]*/u;
+
+/** 对数函数前缀：`ln`（自然对数）、`lg`（常用对数）；允许省略括号，如 `ln2`、`lg 100` */
+const CALC_LOG_FN = /^(ln|lg)/;
 
 /**
  * 开方。对完全 n 次方数做整数回代修正，避免 `27^(1/3)` = 3.0000000000000004 这类浮点误差。
@@ -1159,14 +1317,18 @@ function safeModulo(a, b) {
 /**
  * 递归下降地解析并计算一个算式（{@link neonaicMath.calc} 的实现）
  * @param {String} expr 算式文本
- * @param {{power?: boolean, root?: boolean, mod?: boolean}} [options] 可选开启的特性
+ * @param {{power?: boolean, root?: boolean, mod?: boolean, log?: boolean, basicConstant?: boolean, science?: number}} [options] 可选开启的特性
  * @returns {number}
  */
 function calcExpression(expr, options) {
   if (options !== undefined && options !== null && typeof options !== 'object') {
     throw new NeonaicIllegalArgumentError(`算式的选项应该是一个对象或留空：${parseString(options)}`);
   }
-  const { power = false, root = false, mod = false } = options ?? {};
+  const { power = false, root = false, mod = false, log = false, basicConstant = true, science } = options ?? {};
+  // 高精模式（定点运算 + 整指存储常量）尚未实现：宁可明确拒绝，也不要假装精确
+  if (science !== undefined && science !== null && science !== 0 && science !== false) {
+    throw new NeonaicIllegalArgumentError(`高精模式（science）尚未实现：${parseString(science)}`);
+  }
 
   // 归一化：折算全角与数学符号，`**` 与 `^` 等价
   const source = parseString(expr);
@@ -1181,7 +1343,7 @@ function calcExpression(expr, options) {
   const fail = (why) => new NeonaicIllegalArgumentError(`${why}（第 ${at + 1} 个字符处）：${parseString(source)}`);
   const requireRoot = () => { if (!root) throw fail('未启用根号解析，无法使用“√”“∛”或带次数的根号'); };
 
-  /** 括号或数字 */
+  /** 括号、数字或科学常量 */
   function parsePrimary() {
     skipSpace();
     if (text[at] === '(') {
@@ -1193,9 +1355,38 @@ function calcExpression(expr, options) {
       return v;
     }
     const matched = text.slice(at).match(CALC_NUMBER);
-    if (!matched) throw fail('期待一个数字');
+    if (matched) {
+      at += matched[0].length;
+      return Number(matched[0]);
+    }
+    // 科学常量：整段标识符作为名字去查表（这样 ε0 / N_A / muB 不会被拆错）
+    const name = text.slice(at).match(CALC_CONSTANT_NAME);
+    if (!name) throw fail('期待一个数字、科学常量或括号');
+    const value = resolveConstant(name[0]);
+    if (value === undefined) throw fail(`未知的常量“${name[0]}”（可用名字见 neonaicMath.constants）`);
+    if (!basicConstant) throw fail(`未启用科学常量解析，无法使用“${name[0]}”`);
+    if (typeof value !== 'number') {
+      // 整指存储只在高精模式下有意义；浮点算式里用它会悄悄丢掉精度
+      throw fail(`常量“${name[0]}”是高精常量（整指存储），需要 science 高精模式才能使用`);
+    }
+    at += name[0].length;
+    return value;
+  }
+
+  /**
+   * 对数：`ln<expr>` / `lg<expr>`（也接受括号形式 `ln(1+2)`）
+   * @apiNote 操作数取一元表达式，于是 `ln2^2` 读作 `ln(2^2)`，而 `ln(2)^2` 读作 `(ln 2)^2`。
+   */
+  function parseLog() {
+    skipSpace();
+    const matched = text.slice(at).match(CALC_LOG_FN);
+    if (!matched) return parsePrimary();
+    if (!log) throw fail(`未启用对数解析，无法使用“${matched[1]}”`);
     at += matched[0].length;
-    return Number(matched[0]);
+    skipSpace();
+    const operand = (text[at] === '(') ? parsePrimary() : parseUnary();
+    if (!(operand > 0)) throw new NeonaicArithmeticError(`对数的真数必须为正：${parseString(source)}`);
+    return matched[1] === 'ln' ? Math.log(operand) : Math.log10(operand);
   }
 
   /** 根号：`√9`、`∛8`、`3√8`、`³√8`、`^3√8` */
@@ -1217,7 +1408,7 @@ function calcExpression(expr, options) {
       at += indexed[0].length;
       return nthRootOf(parseUnary(), times);
     }
-    return parsePrimary();
+    return parseLog();
   }
 
   /** 幂：右结合，指数位置允许带符号 */
@@ -1241,7 +1432,20 @@ function calcExpression(expr, options) {
     return parsePower();
   }
 
-  /** 乘、除、取模 */
+  /**
+   * 当前位置是否紧跟一个可以「隐式相乘」的因子：科学常量或左括号。
+   *
+   * 只认这两种，**不认数字** —— 否则 `2 3` 会被当成 `2*3`，把明显的输入错误吞掉。
+   */
+  function startsImplicitFactor() {
+    skipSpace();
+    const ch = text[at];
+    if (ch === undefined) return false;
+    if (ch === '(') return true;
+    return CALC_CONSTANT_NAME.test(text.slice(at));
+  }
+
+  /** 乘、除、取模，以及隐式乘法（`2π`、`3(1+2)`、`(1+2)(3+4)`） */
   function parseMultiplicative() {
     let v = parseUnary();
     for (;;) {
@@ -1253,7 +1457,9 @@ function calcExpression(expr, options) {
         if (!mod) throw fail('未启用模运算解析，无法使用“%”');
         at++;
         v = safeModulo(v, parseUnary());
-      } else break;
+      }
+      else if (startsImplicitFactor()) { v *= parseUnary(); }
+      else break;
     }
     return v;
   }

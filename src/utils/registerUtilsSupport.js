@@ -62,9 +62,15 @@ const ai = () => {
   });
 
   registerAITool('neonaic', 'calc', {
-    description: '计算指定的算式',
+    description: '计算指定的算式。支持四则运算、幂、根号、取模、对数、括号，以及常用科学常量与隐式乘法（如 2π、3(1+2)）',
     inputSchema: z.object({
-      expression: z.string().describe('一个算式，例如 "1+2*3-4"。可以使用+-*/^%()√∛这些运算符。^n√表示 n 次方根。'),
+      expression: z.string().describe(
+        '一个算式，例如 "1+2*3-4"。'
+        + '运算符：+ - * / ^ % ( )；√/∛ 表示平方根/立方根（^n√ 或 ³√ 表示 n 次方根）；'
+        + 'ln/lg 表示自然对数/常用对数（如 ln2；换底写 lg8/lg2）。'
+        + '常量区分大小写：π/pi、e、φ/phi、c（光速）、R、F、α、mppme 等，完整列表见 neonaicMath.constants；'
+        + '整指存储的高精常量（NA、h、ε0…）暂不支持。'
+      ),
     }).describe('要计算的算式'),
     execute: ({ expression }) => {
       try {
@@ -72,9 +78,11 @@ const ai = () => {
           mod: true,
           power: true,
           root: true,
+          log: true,
         });
       } catch (error) {
-        return "无法计算。可能存在算数错误，例如 0 作分母、对负数开偶次方根……";
+        // 把具体原因回给模型，它才有机会自己改正（"未知的常量 xyz" 比笼统的"无法计算"有用）
+        return `无法计算：${error?.message || '未知原因'}`;
       }
     },
   });
