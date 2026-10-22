@@ -856,7 +856,7 @@ const PHYSICAL_CONSTANTS = Object.freeze({
   /** 标况理想气体摩尔体积 m^3/mol */
   "V_m": 22.41383e-3,
   /** 基本电荷(元电荷) C @type {Readonly<NeonaicTDecimalStore>} */
-  "e0": Object.freeze({ mantissa: -16021892, exponent: -26 }),
+  "e0": Object.freeze({ mantissa: 16021892, exponent: -26 }),
   /** 原子质量单位 kg @type {Readonly<NeonaicTDecimalStore>} */
   "u": Object.freeze({ mantissa: 16605655, exponent: -34 }),
   /** 电子静止质量 kg @type {Readonly<NeonaicTDecimalStore>} */
