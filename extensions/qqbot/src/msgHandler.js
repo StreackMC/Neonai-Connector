@@ -57,12 +57,35 @@ async function onPrivateMessageIn(event, pp) {
 }
 
 /**
- * 群聊消息，处理「获取全部消息」
- * 
+ * 群聊消息
+ *
+ * ⚠️ 同一条 @ 消息会**两次**进到群聊回调里，但只有一次是有效的：
+ *
+ *   SDK 的 `em()`（qq-official-bot/lib/client.js）把事件名按 `.` 拆开、逐个前缀 `emit`。
+ *   所以一帧 `GROUP_AT_MESSAGE_CREATE` 会依次触发
+ *   `message` → `message.group`（本函数）→ `message.group.at`（{@link onGroupAtMessageIn}），
+ *   **两次回调拿到的是同一个事件对象**，顺序固定，与监听器注册顺序无关；
+ *   而一帧 `GROUP_MESSAGE_CREATE`（已授权「获取全部群消息」）只会触发到 `message.group`。
+ *
+ *   这正好对应两种授权状态：
+ *     - 已授权：只有本函数，`mentions` 完整 → 一切照旧；
+ *     - 未授权：本函数先跑，但 `mentions` 是空数组（@ 信息不在 payload 里），
+ *       若在此处理，命令会被执行一次、随后 `onGroupAtMessageIn` 再执行一次；
+ *       更糟的是若用「先到先得」的锁把后者挡掉，就永远走不到它那条 `cmd + AI` 的完整流程。
+ *
+ *   判别依据是 `em()` 预先写在事件上的 `sub_type`：来自 `message.group.at` 的帧此处为 `'at'`。
+ *   因此 `sub_type === 'at'` 时**直接让出**，由 `onGroupAtMessageIn` 独占处理，
+ *   结果与已授权时「一次命令、必要时一次 AI」完全一致。
+ *
+ * 以上内容由 Agent 总结，这个特性在 SDK 中没有提及。2026-10-22
+ *
  * @param {qqBotBackend.GroupMessageEvent} event 
  * @param {PlatformQQBot} pp 
  */
 async function onGroupMessageIn(event, pp) {
+  // 未授权「获取全部群消息」时的 @ 消息：mentions 为空，交由 onGroupAtMessageIn 统一处理
+  if (event?.sub_type === 'at') return;
+
   /** 实例的 Profile 配置 */
   const profile_config = neonaicPlatformManager.getPlatformManager().getProfile(pp.profile);
   const user = `qUSR#${event.user_id}@${pp.selfInfo.id}`;
@@ -149,13 +172,16 @@ async function onGroupMessageIn(event, pp) {
 }
 
 /**
- * 群聊消息，当没有授权「获取全部消息」时走此路由
- * @deprecated 根据业务实践，实际上没有授权但 @ 了仍能触发 {@link onGroupMessageIn}，所以本函数属于重复调用，不再使用
+ * 群聊 @ 消息
+ *
+ * 只有**未授权**「获取全部群消息」时才会走到这里（已授权时 QQ 只推 `GROUP_MESSAGE_CREATE`）。
+ * 本函数是这类消息的**唯一**处理者：`onGroupMessageIn` 见到 `sub_type === 'at'` 会直接让出，
+ * 所以命令与 AI 都只跑一次。
+ *
  * @param {qqBotBackend.GroupMessageEvent} event 
  * @param {PlatformQQBot} pp 
  */
 async function onGroupAtMessageIn(event, pp) {
-  return;
   /** 实例的 Profile 配置 */
   const profile_config = neonaicPlatformManager.getPlatformManager().getProfile(pp.profile);
   const user = `qUSR#${event.user_id}@${pp.selfInfo.id}`;

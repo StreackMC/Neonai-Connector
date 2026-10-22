@@ -55,6 +55,19 @@
 - **用户名录**：`src/message/userDirectory.js` 的 `neonaicUserDirectory`，`code → {name, pronoun?, note?}`，存 `config/saves/identities.json`。**判据**：名录是通用概念 ⇒ 内核；「某平台怎么拿到名字」是平台特定 ⇒ 拓展。投递走 `askAI` 注册的**临时 AI 工具** `neonaic:speaker`，**不注入提示词**；入口 `/neonaic:ai whois <list|get|set|unset|show>`。qqbot 用免费的 `group_name` 自动登记；**QQ 群/C2C 拿不到发送者昵称**，只能人工登记。**未登记的 code 一律丢弃**。
 - `askAI` 的 tools 合并坑（已修）：`provider.tools` 解析为空时整个 `tools` 键曾被省略、**overrideAITool 被静默丢弃**；必须**先合并再判空**。
 
+### qqbot 的事件投递语义（`extensions/qqbot/`）
+- ⚠️ **一帧事件会被多次 `emit`**：SDK 的 `client.em()` 把事件名按 `.` 拆开、逐个前缀 emit。所以
+  `GROUP_AT_MESSAGE_CREATE`（未授权「获取全部群消息」时 QQ 只推这一种）会依次触发
+  `message` → **`message.group`（`onGroupMessageIn`）** → **`message.group.at`（`onGroupAtMessageIn`）**，
+  **两次回调拿到同一个事件对象**、顺序固定，与监听器注册顺序无关；而 `GROUP_MESSAGE_CREATE`（已授权）只到 `message.group`。
+- ⇒ 不要用「先到先得」的锁（`event.neonaicused` / WeakSet）来去重：它确实能生效（同一对象），但会让后一个回调的
+  **整条 `cmd + AI` 流程永远不执行**，表现为 @ 消息完全没有回复。正确做法是按 `em()` 预写的
+  **`event.sub_type`** 分工：`'at'` 时 `onGroupMessageIn` 直接让出，由 `onGroupAtMessageIn` 独占。
+- 两个回调各自只看得到一半上下文：`all=false` 时 `group` 那一侧 `event.mentions` 恒为 `[]`（@ 信息不在 payload 里），
+  所以它既判断不出「被 @」，也不能在那里跑 AI。
+- 实测三种实现（模拟 SDK 派发顺序，`exec/resolveReply/dispatch/reply`）：无锁 `2/1/1/2` 与 `0/1/2/1`；
+  加锁 `1/0/0/1` 与 `0/0/1/0`（@ 闲聊零回复）；`sub_type` 分工 `1/1/1/1` 与 `0/1/1/1`。
+
 ## 配置 / gitignore / 硬约束
 - `config/main.json` — 名称/次名、`prefix`、`maxLogFileSize`、`detailedLog`、`ai.*`；`config/prompts/<profile>.md` 提示词（**gitignore**）。**`config/saves` 整目录 gitignore**，但 `ext.json`/`permissions.json` 因**规则加入前已被跟踪**而仍在版本控制；**新增文件（`identities.json`、`joyous-identities.json`）不会入库**。根目录 `secret.json` 是真凭据（gitignore），`config/secret.json` 是模板（入库）。拓展自带 `extensions/<name>/config.json` ⚠️ **已入库**且用户会填自己的部署参数（开启通道、真实频道、端口）——自检**不要依赖它的内容**，要自带配置。
 - **内核不得出现任何拓展名**（解耦硬判据）：看一处改动**会不会留下「本体只在某拓展存在时才有意义」的东西**。拓展专属的合成执行者身份（`$joyous`）必须定义在拓展内，**不得写进内核 `COMMAND_ENUMS`**；`$` 前缀是内核保留的合成身份命名空间（内核只占 `$console`/`$unknown`），权限按执行者字符串存授权。反例：`NeonaicProtocolError` 这类**通用错误词汇**进内核不算耦合。
