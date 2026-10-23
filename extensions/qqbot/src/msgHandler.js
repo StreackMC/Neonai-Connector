@@ -17,6 +17,7 @@ import { neonaicEventBus } from '../../../src/event/neonaicEventBus.js';
 import { NeonaicMessageEvent } from '../../../src/event/neonaicEventInterface.js';
 import { neonaicPermissionServer } from '../../../src/command/permissionServer.js';
 import stripAnsi from 'strip-ansi';
+import { NeonaicAudioMsgFrag, NeonaicEmojiMsgFrag, NeonaicImageMsgFrag, NeonaicLinkMsgFrag, NeonaicMessage, NeonaicTextMsgFrag, NeonaicVideoMsgFrag } from '../../../src/message/messageFragment.js';
 
 /**
  * 好友列表私聊
@@ -28,7 +29,7 @@ async function onPrivateMessageIn(event, pp) {
   /** 实例的 Profile 配置 */
   const profile_config = neonaicPlatformManager.getPlatformManager().getProfile(pp.profile);
   const user = `qUSR#${event.user_id}@${pp.selfInfo.id}`;
-  const markdown = toMarkdown(event.message, pp);
+  const neonaicmsg = toNeonaicMsg(event.message, pp);
   const ctx = {
     executor: [user],
     privateExecutor: true,
@@ -37,10 +38,10 @@ async function onPrivateMessageIn(event, pp) {
   noteKnownNames(event, { user });
 
   pp.logMsgIn('Private:', `from=${user} | msg=` + parseString(event.message, false).replace(/\n/g, "\\n"));
-  const reply = await neonaicMessageIn.resolveReply(markdown, {
+  const reply = await neonaicMessageIn.resolveReply(neonaicmsg, {
     AI: profile_config.useAI,
     AIlist: pickAIList(profile_config.aiRouting, profile_config.allowedAI, {
-      scene: 'private', profile: pp.profile, user, group: '', executor: [user], text: markdown,
+      scene: 'private', profile: pp.profile, user, group: '', executor: [user], text: neonaicmsg.toMarkdown(),
     }),
     resolveCommandWith: ctx,
   });
@@ -90,7 +91,8 @@ async function onGroupMessageIn(event, pp) {
   const profile_config = neonaicPlatformManager.getPlatformManager().getProfile(pp.profile);
   const user = `qUSR#${event.user_id}@${pp.selfInfo.id}`;
   const group = `qGRP#${event.group_id}@${pp.selfInfo.id}`;
-  const markdown = toMarkdown(event.message, pp);
+  const neonaicmsg = toNeonaicMsg(event.message, pp);
+  const markdown = neonaicmsg.toMarkdown();
   const ctx = {
     executor: [user, group],
     privateExecutor: false,
@@ -103,7 +105,7 @@ async function onGroupMessageIn(event, pp) {
 
   // 处理 @ 机器人的情形以及提到澪奈的情形，也就是主动式回复
   if (Array.isArray(mentioned) && mentioned.length > 0 && mentioned.some((u) => !!u.is_you)) {
-    const reply = await neonaicMessageIn.resolveReply(markdown, {
+    const reply = await neonaicMessageIn.resolveReply(neonaicmsg, {
       AI: profile_config.useAI,
       AIlist: pickAIList(profile_config.aiRouting, profile_config.allowedAI, {
         scene: 'group', profile: pp.profile, user, group, executor: [user, group], text: markdown,
@@ -159,7 +161,7 @@ async function onGroupMessageIn(event, pp) {
   }
 
   // 再使用被动回复
-  neonaicEventBus.dispatchEvent(new NeonaicMessageEvent(pp, [user, group], markdown, async (msg) => {
+  neonaicEventBus.dispatchEvent(new NeonaicMessageEvent(pp, [user, group], neonaicmsg, async (msg) => {
     event.reply([
       segment.reply(event.message_id),
       segment.text(msg),
@@ -186,7 +188,7 @@ async function onGroupAtMessageIn(event, pp) {
   const profile_config = neonaicPlatformManager.getPlatformManager().getProfile(pp.profile);
   const user = `qUSR#${event.user_id}@${pp.selfInfo.id}`;
   const group = `qGRP#${event.group_id}@${pp.selfInfo.id}`;
-  const markdown = toMarkdown(event.message, pp);
+  const neonaicmsg = toNeonaicMsg(event.message, pp);
   const ctx = {
     executor: [user, group],
     privateExecutor: false,
@@ -197,10 +199,10 @@ async function onGroupAtMessageIn(event, pp) {
   noteKnownNames(event, { user, group });
   pp.logMsgIn('GroupAt:', `where=${group} | from=${user} | msg=` + parseString(event.message, false).replace(/\n/g, "\\n"));
 
-  const reply = await neonaicMessageIn.resolveReply(markdown, {
+  const reply = await neonaicMessageIn.resolveReply(neonaicmsg, {
     AI: profile_config.useAI,
     AIlist: pickAIList(profile_config.aiRouting, profile_config.allowedAI, {
-      scene: 'group', profile: pp.profile, user, group, executor: [user, group], text: markdown,
+      scene: 'group', profile: pp.profile, user, group, executor: [user, group], text: neonaicmsg.toMarkdown(),
     }),
     resolveCommandWith: ctx,
   });
@@ -272,41 +274,34 @@ function noteKnownNames(event, targets) {
  * @param {qqBotBackend.Sendable} raw 原始信息
  * @param {PlatformQQBot} pp 
  * @param {boolean} [textOnly=false] 开启后将只处理可用文本表达的消息片段，其余部分自动忽略，这将替换图片视频等内容为无意义占位符而非链接、Base64 等带内容的 Payload
- * @returns {String} Markdown 格式的信息
+ * @returns {NeonaicMessage}
  */
-function toMarkdown(raw, pp, textOnly = false) {
-  let result = "";
+function toNeonaicMsg(raw, pp, textOnly = false) {
+  let result = new NeonaicMessage();
   raw.forEach((piece) => {
     try {
       const msgMeta = piece?.data || {};
       switch (parseString(piece?.type).trim().toLowerCase()) {
         case 'text':// 纯文本
-          result += msgMeta.text;
+          result.appendFragment(new NeonaicTextMsgFrag(msgMeta?.text ?? ''));
           break;
         case 'face':// 表情1
-          result += ` :[${fromQQElement(msgMeta, 'face')?.text ?? 'Unknown Emoji'}]: `;
+          result.appendFragment(new NeonaicEmojiMsgFrag(`:${fromQQElement(msgMeta, 'face')?.text ?? 'Unknown Emoji'}:`));
           break;
         case 'emoji':// 表情2
-          result += ` :[${fromQQElement(msgMeta, 'emoji')?.text ?? 'Unknown Emoji'}]: `;
+          result.appendFragment(new NeonaicEmojiMsgFrag(`:${fromQQElement(msgMeta, 'emoji')?.text ?? 'Unknown Emoji'}:`));
           break;
         case 'image':// 图片
-          result += textOnly
-            ? ` ![Image:${msgMeta?.name ?? 'Untitled Image'}](//noUrl)`
-            : ` ![Image:${msgMeta?.name ?? 'Untitled Image'}](${msgMeta?.url ?? '//UnknownUrl'}) `;
+          result.appendFragment(new NeonaicImageMsgFrag(msgMeta?.url ?? 'about:unknown', msgMeta?.name ?? 'Untitled Image'));
           break;
         case 'audio':// 音频
-          result += textOnly
-            ? ` <audio title="${he.escape(msgMeta?.name ?? 'Untitled Audio')}">NoSource</audio> `
-            : ` <audio controls title="${he.escape(msgMeta?.name ?? 'Untitled Audio')}"><source src="${he.escape(msgMeta?.url ?? '//UnknownUrl')}"></audio> `;
+          result.appendFragment(new NeonaicAudioMsgFrag(textOnly ? 'about:nosource' :msgMeta?.url ?? 'about:unknown', msgMeta?.name ?? 'Untitled Audio'));
           break;
         case 'video':// 视频
-          result += textOnly
-            ? ` <video title="${he.escape(msgMeta?.name ?? 'Untitled Video')}">NoSource</video> `
-            : ` <video controls title="${he.escape(msgMeta?.name ?? 'Untitled Video')}"><source src="${he.escape(msgMeta?.url ?? '//UnknownUrl')}"></video> `;
+          result.appendFragment(new NeonaicVideoMsgFrag(textOnly ? 'about:nosource' : msgMeta?.url ?? 'about:unknown', msgMeta?.name ?? 'Untitled Video'));
           break;
         case 'link':// 链接
-          // Warn: 没有转义
-          result += `[${msgMeta?.text ?? msgMeta?.url ?? '//UnknownUrl'}](${msgMeta?.url ?? '//UnknownUrl'} "${msgMeta?.description ?? 'A link'}")`;
+          result.appendFragment(new NeonaicLinkMsgFrag(msgMeta?.url ?? 'about:unknown', msgMeta?.text ?? msgMeta?.url ?? 'Untitled Link', msgMeta?.description ?? 'A link'));
           break;
 
         default:
