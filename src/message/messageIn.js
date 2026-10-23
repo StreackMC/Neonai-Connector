@@ -95,7 +95,7 @@ async function resolveReply(msg, options) {
       }
     );
     if (!eventBus.dispatchEvent(event)) {
-      getLogger().tool.debug('[msgIn] 消息被事件取消，返回默认回复。');
+      getLogger().tool.debug('[msgIn] 消息被事件取消：', event.reason);
       return {
         text: REPLY_FALLBACK.CANCELED_BY_EVENT(event.reason),
         failed: true,

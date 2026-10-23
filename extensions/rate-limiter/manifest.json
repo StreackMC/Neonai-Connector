@@ -1,0 +1,16 @@
+{
+  "meta": {
+    "version": [1, "0.1.0"],
+    "id": "rate-limiter"
+  },
+  "particulars": {
+    "name": "Rete Limiter",
+    "author": ["kdxiaoyi"],
+    "description": "Rate Limiter prevent Neonaic from DDoS, DoS and other attackings.",
+    "url": "https://github.com/StreackMC/Neonai-Connector/tree/main/extensions/rate-limiter",
+    "license": "AGPL-3.0 modified"
+  },
+  "entry": "./src/main.js",
+  "depends": {},
+  "softdepends": {}
+}
