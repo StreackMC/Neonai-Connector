@@ -122,13 +122,13 @@ export class NeonaicMessage extends NeonaicNewable {
       .join("");
   }
 
-  toString() { return this.toMarkdown(); }
+  toString() { return parseString(this.mapFrag(f => f.toString())); }
 }
 
 /** @apiNote 原始类型，需继承使用 */
 export class NeonaicMessageFragment extends NeonaicNewable {
   get TYPE() { return 'raw-fragment'; }
-  toString() { return this.markdown; }
+  toString() { return `${this.TYPE}:${this.markdown}`; }
   get markdown() { return ""; }
 
   constructor() {
@@ -145,7 +145,7 @@ export class NeonaicTextMsgFrag extends NeonaicMessageFragment {
 
   /** @returns {NeonaicTMessageFragmentTypes} */
   get TYPE() { return 'text'; }
-  toString() { return this.markdown; }
+  toString() { return `${this.TYPE}:${this.markdown}`; }
   get markdown() {
     let text = this.#payload.text;
     if (this.#payload.style.code) {
@@ -254,7 +254,7 @@ export class NeonaicLinkMsgFrag extends NeonaicMessageFragment {
   get description() { return this.#payload.description; }
   /** @returns {NeonaicTextMsgFrag} */
   get alt() { return this.#payload.alt; }
-  toString() { return this.markdown; }
+  toString() { return `${this.TYPE}:${this.markdown}`; }
   get markdown() {
     const url = escapeMarkdownUrl(this.#payload.uri.toString()) + this.alt ? ` "${escapeMarkdownTitle(this.alt.markdown)}"` : "";
     // 描述文本里的 [ ] \ 会打断链接语法，必须转义；空描述退回显示 URL 本身
@@ -302,7 +302,7 @@ export class NeonaicEmojiMsgFrag extends NeonaicMessageFragment {
   get url() { return this.#payload.url; }
   /** @returns {string|null} 自定义表情的替代文本 */
   get alt() { return this.#payload.alt; }
-  toString() { return this.markdown; }
+  toString() { return `${this.TYPE}:${this.markdown}`; }
   get markdown() {
     if (this.#payload.unicode) return this.#payload.unicode;
     if (this.#payload.url) {
@@ -367,7 +367,7 @@ export class NeonaicTableMsgFrag extends NeonaicMessageFragment {
   get TYPE() { return 'table'; }
   /** @returns {NeonaicTable<string>} */
   get table() { return this.#payload.table; }
-  toString() { return this.markdown; }
+  toString() { return `${this.TYPE}:${this.markdown}`; }
   get markdown() { return this.table.markdown; }
 
   /**
@@ -444,7 +444,7 @@ export class NeonaicMediaMsgFrag extends NeonaicMessageFragment {
   /** @returns {string|null} */
   get poster() { return this.#media.poster; }
 
-  toString() { return this.markdown; }
+  toString() { return `${this.TYPE}:${this.markdown}`; }
   /** 生成 HTML 媒体标签；没有声明 TAG 的子类（图片）应覆写本 getter */
   get markdown() {
     const tag = this.constructor.TAG;
@@ -558,7 +558,7 @@ export class NeonaicImageMsgFrag extends NeonaicMediaMsgFrag {
   /** @returns {NeonaicTMessageFragmentTypes} */
   get TYPE() { return 'image'; }
 
-  toString() { return this.markdown; }
+  toString() { return `${this.TYPE}:${this.markdown}`; }
   get markdown() {
     const alt = escapeMarkdownAlt(this.alt);
     const title = this.title
