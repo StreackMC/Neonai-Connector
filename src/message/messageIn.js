@@ -27,7 +27,9 @@ import { NeonaicIllegalArgumentError } from '../utils/NeonaicNewableError.js';
 /** 回复因各种原因失败的预设值 */
 const REPLY_FALLBACK = Object.freeze({
   /** 被事件中断 */
-  CANCELED_BY_EVENT: () => `（${neonaicConfManager.getBotName()}静静地看着你，并未言语）`,
+  CANCELED_BY_EVENT: (r) => r ?
+    `（${r}）`
+    :`（${neonaicConfManager.getBotName()}静静地看着你，并未言语）`,
   /** 无权限使用 AI */
   PERMISSION_OF_AI_DENIED: (pardonTime) =>
     `（${neonaicConfManager.getBotName()}静静地看着别处，并未言语）`
@@ -83,20 +85,19 @@ async function resolveReply(msg, options) {
   // ---- 事件广播 ----
   if (config.dispatchEvent) {
     const eventBus = (await import('../event/neonaicEventBus.js')).neonaicEventBus;
-    if (!eventBus.dispatchEvent(
-      new NeonaicMessageEvent(
-        null,
-        config.resolveCommandWith.executor,
-        message,
-        undefined,
-        {
-          cancelable: config?.preventedByEvent,
-        }
-      )
-    )) {
+    const event = new NeonaicMessageEvent(
+      null,
+      config.resolveCommandWith.executor,
+      message,
+      undefined,
+      {
+        cancelable: config?.preventedByEvent,
+      }
+    );
+    if (!eventBus.dispatchEvent(event)) {
       getLogger().tool.debug('[msgIn] 消息被事件取消，返回默认回复。');
       return {
-        text: REPLY_FALLBACK.CANCELED_BY_EVENT(),
+        text: REPLY_FALLBACK.CANCELED_BY_EVENT(event.reason),
         failed: true,
         status: 'CANCELED_BY_EVENT'
       };

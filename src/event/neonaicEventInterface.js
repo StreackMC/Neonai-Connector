@@ -161,6 +161,25 @@ export class NeonaicMessageEvent extends NeonaicEvent {
       reply: (typeof replyFunc === 'function') ? replyFunc : undefined,
     }, options);
   }
+
+  #reason = "";
+
+  /** 获取拒绝原因 @returns {string} */
+  get reason() { return this.#reason; };
+
+  /** 以指定理由拒绝产生回复 */
+  refuse(why) {
+    super.preventDefault();
+    this.#reason = parseString(why ?? '');
+  }
+
+  /**
+   * @deprecated 不推荐使用本内置方法，因为语义不明
+   * @param {string} [v] 拒绝理由
+   */
+  preventDefault(v) {
+    this.refuse(v);
+  }
 }
 
 /**

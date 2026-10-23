@@ -170,6 +170,8 @@ async function onGroupMessageIn(event, pp) {
     }).catch((e) => {
       pp.log('error', 'Failed to send message to group:', `where=${group} | to=${user} | error=`, e, ` | reply=`, parseString(msg, false).replace(/\n/g, "\\n"));
     });
+  }, {
+    cancelable: false,
   }));
 }
 
