@@ -324,16 +324,15 @@ function resolveMultimodal(provider) {
  * Profile 是否能理解指定媒体。
  * @param {{image: string[], audio: string[], video: string[]}} caps
  * @param {'image'|'audio'|'video'} kind 媒体种类
- * @param {string|null} mime 媒体 MIME；未知时为 null
+ * @param {string|null} mime
  * @returns {boolean}
- * @apiNote MIME 未知时**不放行**：配置写的是「可理解哪些 MIME」，猜错会把不支持的格式塞给模型。
- *          需要「任何格式都收」时，配置里写 `"*"`、`"image"` 或 `"image/*"`。
+ * @apiNote MIME 未知时**放行**：由于非异步问题，远程媒体无法获取 MIME。
  */
 function supportsMedia(caps, kind, mime) {
   const list = caps[kind] ?? [];
+  if (!mime) return true;
   if (!list.length) return false;
   if (list.includes('*') || list.includes(kind) || list.includes(`${kind}/*`)) return true;
-  if (!mime) return false;
   return list.includes(normalizeMime(mime));
 }
 
