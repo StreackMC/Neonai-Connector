@@ -108,7 +108,7 @@ async function resolveReply(msg, options) {
   if (config.resolveCommand && trimmed) {
     const prefixes = neonaicConfManager.getConfig(neonaicConfManager.CONFIG_PATHS.main).getList('prefix');
     /** 解析结果；为 null 说明没有任何命令前缀匹配，即「这不是一条命令」，交给 AI 兜底 */
-    const parsed = neonaicCommandServer.resolveCommandArgs(msg, prefixes, true);
+    const parsed = neonaicCommandServer.resolveCommandArgs(trimmed, prefixes, true);
     if (parsed) {
       const [cmdName, cmdArgs] = parsed;
       if (/* 只有前缀、没有命令名 */!cmdName) return {
