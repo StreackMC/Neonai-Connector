@@ -33,17 +33,19 @@
 - ⚠️ **`neonaicMath.toNumber` 原先会删掉负号**（`'-1'` → `1`），矩阵里就是静默算错；现已单独处理前导 `-` / `−`（U+2212）。下游（`calc`/`solve24`/`parseStorageText`/`timeout`）均已回归。
 - `neonaic:matrix` 工具（`utils/registerUtilsSupport.js`）：行分隔容忍换行与分号；**先校验形状与单元格是否可解析为数字**再建矩阵（`NeonaicTable` 对不齐数据是截断/补空，不校验会算出「看起来正常的错答案」）；输出字段 `singular`（布尔，原 `signature` 是不存在的方法）；奇异矩阵**不返回** `inverse`；`rank/fullrank/squared` 在 schema 里改为可选，失败只回 `info`。
 
-## 科学常量与算式（同一文件的 `PHYSICAL_CONSTANTS` / `calcExpression`）
-- **两类常量，边界是「能否用 number 精确表示」**：`number` 型（π/pi、e、φ/phi、c、R、F、α、mppme、VM…）与 **{@link NeonaicTDecimalStore} 整指存储**（NA、k、u、me、mp、mn、epme、e0、ε0、μ0、μe、μp、α0、μB、μN、h、ħ；值是 `mantissa × 10^exponent`，mantissa 保持安全整数）。别名常见：`NA/Na/N_A/N_a`、`ε0/E0`、`μ0/mu0`、`α0/a0`、`μB/muB`、`ħ/hbar`。
-- **`toNumber` 只认 `number` 型常量**（整串匹配，允许前置 `-`），高精常量一律不转换（`'NA'` → NaN）——降级成浮点等于抹掉它存在的意义。查表用 `hasOwnProperty`，否则 `constructor`/`__proto__` 会被当成常量。
-- **`calc` 的新特性**：常量（`basicConstant` 默认 true）、隐式乘法（`2π`、`3(1+2)`、`(1+2)(3+4)`，但**不认数字**，`2 3` 仍报错）、对数（`log` 默认 false；`ln2`/`lg 100`，操作数取一元表达式，`lg8/lg2` 换底）。解析链：加减 → 乘除模(含隐式) → 一元 → 幂 → 根号 → **对数** → 常量/括号/数字。
-- **`science` = 小数位数（1..200），已实现 BigInt 定点引擎**：`+ - * /`、整数次幂、n 次根、`ln`/`lg`，返回 `NeonaicTDecimalStore`。内部值 = 真实值 × 10^scale 的 BigInt；工作精度 = scale+12，**只在最后舍入一次**。
+## 科学常量与算式（同一文件的 `PHYSICAL_CONSTANTS` / `HIGH_PRECISION_CONSTANTS` / `calcExpression`）
+- **两张表，不再靠 `typeof` 分辨**：`PHYSICAL_CONSTANTS`（15 个名字，**全是 `number`**：π/pi、e、φ/phi、c、R、F、α/a、mppme、VM/Vm/V_M/V_m）与 `HIGH_PRECISION_CONSTANTS`（41 个名字，值是 **CODATA 2022 十进制字面量字符串**，允许负号与 `e` 指数）。浮点表是高精表的**子集**，模块加载时断言「浮点表每个名字都在高精表里」，缺项直接抛 `NeonaicIllegalStateError`。导出为 `neonaicMath.constants` / `neonaicMath.highPrecisionConstants`。
+- 高精表用字面量而不用 `mantissa×10^exponent`：旧整指存储位数少（`h` 只有 7 位、`NA` 7 位），混进 50 位 π 的算式会平白损失精度；字面量按 scale 精确移位，同一个常量在 science=20/100 下是同一个数。**`ħ` 由精确 h 与 50 位 π 推出**（1.054571817646156391262428003302280744722e-34），`VM` 由 R·T/p 推出。
+- **`toNumber` 只查浮点表**（整串匹配，允许前置 `-`），表里全是 number，故**没有 `typeof` 判断**；高精常量一律不转换（`'NA'`/`'h'` → NaN）。查表用 `hasOwnProperty`，否则 `constructor`/`__proto__` 会被当成常量。
+- **`calc` 的新特性**：常量（`basicConstant` 默认 true）、隐式乘法（`2π`、`3(1+2)`、`(1+2)(3+4)`，但**不认数字**，`2 3` 仍报错）、对数（`log` 默认 false；`ln2`/`lg 100`，操作数取一元表达式，`lg8/lg2` 换底）、**后缀阶乘 `!`**（`factorial` 默认 false）。解析链：加减 → 乘除模(含隐式) → 一元 → 幂 → 根号 → 对数 → **阶乘** → 常量/括号/数字。阶乘比 `^` 更紧：`2^3!`=64、`-3!`=-6、`3!!`=`(3!)!`=720；浮点 170! 封顶、高精 10000! 封顶，参数必须是非负整数。
+- 浮点算式里用只有高精版本的常量（NA/h/…）会**明确报错**并提示开 `science`；高精模式用未知/无高精版本的名字也会分别报错。
+- **`science` = 小数位数（1..200），已实现 BigInt 定点引擎**：`+ - * /`、整数次幂、n 次根、`ln`/`lg`、阶乘，返回 `NeonaicTDecimalStore`。内部值 = 真实值 × 10^scale 的 BigInt；工作精度 = scale+12，**只在最后舍入一次**。
   - `ln` 用 `2·atanh((m-1)/(m+1))` 级数，先把值归一化到 [1,10) 再折半到 [1,2)（y ≤ 1/3，每项缩到 1/9）；`ln2`/`ln10` 按精度缓存。`lg` 的分子分母都取到工作精度再相除（否则 `lg8/lg2` 会明显漂）。
   - n 次根：integerRoot（牛顿 + 末位修正）在 `a·10^(scale(n-1)+n)` 上取整根，再 `/10` 四舍五入 —— 少算这一位会让末位总是偏小。
   - ⚠️ 每步都按 scale 舍入，链式除法/换底末位会漂 1 ulp（`lg8/lg2` → `3.00000000000000000003`），属定点固有行为。
-  - ⚠️ 数学常量在高精模式走 `HIGH_PRECISION_MATH` 的 50 位字面量；若直接用 `number` 升精度，会「后面补零」，看着像高精其实是假的。
-  - 明确拒绝的情形：非整数指数、浮点模式下的整指存储常量、非法 `science`（非 1..200 整数）。`decimalToString` 与 JS 的 `Number#toString` 对齐（小数点后超 6 个 0 才科学记数法）。
-- ⚠️ `µ`(U+00B5) 与 `μ`(U+03BC) 码位不同但长得一样，`CALC_SYMBOLS` 已把前者折成后者，否则 `µ0` 查不到常量。
+  - ⚠️ **常量在给定 scale 下会舍入为 0 时必须报错**（如 `h` 在 science=20）：`scaledFromDecimal` 检测到非零字面量转出 0 就抛 `NeonaicIllegalArgumentError`，并算出「至少多少位才不为 0」与「保留全部有效数字需要多少位」（h 分别是 34 / 42）。静默变 0 曾让 `h*NA` 整条算式失效。
+  - 明确拒绝的情形：非整数指数、非法 `science`（非 1..200 整数）、阶乘参数非整数/超上限。`decimalToString` 与 JS 的 `Number#toString` 对齐（小数点后超 6 个 0 才科学记数法）。
+- ⚠️ `µ`(U+00B5) 与 `μ`(U+03BC) 码位不同但长得一样，`CALC_SYMBOLS` 已把前者折成后者，否则 `µ0` 查不到常量。`！`（全角）也会折成 `!`。
 
 ## Joyous 桥接拓展（`extensions/joyous/`）
 与 Java 插件 [StreackMC/Joyous](https://github.com/StreackMC/Joyous) 协作的双通道桥接。**V1 见 `PROTOCOL.md`（§16 是 V2 落地说明）；V2 增量以 `PROTOCOL-V2.md` 为唯一约定来源，必需改动清单见 `NEONAIC-REQUIRED-CHANGES.md`**（后两份是对端 `docs/neonaic/` 的副本）。常量以 `src/protocol/constants.js` 为准，对端以 `Neonaic/bridge/BridgeProtocol.java` 为准，**自检解析该 Java 文件逐项比对**。

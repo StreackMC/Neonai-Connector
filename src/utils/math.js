@@ -1,4 +1,4 @@
-import { NeonaicArithmeticError, NeonaicIllegalArgumentError } from "./NeonaicNewableError.js";
+import { NeonaicArithmeticError, NeonaicIllegalArgumentError, NeonaicIllegalStateError } from "./NeonaicNewableError.js";
 import { parseString } from "./chore.js";
 // ⚠️ 这个 import 必须放在前两者之后：NeonaicNewableClass ↔ NeonaicNewableError ↔ chore →
 // confManager → NeonaicConfig → NeonaicNewableClass 之间存在既有的 ESM 环，环的求值顺序
@@ -810,128 +810,119 @@ function getNaNException(where) {
  */
 
 /**
- * 常用科学常量。两类值泾渭分明：
+ * 常用科学常量（浮点表）：**全部是 `number`**，可直接参与浮点运算，也供 `toNumber` 使用。
  *
- * - **`number`**：可直接参与浮点运算的近似值；
- * - **{@link NeonaicTDecimalStore}**（整指存储）：绝对值过大/过小、直接写成浮点会丢精度的常量。
- *   约定：值是 `mantissa × 10^exponent`，`mantissa` 保持为整数。
+ * 只收「double 里有效数字够用」的常量。像 `h = 6.62607015e-34` 这种值，浮点只剩约 16 位有效数字，
+ * 升到定点后第 17 位起全是二进制转十进制的噪声，因此放进 {@link HIGH_PRECISION_CONSTANTS}，
+ * 由高精模式按十进制字面量精确解析。高精表覆盖浮点表的**全部名字**（浮点表是清单，高精表是权威值）。
  *
- * 用途边界：
- *   - `toNumber` **只认 `number` 型常量**，高精常量一律不转换 —— 把它降级成浮点等于抹掉它存在的意义；
- *   - `calc`/算式求值本身只有浮点精度，两类都接受，高精常量按浮点近似参与运算。
- *
- * 名称区分大小写；常用符号都配了 ASCII 别名（`π`/`pi`、`φ`/`phi`、`μ0`/`mu0`、`ħ`/`hbar`…）。
+ * 数值来源：CODATA 2022（NIST SP 959，2024-05）。
+ * 名称区分大小写；常用符号都配了 ASCII 别名（`π`/`pi`、`φ`/`phi`、`α`/`a`）。
  */
 const PHYSICAL_CONSTANTS = Object.freeze({
-  /** 圆周率常量 */
-  "π": Math.PI,
-  /** 圆周率常量 */
-  "pi": Math.PI,
-  /** 自然对数常量 */
-  "e": Math.E,
-  /** 黄金比例 */
-  "φ": (1 + Math.sqrt(5)) / 2,
-  /** 黄金比例 */
-  "phi": (1 + Math.sqrt(5)) / 2,
-  /** 光速 m/s */
-  "c": 299792458,
-  /** 阿伏加德罗(Avogadro)常数 mol/L @type {Readonly<NeonaicTDecimalStore>} */
-  "NA": Object.freeze({mantissa: 6022045, exponent: 17}),
-  /** 阿伏加德罗(Avogadro)常数 mol/L @type {Readonly<NeonaicTDecimalStore>} */
-  "Na": Object.freeze({ mantissa: 6022045, exponent: 17 }),
-  /** 阿伏加德罗(Avogadro)常数 mol/L @type {Readonly<NeonaicTDecimalStore>} */
-  "N_A": Object.freeze({ mantissa: 6022045, exponent: 17 }),
-  /** 阿伏加德罗(Avogadro)常数 mol/L @type {Readonly<NeonaicTDecimalStore>} */
-  "N_a": Object.freeze({ mantissa: 6022045, exponent: 17 }),
-  /** 普适气体常数 J/(mol*K) */
-  "R": 8.31441,
-  /** 玻尔兹曼(Boltzmann)常数 J/K @type {Readonly<NeonaicTDecimalStore>} */
-  "k": Object.freeze({ mantissa: 1380662, exponent: -29 }),
-  /** 标况理想气体摩尔体积 m^3/mol */
-  "VM": 22.41383e-3,
-  /** 标况理想气体摩尔体积 m^3/mol */
-  "Vm": 22.41383e-3,
-  /** 标况理想气体摩尔体积 m^3/mol */
-  "V_M": 22.41383e-3,
-  /** 标况理想气体摩尔体积 m^3/mol */
-  "V_m": 22.41383e-3,
-  /** 基本电荷(元电荷) C @type {Readonly<NeonaicTDecimalStore>} */
-  "e0": Object.freeze({ mantissa: 16021892, exponent: -26 }),
-  /** 原子质量单位 kg @type {Readonly<NeonaicTDecimalStore>} */
-  "u": Object.freeze({ mantissa: 16605655, exponent: -34 }),
-  /** 电子静止质量 kg @type {Readonly<NeonaicTDecimalStore>} */
-  "me": Object.freeze({ mantissa: 9109534, exponent: -37 }),
-  /** 电子荷质比 C/kg @type {Readonly<NeonaicTDecimalStore>} */
-  "epme": Object.freeze({ mantissa: 17588047, exponent: 4 }),
-  /** 质子静止质量 kg @type {Readonly<NeonaicTDecimalStore>} */
-  "mp": Object.freeze({ mantissa: 16726485 , exponent: -34 }),
-  /** 中子静止质量 kg @type {Readonly<NeonaicTDecimalStore>} */
-  "mn": Object.freeze({ mantissa: 16749543 , exponent: -34 }),
-  /** 法拉第常数 C/mol */
-  "F": 9.648456e4,
-  /** 真空电容率 F/m @type {Readonly<NeonaicTDecimalStore>} */
-  "ε0": Object.freeze({ mantissa: 8854187818, exponent: -21 }),
-  /** 真空电容率 F/m @type {Readonly<NeonaicTDecimalStore>} */
-  "E0": Object.freeze({ mantissa: 8854187818, exponent: -21 }),
-  /** 真空磁导率 N/A²（= 4π×10⁻⁷ ≈ 1.2566370614×10⁻⁶） */
-  "μ0": Object.freeze({ mantissa: 12566370614, exponent: -16 }),
-  /** 真空磁导率 N/A²（ASCII 别名） */
-  "mu0": Object.freeze({ mantissa: 12566370614, exponent: -16 }),
-  /** 电子磁矩 J/T */
-  "μe": Object.freeze({ mantissa: 9284832, exponent: -30 }),
-  /** 质子磁矩 J/T */
-  "μp": Object.freeze({ mantissa: 14106171, exponent: -30 }),
-  /** 玻尔(Bohr)半径 m */
-  "α0": Object.freeze({ mantissa: 52917706, exponent: -18 }),
-  /** 玻尔(Bohr)半径 m（ASCII 别名） */
-  "a0": Object.freeze({ mantissa: 52917706, exponent: -18 }),
-  /** 玻尔(Bohr)磁子 J/T */
-  "μB": Object.freeze({ mantissa: 9274078, exponent: -30 }),
-  /** 玻尔(Bohr)磁子 J/T（ASCII 别名） */
-  "muB": Object.freeze({ mantissa: 9274078, exponent: -30 }),
-  /** 核磁子 J/T */
-  "μN": Object.freeze({ mantissa: 5059824, exponent: -33 }),
-  /** 核磁子 J/T（ASCII 别名） */
-  "muN": Object.freeze({ mantissa: 5059824, exponent: -33 }),
-  /** 普朗克常数 J·s */
-  "h": Object.freeze({ mantissa: 6626176, exponent: -40 }),
-  /** 约化普朗克常数 J·s（h/2π） */
-  "ħ": Object.freeze({ mantissa: 1054571817, exponent: -43 }),
-  /** 约化普朗克常数 J·s（ASCII 别名） */
-  "hbar": Object.freeze({ mantissa: 1054571817, exponent: -43 }),
-  /** 精细结构常数 */
-  "α": 7.2973506e-3,
-  /** 精细结构常数 */
-  "a": 7.2973506e-3,
-  /** 质子电子质量比 */
-  "mppme": 1836.1515,
+  /** 圆周率 */ "π": Math.PI,
+  /** 圆周率（ASCII 别名） */ "pi": Math.PI,
+  /** 自然对数底 */ "e": Math.E,
+  /** 黄金比例 */ "φ": (1 + Math.sqrt(5)) / 2,
+  /** 黄金比例（ASCII 别名） */ "phi": (1 + Math.sqrt(5)) / 2,
+  /** 光速 m/s（精确值） */ "c": 299792458,
+  /** 普适气体常数 J/(mol*K)（= k·N_A，精确值；高精版多留位数） */ "R": 8.314462618,
+  /** 标况理想气体摩尔体积 m^3/mol（273.15 K，101.325 kPa；R·T/p） */ "VM": 22.413969545014138e-3,
+  /** 标况理想气体摩尔体积 m^3/mol */ "Vm": 22.413969545014138e-3,
+  /** 标况理想气体摩尔体积 m^3/mol */ "V_M": 22.413969545014138e-3,
+  /** 标况理想气体摩尔体积 m^3/mol */ "V_m": 22.413969545014138e-3,
+  /** 法拉第常数 C/mol（= e·N_A，精确值） */ "F": 96485.3321233100184,
+  /** 精细结构常数（无单位） */ "α": 7.2973525643e-3,
+  /** 精细结构常数（ASCII 别名） */ "a": 7.2973525643e-3,
+  /** 质子电子质量比 */ "mppme": 1836.152673426,
 });
 
-/**
- * 高精模式下数学常量的扩展位数。
- *
- * `number` 只有约 16 位有效数字，若直接升精度，后面会全是 0 —— 看着像 40 位精度，其实是假的。
- * 这里给 π/e/φ 补一份十进制字面量，按 scale 截断（前 50 位，够 science ≤ 49 用）。
- */
 const HP_PI = '3.14159265358979323846264338327950288419716939937510';
 const HP_E = '2.71828182845904523536028747135266249775724709369995';
 const HP_PHI = '1.61803398874989484820458683436563811772030917980576';
-const HIGH_PRECISION_MATH = Object.freeze({
-  'π': HP_PI, 'pi': HP_PI,
-  'e': HP_E,
-  'φ': HP_PHI, 'phi': HP_PHI,
+/**
+ * 高精科学常量（CODATA 2022）：值是**十进制字面量字符串**，允许负号与 `e` 指数。
+ *
+ * 为什么不从浮点表升精度：`number` 只有约 16 位有效数字，且 `String(n)` 在小数末段是
+ * 二进制舍入噪声；拿它当高精常量，看着有 40 位，其实第 17 位就错了。
+ * 高精模式直接按字符串移位、不经过浮点，于是同一个常量在 science=20 与 science=100 下是同一个数。
+ *
+ * 数学常量（π/e/φ）取 50 位；物理常量取 CODATA 公布的全部有效数字。
+ * 精确值（c、h、e0、k、N_A、R、F）按定义写全；其余为中心值（公布值括号里的不确定度不参与运算）。
+ */
+const HIGH_PRECISION_CONSTANTS = Object.freeze({
+  /** 圆周率 */ 'π': HP_PI,
+  /** 圆周率（ASCII 别名） */ 'pi': HP_PI,
+  /** 自然对数底 */ 'e': HP_E,
+  /** 黄金比例 */ 'φ': HP_PHI,
+  /** 黄金比例（ASCII 别名） */ 'phi': HP_PHI,
+  /** 光速 m/s（精确值） */ 'c': '299792458',
+  /** 普适气体常数 J/(mol*K)（= k·N_A，精确值） */ 'R': '8.31446261815324',
+  /** 标况理想气体摩尔体积 m^3/mol（273.15 K，101.325 kPa；R·T/p） */ 'VM': '0.0224139695450141377350111028867505551443',
+  /** 标况理想气体摩尔体积 m^3/mol */ 'Vm': '0.0224139695450141377350111028867505551443',
+  /** 标况理想气体摩尔体积 m^3/mol */ 'V_M': '0.0224139695450141377350111028867505551443',
+  /** 标况理想气体摩尔体积 m^3/mol */ 'V_m': '0.0224139695450141377350111028867505551443',
+  /** 法拉第常数 C/mol（= e·N_A，精确值） */ 'F': '96485.3321233100184',
+  /** 精细结构常数（无单位） */ 'α': '0.0072973525643',
+  /** 精细结构常数（ASCII 别名） */ 'a': '0.0072973525643',
+  /** 质子电子质量比 */ 'mppme': '1836.152673426',
+  /** 阿伏加德罗(Avogadro)常数 mol^-1（精确值） */ 'NA': '6.02214076e23',
+  /** 阿伏加德罗常数（ASCII 别名） */ 'Na': '6.02214076e23',
+  /** 阿伏加德罗常数（ASCII 别名） */ 'N_A': '6.02214076e23',
+  /** 阿伏加德罗常数（ASCII 别名） */ 'N_a': '6.02214076e23',
+  /** 玻尔兹曼(Boltzmann)常数 J/K（精确值） */ 'k': '1.380649e-23',
+  /** 基本电荷(元电荷) C（精确值） */ 'e0': '1.602176634e-19',
+  /** 原子质量单位 kg */ 'u': '1.66053906892e-27',
+  /** 电子静止质量 kg */ 'me': '9.1093837139e-31',
+  /** 电子荷质比 C/kg */ 'epme': '1.75882000838e11',
+  /** 质子静止质量 kg */ 'mp': '1.67262192595e-27',
+  /** 中子静止质量 kg */ 'mn': '1.67492750056e-27',
+  /** 真空电容率 F/m */ 'ε0': '8.8541878188e-12',
+  /** 真空电容率 F/m（ASCII 别名） */ 'E0': '8.8541878188e-12',
+  /** 真空磁导率 N/A² */ 'μ0': '1.25663706127e-6',
+  /** 真空磁导率 N/A²（ASCII 别名） */ 'mu0': '1.25663706127e-6',
+  /** 电子磁矩 J/T（负值，与自旋反向） */ 'μe': '-9.2847646917e-24',
+  /** 质子磁矩 J/T */ 'μp': '1.41060679545e-26',
+  /** 玻尔(Bohr)半径 m */ 'α0': '5.29177210544e-11',
+  /** 玻尔半径 m（ASCII 别名） */ 'a0': '5.29177210544e-11',
+  /** 玻尔(Bohr)磁子 J/T */ 'μB': '9.2740100657e-24',
+  /** 玻尔磁子 J/T（ASCII 别名） */ 'muB': '9.2740100657e-24',
+  /** 核磁子 J/T */ 'μN': '5.0507837393e-27',
+  /** 核磁子 J/T（ASCII 别名） */ 'muN': '5.0507837393e-27',
+  /** 普朗克常数 J·s（精确值） */ 'h': '6.62607015e-34',
+  /** 约化普朗克常数 J·s（h/2π，由精确的 h 与 π 推出） */ 'ħ': '1.054571817646156391262428003302280744722e-34',
+  /** 约化普朗克常数 J·s（ASCII 别名） */ 'hbar': '1.054571817646156391262428003302280744722e-34',
 });
 
+// 两张表必须覆盖同一批名字：浮点表是「有哪些常量」的清单，高精表缺项会让同一个名字在
+// science 模式里突然变成「未知常量」。宁可启动即炸，也别等用户输入时才发现。
+for (const name of Object.keys(PHYSICAL_CONSTANTS)) {
+  if (!Object.prototype.hasOwnProperty.call(HIGH_PRECISION_CONSTANTS, name)) {
+    throw new NeonaicIllegalStateError(`高精常量表缺少“${name}”：两张常量表的名字必须一一对应`);
+  }
+}
+
 /**
- * 按名字取常量。
+ * 取浮点常量。
  * @param {string} name 常量名（区分大小写）
- * @returns {number|Readonly<NeonaicTDecimalStore>|undefined} 未定义时为 undefined
+ * @returns {number|undefined} 未定义时为 undefined
  * @apiNote 用 `hasOwnProperty` 而不是直接下标：否则 `constructor`、`toString`、`__proto__` 这类
  *          原型链上的键会被当成「存在」并返回函数/对象，污染 `toNumber` 与算式求值。
  */
 function resolveConstant(name) {
   return Object.prototype.hasOwnProperty.call(PHYSICAL_CONSTANTS, name)
     ? PHYSICAL_CONSTANTS[name]
+    : undefined;
+}
+
+/**
+ * 取高精常量的十进制字面量。
+ * @param {string} name 常量名（区分大小写）
+ * @returns {string|undefined} 未定义时为 undefined
+ */
+function resolveHighPrecisionConstant(name) {
+  return Object.prototype.hasOwnProperty.call(HIGH_PRECISION_CONSTANTS, name)
+    ? HIGH_PRECISION_CONSTANTS[name]
     : undefined;
 }
 
@@ -1003,32 +994,60 @@ function scaledFromLiteral(text, scale) {
 }
 
 /**
- * `number` → 定点。按最短往返表示解析，**不做乘法**，避免 `n * 10^scale` 的浮点误差与溢出。
- * @param {number} n 数值
+ * 十进制字面量（如 `"-9.2847646917e-24"`）→ 定点。按字符串移位，**不经过浮点**。
+ * @param {string} text 字面量：可选负号、可选小数、可选 `e` 指数
  * @param {number} scale 小数位数
+ * @param {string} [name] 常量名，仅用于报错
  * @returns {BigInt}
- * @throws {NeonaicArithmeticError} 传入 NaN/Infinity
+ * @throws {NeonaicIllegalArgumentError} 字面量格式非法，或该值在当前 scale 下会被舍入为 0
  */
-function scaledFromNumber(n, scale) {
-  if (!Number.isFinite(n)) throw new NeonaicArithmeticError(`无法把 ${String(n)} 表示为高精数值`);
-  const matched = String(n).match(/^(-?)(\d*)(?:\.(\d*))?(?:e([+-]?\d+))?$/i);
-  if (!matched) throw new NeonaicIllegalArgumentError(`无法解析的数字：${String(n)}`);
-  const sign = matched[1] === '-' ? -1n : 1n;
-  const digits = BigInt((matched[2] || '0') + (matched[3] || ''));
-  const shift = (matched[4] ? Number(matched[4]) : 0) - (matched[3] || '').length + scale;
-  return shift >= 0 ? sign * digits * bigPow10(shift) : sign * bigRoundDiv(digits, bigPow10(-shift));
+function scaledFromDecimal(text, scale, name) {
+  const matched = text.match(/^(-?)(\d*)(?:\.(\d*))?(?:[eE]([+-]?\d+))?$/);
+  if (!matched || ((matched[2] || '') === '' && (matched[3] || '') === '')) {
+    throw new NeonaicIllegalArgumentError(`无法解析的常量字面量：${text}`);
+  }
+  const intPart = matched[2] || '';
+  const fracPart = matched[3] || '';
+  const digitsText = intPart + fracPart;
+  const digits = BigInt(digitsText);
+  if (digits === 0n) return 0n;
+  const shift = (matched[4] ? Number(matched[4]) : 0) - fracPart.length + scale;
+  const magnitude = shift >= 0 ? digits * bigPow10(shift) : bigRoundDiv(digits, bigPow10(-shift));
+  const value = matched[1] === '-' ? -magnitude : magnitude;
+  if (value === 0n) {
+    // 定点表示不了这么小的量。静默变 0 会让 h、μB 这类常量整条算式失效，宁可明确报错。
+    const leading = decimalLeadingExponent(intPart, fracPart, matched[4]);
+    const needed = -leading;
+    const keepAll = needed + decimalSignificantDigits(digitsText) - 1;
+    throw new NeonaicIllegalArgumentError(
+      `常量${name ? `“${name}”` : ''}（${text}）在 science=${scale} 下会舍入为 0；`
+      + `请把 science 提到至少 ${needed} 位（保留全部有效数字需 ${keepAll} 位）`,
+    );
+  }
+  return value;
 }
 
 /**
- * 整指存储 → 定点。`mantissa` 是整数，按 `exponent` 移位，scale 足够时**精确无损**。
- * @param {Readonly<NeonaicTDecimalStore>} store 整指存储
- * @param {number} scale 小数位数
- * @returns {BigInt}
+ * 十进制字面量首位有效数字的量级（`6.62607015e-34` → -34）。
+ * @param {string} intPart 整数部分
+ * @param {string} fracPart 小数部分
+ * @param {string} [exponentText] `e` 之后的指数
+ * @returns {number}
  */
-function scaledFromStore(store, scale) {
-  const mantissa = BigInt(store.mantissa);
-  const shift = Number(store.exponent) + scale;
-  return shift >= 0 ? mantissa * bigPow10(shift) : bigRoundDiv(mantissa, bigPow10(-shift));
+function decimalLeadingExponent(intPart, fracPart, exponentText) {
+  const digits = intPart + fracPart;
+  const first = digits.search(/[1-9]/);
+  return (digits.length - 1 - first) + (exponentText ? Number(exponentText) : 0) - fracPart.length;
+}
+
+/**
+ * 有效数字位数（去掉前导/尾随零），用于提示「保留全部有效数字需要多少位小数」。
+ * @param {string} digits 全部数字
+ * @returns {number}
+ */
+function decimalSignificantDigits(digits) {
+  const trimmed = digits.replace(/^0+/, '').replace(/0+$/, '');
+  return trimmed.length || 1;
 }
 
 /**
@@ -1231,8 +1250,9 @@ export const neonaicMath = Object.freeze({
     // 前导负号（含 U+2212 减号）单独记下来，不要参与「只保留数字和点」的清洗
     const sign = (text.startsWith('-') || text.startsWith('−')) ? -1 : 1;
     // 常量名要求**整串匹配**：否则 "help" 里的 "e" 会被误当成自然常数
+    // 浮点表里全是 number，无需判类型；高精常量不在这里降级（那等于抹掉它存在的意义）
     const constant = resolveConstant(sign < 0 ? text.slice(1).trim() : text);
-    if (typeof constant === 'number') return sign * constant;
+    if (constant !== undefined) return sign * constant;
     // 只保留数字和点
     const s = text.replace(/[^0-9.]/g, '');
     // 拆出整数部分 + 其余全部当小数
@@ -1399,26 +1419,29 @@ export const neonaicMath = Object.freeze({
 
   /**
    * 解析并计算一个算式。
-   * @implNote 递归下降，优先级由低到高为：加减 → 乘除模（含隐式乘法）→ 一元正负 → 幂 → 根号 → 对数 → 常量/括号/数字。
+   * @implNote 递归下降，优先级由低到高为：加减 → 乘除模（含隐式乘法）→ 一元正负 → 幂 → 根号 → 对数 → 阶乘 → 常量/括号/数字。
    *           `^` 右结合（`2^3^2` = 512），且比一元负号更紧（`-2^2` = -4），但指数位置上允许带符号（`2^-3`）。
+   *           阶乘是后缀运算符，比 `^` 更紧：`2^3!` = 2^6 = 64、`-3!` = -6；`3!!` 读作 `(3!)!`。
    *           隐式乘法支持 `2π`、`3(1+2)`、`(1+2)(3+4)`；但 `2 3` 仍视为错误（不猜）。
    * @implNote 除号 `/` 与 `÷` 等价，乘号还额外接受 `×` 与 `·`，全角符号会被自动折算。
    * @param {String} expr 算式文本，例如 `(13-9)*7-4`
-   * @param {{power?: boolean, root?: boolean, mod?: boolean, log?: boolean, basicConstant?: boolean, science?: number}} [options] 可选开启的特性
+   * @param {{power?: boolean, root?: boolean, mod?: boolean, log?: boolean, factorial?: boolean, basicConstant?: boolean, science?: number}} [options] 可选开启的特性
    *        `power` 开启 `^` 与 `**`；`root` 开启 `√`、`∛`、`3√8`、`³√8`、`^3√8`；`mod` 开启 `%`；
-   *        `log` 开启 `ln`/`lg`（自定义底用换底公式，如 `lg8/lg2`）。
-   *        以上四项默认 false，即默认只解析四则运算。
-   *        `basicConstant` 默认 **true**，控制是否解析 {@link neonaicMath.constants} 里的常量。
+   *        `log` 开启 `ln`/`lg`（自定义底用换底公式，如 `lg8/lg2`）；`factorial` 开启后缀 `!`。
+   *        以上五项默认 false，即默认只解析四则运算。
+   *        `basicConstant` 默认 **true**，控制是否解析 {@link PHYSICAL_CONSTANTS} / {@link HIGH_PRECISION_CONSTANTS} 里的常量。
    *        `science` 设为 1..200 的整数即启用**高精定点模式**，该数字是**小数位数**：
-   *        运算改用 BigInt 定点（`+ - * /`、整数次幂、n 次根、`ln`/`lg`），整指存储的高精常量
-   *        （NA、h、ε0…）也可解析，返回值变为 {@link NeonaicTDecimalStore}。
+   *        运算改用 BigInt 定点（`+ - * /`、整数次幂、n 次根、`ln`/`lg`、阶乘），高精常量
+   *        （NA、h、ε0…）按十进制字面量精确解析，返回值变为 {@link NeonaicTDecimalStore}。
    *        代价是慢，且只支持整数指数（非整数指数会明确报错）。
    *        每一步运算都会按 `scale` 舍入，长链运算（尤其连续除法/换底）末位可能累积 1 ulp——
    *        例如 `lg8/lg2` 会得到 `3.00000000000000000003` 而不是精确的 3，这是定点的固有行为。
-   *        不传（或 0）走浮点路径，返回 `number`；此时整指存储的常量会明确报错，不偷偷降级。
+   *        常量若在给定 `scale` 下会被舍入为 0（如 `science=20` 时的 `h`），会明确报错并给出所需位数，
+   *        而不是静默变成 0。
+   *        不传（或 0）走浮点路径，返回 `number`；此时只有高精版本的常量会明确报错，不偷偷降级。
    * @returns {number|NeonaicTDecimalStore} 浮点模式返回 number；高精模式返回整指存储
-   * @throws {NeonaicIllegalArgumentError} 算式语法错误、使用了未开启的运算符、未知常量、`science` 取值非法
-   * @throws {NeonaicArithmeticError} 除数为零、负数开偶次方、对数的真数非正等
+   * @throws {NeonaicIllegalArgumentError} 算式语法错误、使用了未开启的运算符、未知常量、`science` 取值非法或精度不足
+   * @throws {NeonaicArithmeticError} 除数为零、负数开偶次方、对数的真数非正、阶乘参数非整数等
    */
   calc: calcExpression,
 
@@ -1436,8 +1459,14 @@ export const neonaicMath = Object.freeze({
    */
   decimalToString: decimalToString,
 
-  /** 科学常量表（只读），键为可用名字；值的两种形态见 {@link PHYSICAL_CONSTANTS} 的说明 */
+  /** 浮点科学常量表（只读），键为可用名字，值**全部是 number**；见 {@link PHYSICAL_CONSTANTS} */
   constants: PHYSICAL_CONSTANTS,
+
+  /**
+   * 高精科学常量表（只读），键与 {@link neonaicMath.constants} 一一对应，
+   * 值为 CODATA 2022 的十进制字面量字符串（供 `science` 模式按 scale 精确解析）。
+   */
+  highPrecisionConstants: HIGH_PRECISION_CONSTANTS,
 
   solve24: dfs24solution,
 });
@@ -1537,7 +1566,7 @@ function dfs24solution(numbers, target = 24) {
 const CALC_SYMBOLS = Object.freeze({
   '（': '(', '）': ')', '＋': '+', '－': '-', '−': '-',
   '＊': '*', '×': '*', '·': '*', '／': '/', '÷': '/',
-  '％': '%', '＾': '^',
+  '％': '%', '＾': '^', '！': '!',
   // 微符号（U+00B5）与希腊字母 μ（U+03BC）外观相同、码位不同，统一折成后者，否则常量名查不到
   'µ': 'μ',
   '０': '0', '１': '1', '２': '2', '３': '3', '４': '4',
@@ -1609,16 +1638,49 @@ function safeModulo(a, b) {
 }
 
 /**
+ * 阶乘（浮点模式）。只接受非负整数。
+ * @param {number} n 参数
+ * @returns {number} n!
+ * @throws {NeonaicIllegalArgumentError} 不是非负整数
+ * @throws {NeonaicArithmeticError} 参数超过 170（double 已放不下）
+ */
+function factorialOf(n) {
+  if (!Number.isInteger(n) || n < 0) throw new NeonaicIllegalArgumentError(`阶乘只接受非负整数：${parseString(n)}`);
+  if (n > 170) throw new NeonaicArithmeticError(`${n}! 超出双精度浮点范围，请改用 science 高精模式`);
+  let result = 1;
+  for (let i = 2; i <= n; i++) result *= i;
+  return result;
+}
+
+/**
+ * 阶乘（定点模式）。参数必须是定点表示的**非负整数**。
+ * @param {BigInt} value 定点值
+ * @param {number} scale 小数位数
+ * @returns {BigInt} n! 的定点表示
+ * @throws {NeonaicIllegalArgumentError} 不是非负整数
+ * @throws {NeonaicArithmeticError} 参数超过 10000（防止一次输入把内存吃满）
+ */
+function decFactorial(value, scale) {
+  const one = bigPow10(scale);
+  if (value < 0n || value % one !== 0n) throw new NeonaicIllegalArgumentError('阶乘只接受非负整数');
+  const n = value / one;
+  if (n > 10000n) throw new NeonaicArithmeticError(`阶乘参数过大（上限 10000）：${n}`);
+  let result = 1n;
+  for (let i = 2n; i <= n; i++) result *= i;
+  return result * one;
+}
+
+/**
  * 递归下降地解析并计算一个算式（{@link neonaicMath.calc} 的实现）
  * @param {String} expr 算式文本
- * @param {{power?: boolean, root?: boolean, mod?: boolean, log?: boolean, basicConstant?: boolean, science?: number}} [options] 可选开启的特性
- * @returns {number}
+ * @param {{power?: boolean, root?: boolean, mod?: boolean, log?: boolean, factorial?: boolean, basicConstant?: boolean, science?: number}} [options] 可选开启的特性
+ * @returns {number|NeonaicTDecimalStore} 浮点模式为 number，`science` 模式为整指存储
  */
 function calcExpression(expr, options) {
   if (options !== undefined && options !== null && typeof options !== 'object') {
     throw new NeonaicIllegalArgumentError(`算式的选项应该是一个对象或留空：${parseString(options)}`);
   }
-  const { power = false, root = false, mod = false, log = false, basicConstant = true, science } = options ?? {};
+  const { power = false, root = false, mod = false, log = false, factorial = false, basicConstant = true, science } = options ?? {};
   // science = 小数位数；null 表示走原来的浮点路径
   const scale = (science === undefined || science === null || science === 0 || science === false) ? null : science;
   if (scale !== null && (!Number.isInteger(scale) || scale < 1 || scale > 200)) {
@@ -1674,21 +1736,45 @@ function calcExpression(expr, options) {
     // 科学常量：整段标识符作为名字去查表（这样 ε0 / N_A / muB 不会被拆错）
     const name = text.slice(at).match(CALC_CONSTANT_NAME);
     if (!name) throw fail('期待一个数字、科学常量或括号');
-    const value = resolveConstant(name[0]);
-    if (value === undefined) throw fail(`未知的常量“${name[0]}”（可用名字见 neonaicMath.constants）`);
-    if (!basicConstant) throw fail(`未启用科学常量解析，无法使用“${name[0]}”`);
-    at += name[0].length;
+    const symbol = name[0];
     if (high) {
-      // 数学常量用扩展位数：直接从 number 升精度会「后面补零」，看着像高精其实是假的
-      const extended = HIGH_PRECISION_MATH[name[0]];
-      if (extended !== undefined) return scaledFromLiteral(extended, scale);
-      return typeof value === 'number' ? scaledFromNumber(value, scale) : scaledFromStore(value, scale);
+      // 高精模式只认十进制字面量：从 number 升精度会「后面补零」，看着像高精其实是假的
+      const literal = resolveHighPrecisionConstant(symbol);
+      if (literal === undefined) {
+        if (resolveConstant(symbol) !== undefined) throw fail(`常量“${symbol}”没有高精版本，无法在 science 模式下使用`);
+        throw fail(`未知的常量“${symbol}”（可用名字见 neonaicMath.highPrecisionConstants）`);
+      }
+      if (!basicConstant) throw fail(`未启用科学常量解析，无法使用“${symbol}”`);
+      at += symbol.length;
+      return scaledFromDecimal(literal, scale, symbol);
     }
-    if (typeof value !== 'number') {
-      // 整指存储只在高精模式下有意义；浮点算式里用它会悄悄丢掉精度
-      throw fail(`常量“${name[0]}”是高精常量（整指存储），需要 science 高精模式才能使用`);
+    const value = resolveConstant(symbol);
+    if (value === undefined) {
+      // 高精常量在浮点里只能降到 16 位，等于抹掉它存在的意义 —— 宁可报错并告诉用户怎么开
+      if (resolveHighPrecisionConstant(symbol) !== undefined) {
+        throw fail(`常量“${symbol}”只有高精版本，需要 science 高精模式才能使用`);
+      }
+      throw fail(`未知的常量“${symbol}”（可用名字见 neonaicMath.constants）`);
     }
+    if (!basicConstant) throw fail(`未启用科学常量解析，无法使用“${symbol}”`);
+    at += symbol.length;
     return value;
+  }
+
+  /**
+   * 后缀阶乘：`5!`、`(1+2)!`、`3!!`（重复求阶乘）。
+   * @apiNote 位于优先级链最高处（比 `^` 更紧），于是 `2^3!` = 2^6 = 64、`-3!` = -(3!) = -6，
+   *          与常见计算器一致。`3!!` 读作 `(3!)!`，**不是**数学里的双阶乘。
+   */
+  function parsePostfix() {
+    let v = parsePrimary();
+    for (;;) {
+      skipSpace();
+      if (text[at] !== '!') return v;
+      if (!factorial) throw fail('未启用阶乘解析，无法使用“!”');
+      at++;
+      v = high ? decFactorial(v, scale) : factorialOf(v);
+    }
   }
 
   /**
@@ -1698,7 +1784,7 @@ function calcExpression(expr, options) {
   function parseLog() {
     skipSpace();
     const matched = text.slice(at).match(CALC_LOG_FN);
-    if (!matched) return parsePrimary();
+    if (!matched) return parsePostfix();
     if (!log) throw fail(`未启用对数解析，无法使用“${matched[1]}”`);
     at += matched[0].length;
     skipSpace();

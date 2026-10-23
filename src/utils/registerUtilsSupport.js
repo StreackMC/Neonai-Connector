@@ -62,18 +62,19 @@ const ai = () => {
   });
 
   registerAITool('neonaic', 'calc', {
-    description: '计算指定的算式。支持四则运算、幂、根号、取模、对数、括号，以及常用科学常量与隐式乘法（如 2π、3(1+2)）',
+    description: '计算指定的算式。支持四则运算、幂、根号、取模、对数、阶乘、括号，以及常用科学常量与隐式乘法（如 2π、3(1+2)）',
     inputSchema: z.object({
       expression: z.string().describe(
         '一个算式，例如 "1+2*3-4"。'
-        + '运算符：+ - * / ^ % ( )；√/∛ 表示平方根/立方根（^n√ 或 ³√ 表示 n 次方根）；'
-        + 'ln/lg 表示自然对数/常用对数（如 ln2；换底写 lg8/lg2）。'
-        + '常量区分大小写：π/pi、e、φ/phi、c（光速）、R、F、α、mppme 等，完整列表见 neonaicMath.constants；'
-        + '高精常量（NA、h、ε0…）只有在传了 precision 时才可用。'
+        + '运算符：+ - * / ^ % ! ( )；√/∛ 表示平方根/立方根（^n√ 或 ³√ 表示 n 次方根）；'
+        + 'ln/lg 表示自然对数/常用对数（如 ln2；换底写 lg8/lg2）；! 是后缀阶乘（如 5!、2^3! = 64）。'
+        + '常量区分大小写：π/pi、e、φ/phi、c（光速）、R、F、α、mppme 等，完整列表见 neonaicMath.constants 与 neonaicMath.highPrecisionConstants；'
+        + '高精常量（NA、h、ε0…）只有在传了 precision 时才可用，且 precision 要足够大（例如 h 至少要 34 位小数）。'
       ),
       precision: z.int().optional().describe(
         '可选：高精模式的小数位数（1..200）。传了就用 BigInt 定点运算并返回十进制字符串，'
-        + '可解析 NA、h、ε0 等整指存储常量，但只支持整数指数；不传则用浮点（约 15 位有效数字）'
+        + '可解析 NA、h、ε0 等常量（CODATA 2022 值），但只支持整数指数与整数阶乘，且会降低运算速度；'
+        + '不传则用浮点（约 15 位有效数字）。precision 过小、无法表示极小的常量时会报错并提示所需位数'
       ),
     }).describe('要计算的算式'),
     execute: ({ expression, precision }) => {
@@ -83,6 +84,7 @@ const ai = () => {
           power: true,
           root: true,
           log: true,
+          factorial: true,
           science: precision,
         });
         // 高精模式返回整指存储，转成十进制文本；浮点模式直接用 number
