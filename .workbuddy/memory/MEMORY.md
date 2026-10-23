@@ -47,6 +47,14 @@
   - 明确拒绝的情形：非整数指数、非法 `science`（非 1..200 整数）、阶乘参数非整数/超上限。`decimalToString` 与 JS 的 `Number#toString` 对齐（小数点后超 6 个 0 才科学记数法）。
 - ⚠️ `µ`(U+00B5) 与 `μ`(U+03BC) 码位不同但长得一样，`CALC_SYMBOLS` 已把前者折成后者，否则 `µ0` 查不到常量。`！`（全角）也会折成 `!`。
 
+## 消息片段协议（`src/message/messageFragment.js`）
+- `NeonaicMessage` 持有片段链：`markdown(override)` 返回**数组**（可按 `TYPE` 替换或置 null），`toMarkdown()` 拼成字符串；`forEachFrag`/`mapFrag` 的回调第三个参数是 `TYPE`。构造函数接受 `string | fragment | fragment[] | string[] | NeonaicMessage`，留空创建空消息。⚠️ 构造函数末尾曾有一个**无条件 `throw`**，任何消息都构造失败。
+- 片段类型：`text`/`br`/`link`/`emoji`/`table`/`image`/`audio`/`video`，共同基类 `NeonaicMessageFragment`（抽象，直接实例化抛错）。
+- ⚠️ **ESM 私有字段不能跨类访问**：在基类声明 `#payload`、子类写 `this.#payload` 会在**解析期**报 `Private field '#payload' must be declared in an enclosing class`（不是运行期）。每个类必须自己声明 `#payload`。
+- 媒体统一继承 `NeonaicMediaMsgFrag`（抽象；子类用静态 `KIND`/`TAG` 声明身份）：负责 `Buffer|Blob|URL|Request|NeonaicUriMeta|string` 归一化（Buffer → data URL；Blob 在浏览器走 object URL，需 `dispose()`）、MIME 推断（magic number + 扩展名兜底）、HTML 标签生成（`src`/`title`/`aria-label`/`controls`/`loop`/`muted`/`autoplay`/`preload`，`poster` 仅 video）。图片只覆写 `markdown` 为 `![alt](url "title")`。
+- ⚠️ `NeonaicTable.map(cb)` 默认 `direction='row'`，回调收到的是**整行数组**；逐格处理必须传 `'cell'`（`NeonaicTableMsgFrag` 曾因此把每行 stringify 成 `"['a','b']"`）。
+- ⚠️ `NeonaicUriMeta.toString()` 会补尾斜杠（`https://e.com` → `https://e.com/`），断言链接输出时要按规范化后的值。
+
 ## Joyous 桥接拓展（`extensions/joyous/`）
 与 Java 插件 [StreackMC/Joyous](https://github.com/StreackMC/Joyous) 协作的双通道桥接。**V1 见 `PROTOCOL.md`（§16 是 V2 落地说明）；V2 增量以 `PROTOCOL-V2.md` 为唯一约定来源，必需改动清单见 `NEONAIC-REQUIRED-CHANGES.md`**（后两份是对端 `docs/neonaic/` 的副本）。常量以 `src/protocol/constants.js` 为准，对端以 `Neonaic/bridge/BridgeProtocol.java` 为准，**自检解析该 Java 文件逐项比对**。
 - 分层：`src/entry.js` 组合根｜`config.js`｜`identity.js`｜`status.js`｜`protocol/`（`constants`/`codec`/`session`/`http`/`uds`/`dispatch`/`methods`）。**`protocol/` 下导入内核是 4 层** `../../../../src/...`。两个接缝：`dispatch.js` 认识命令系统、`methods.js` 认识平台/AI/身份，**都不认识具体传输**；http.js/uds.js 只认「handler + {method,payload}」。
@@ -62,12 +70,16 @@
 - ⚠️ 改 `extensions/joyous/config.json` 后要 `/neonaic:reload` **并重启拓展**，通道不热切换。
 
 ## AI 调用链
-- 链路：平台事件 → 平台拓展（qqbot/msgHandler）→ `neonaicMessageIn.resolveReply(msg, {AI, AIlist, resolveCommandWith})` → `neonaicAI.askAI(msg, {AIlist, caller, speaker, overridePrompt, overrideAITool})` → `callProvider`。**AI Profile = `secret.json` 的 `oai[]`**：`{name, available, address, token, model, tools, maxToolcall, prompt}`（`prompt` 指向 `config/prompts/<file>.md`）。
+- 链路：平台事件 → 平台拓展（qqbot/msgHandler）→ `neonaicMessageIn.resolveReply(msg, {AI, AIlist, resolveCommandWith})` → `neonaicAI.askAI(msg, {AIlist, caller, speaker, overridePrompt, overrideAITool})` → `callProvider`。**AI Profile = `secret.json` 的 `oai[]`**：`{name, available, address, token, model, tools, maxToolcall, prompt}`（`prompt` 指向 `config/prompts/<file>.md`）。`address` 是 **base URL**（如 `https://api.deepseek.com/v1/`），端点由 SDK 追加（chat → `/chat/completions`，responses → `/responses`）；**不再要求用户手写完整端点，也没有 fetch 中间件改写 URL**。
 - **`AIlist` 只过滤、不决定顺序**（`getList('oai').filter(...)` 保持源顺序）⇒ **尝试顺序恒等于 `oai` 声明顺序**。`available:false` 是**独立闸门**；内核已内置「跳过不可用 + 逐个 try 失败换下一个」。
 - **模式列表（`tools` 与 `AIlist` 共用 `resolvePatternList`）**：`"*"` 全选 / `"!name"` 排除（排除优先）/ `"!*"` 全排除。**严格度不同**：`AIlist` **严格**（只写排除项 → 抛错），`tools` **宽松**（`["!x"]` = 一个都不给）。
 - **`PlatformManager` 构造 profile 是 `{...raw, _debug}`** ⇒ 平台 Profile 可携带任意自定义键并原样透传（qqbot 的 `platforms[].aiRouting` 由 `extensions/qqbot/src/aiRoute.js` 的 `pickAIList` 消费：维度 `scene`/`group`/`user`/`permission`/`match`，when 字段间 AND、字段内 OR，首条命中即用，`use:"*"`=沿用 `allowedAI` 只能收窄）。⚠️ `_writeProfileEnabled` 用 `JSON5.stringify` 整体重写 `secret.json`，**会丢手写注释**。
 - **用户名录**：`src/message/userDirectory.js` 的 `neonaicUserDirectory`，`code → {name, pronoun?, note?}`，存 `config/saves/identities.json`。**判据**：名录是通用概念 ⇒ 内核；「某平台怎么拿到名字」是平台特定 ⇒ 拓展。投递走 `askAI` 注册的**临时 AI 工具** `neonaic:speaker`，**不注入提示词**；入口 `/neonaic:ai whois <list|get|set|unset|show>`。qqbot 用免费的 `group_name` 自动登记；**QQ 群/C2C 拿不到发送者昵称**，只能人工登记。**未登记的 code 一律丢弃**。
 - `askAI` 的 tools 合并坑（已修）：`provider.tools` 解析为空时整个 `tools` 键曾被省略、**overrideAITool 被静默丢弃**；必须**先合并再判空**。
+- **多模态**：由 Profile 的 `multimodal`（兼容历史拼写 `mutimodal`，正字优先）声明，形如 `{ image: ["image/png"], video: [], audio: [] }`；空数组/缺省=不支持，`true` 等价 `["*"]`。`askAI` 先把 `string|fragment|fragment[]` 归一成 `NeonaicMessage`，再**按 Profile 逐个**构建内容：模态已开启时 **URL 与 base64 都会发**（URL → `data:{type:'url'}`，base64 → `data:{type:'data'}`）；未开启/格式不在白名单 → 降级 markdown（**只有这条路禁止 base64**，base64、`blob:`、`file:` 换成占位文本 `[图片已省略：来源不是可公开访问的 URL]`）。
+  - ⚠️ MIME 未知时**不放行**（配置写的是「理解哪些 MIME」）；要全收就写 `"*"` / `"image"` / `"image/*"`。`image/jpg`→`image/jpeg`、`audio/mp3`→`audio/mpeg` 等别名已折叠。
+  - ⚠️ `@ai-sdk/openai` 的 **Chat Completions**：图片 URL/data 都行；音频只收 **wav/mp3 的内联 data**（URL 会被拒）；**视频不接受内联**（URL 也传不了）。**Responses API**：非图片 URL → `input_file.file_url`；非图片内联需要 `providerOptions.openai.passThroughUnsupportedFiles = true`（Key 固定 `openai`/`azure`，**不是 Profile 名**）。
+  - ⚠️ AI SDK 默认会**下载**不在 `model.supportedUrls` 里的文件 URL 再内联 base64；`callProvider` 已按 Profile 声明给 Responses 模型补上 `audio/*` / `video/*` 的 URL 白名单，否则视频会被整个拉下来。
 
 ### qqbot 的事件投递语义（`extensions/qqbot/`）
 - ⚠️ **一帧事件会被多次 `emit`**：SDK 的 `client.em()` 把事件名按 `.` 拆开、逐个前缀 emit。所以

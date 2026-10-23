@@ -13,6 +13,8 @@ import stripAnsi from 'strip-ansi';
 import { NeonaicMessageEvent } from '../event/neonaicEventInterface.js';
 import { neonaicChore, parseString } from '../utils/chore.js';
 import { neonaicPermissionServer } from '../command/permissionServer.js';
+import { NeonaicMessage, NeonaicMessageFragment } from './messageFragment.js';
+import { NeonaicIllegalArgumentError } from '../utils/NeonaicNewableError.js';
 
 /**
  * @typedef {Object} NeonaicTReplyPayload
@@ -48,7 +50,7 @@ const REPLY_FALLBACK = Object.freeze({
 });
 
 /**
- * @param {string} msg
+ * @param {string|NeonaicMessage|NeonaicMessageFragment|NeonaicMessageFragment[]|string[]} msg
  * @param {object} [options]
  * @param {boolean} [options.dispatchEvent=true] 是否要广播事件
  * @param {boolean} [options.preventedByEvent=true] 本回复是否能通过事件来取消
@@ -57,6 +59,7 @@ const REPLY_FALLBACK = Object.freeze({
  * @param {boolean} [options.resolveCommand=true] 是否要执行命令
  * @param {import('../command/commandServer.js').NeonaicCommandContext} options.resolveCommandWith 执行时命令上下文
  * @returns {Promise<NeonaicTReplyPayload>}
+ * @throws {NeonaicIllegalArgumentError} 参数不合法
  */
 async function resolveReply(msg, options) {
   getLogger().tool.debug('[msgIn] 正为消息生成回复：', { msg, options });
@@ -72,8 +75,10 @@ async function resolveReply(msg, options) {
     preventedByEvent: true,
     dispatchEvent: true,
   }, (typeof options === 'object') ? options : {});
-
-  const trimmed = msg.trim();
+  /** 参数化消息 */
+  const message = (msg instanceof NeonaicMessage) ? msg : new NeonaicMessage(msg);
+  /** 无留白文本消息 */
+  const trimmed = (typeof msg === 'string') ? msg.trim() : message.toMarkdown().trim();
 
   // ---- 事件广播 ----
   if (config.dispatchEvent) {
@@ -82,7 +87,7 @@ async function resolveReply(msg, options) {
       new NeonaicMessageEvent(
         null,
         config.resolveCommandWith.executor,
-        msg,
+        message,
         {
           cancelable: config?.preventedByEvent,
         }
@@ -152,7 +157,7 @@ async function resolveReply(msg, options) {
     failed: false,
     status: 'AI_DISABLED'
   };
-  const aiBan = neonaicAI.isAIBanned(config.resolveCommandWith?.executor)
+  const aiBan = neonaicAI.isAIBanned(config.resolveCommandWith?.executor);
   if (/* 无权使用 AI */aiBan.banned) return {
     text: REPLY_FALLBACK.PERMISSION_OF_AI_DENIED(aiBan.until),
     failed: true,
@@ -160,7 +165,7 @@ async function resolveReply(msg, options) {
   };
   try {
     return {
-      text: stripAnsi(await neonaicAI.askAI(msg, { AIlist: config.AIlist, caller: config.resolveCommandWith?.executor })).trim(),
+      text: stripAnsi(await neonaicAI.askAI(message, { AIlist: config.AIlist, caller: config.resolveCommandWith?.executor })).trim(),
       failed: false,
       status: 'SUCCESS'
     };
