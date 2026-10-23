@@ -88,6 +88,7 @@ async function resolveReply(msg, options) {
         null,
         config.resolveCommandWith.executor,
         message,
+        undefined,
         {
           cancelable: config?.preventedByEvent,
         }
