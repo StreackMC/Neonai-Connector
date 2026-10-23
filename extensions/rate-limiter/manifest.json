@@ -1,10 +1,10 @@
 {
   "meta": {
     "version": [1, "0.1.0"],
-    "id": "rate-limiter"
+    "id": "ratelimiter"
   },
   "particulars": {
-    "name": "Rete Limiter",
+    "name": "Rate Limiter",
     "author": ["kdxiaoyi"],
     "description": "Rate Limiter prevent Neonaic from DDoS, DoS and other attackings.",
     "url": "https://github.com/StreackMC/Neonai-Connector/tree/main/extensions/rate-limiter",

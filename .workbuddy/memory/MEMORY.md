@@ -112,6 +112,6 @@
 - **`commandServer.js` 的 `executeCommand`/`executeCommandSilent` 只拦同步异常**：`async` 处理器抛出的异常以 Promise 拒绝逸出、不会被包成 `NeonaicCommandError`（产生未处理拒绝）。joyous 的 `dispatch.classify` 兜住了这一类，**内核侧应单独修**。影响全项目所有 async 命令。
 - `extLoader.js`：`disable()` 无空守卫；`replaceAll('.', '\.')` 是空操作，且键名用 `.enabled` 而 `ext.json` 样例写的是 `enable`。
 - `ai.js` 的 `neonaic:webfetch` 是半成品（`uri = new URL(address)` 赋给未声明变量，严格模式必抛，被 catch 吞掉）。`entry.js` 的 `checkPermissionFromContext(this)` 只传 1 个参数，`systemLine` 永远为空。`NeonaicUriMeta.js:184` 的 `{@link resolveUri}` 悬空。
-- **`NeonaicTable.toCsv()` 应按 RFC4180 加引号**（内容含 `,`/`"`/换行时包双引号并双写内部引号），当前只会转义 `|`，往返即错。
-- `NeonaicMatrix` 的 `rank` 恒为 `NaN`；`registerUtilsSupport.js` 里 `inverse().toString('csv')` 的参数无效（应为 `toCsv()`），`matrix.signature()` 不存在（应为 `singular`）。
-- ✅ 已修：joyous `dispatch.js` 调不存在的 `checkCommandPerms`；`codec.js` 漏 `super()`；`JoyousUdsLink` 缺 `notify()`；`uds.js` 异步连接失败不发 `error`；`config.js` 的 `bridge.ai.AIlist` 缺省误报 issue。
+- **`NeonaicTable.toCsv()` 的转义仍未按 RFC4180**：只转义 `|`，含 `,`/`"`/换行的单元格往返即错（`neonaic:matrix` 只输出纯数字，暂不受影响）。
+- ✅ 已修：joyous `dispatch.js` 调不存在的 `checkCommandPerms`；`codec.js` 漏 `super()`；`JoyousUdsLink` 缺 `notify()`；`uds.js` 异步连接失败不发 `error`；`config.js` 的 `bridge.ai.AIlist` 缺省误报 issue；`NeonaicMatrix.rank`（高斯消元）、`neonaic:matrix` 的 `singular` 字段与 `toCsv()` 调用。
+- ⚠️ **拓展 id 的连字符会让整个拓展静默不加载**：`extensions/rate-limiter/manifest.json` 曾写 `"id": "rate-limiter"`，被 `extLoader` 的 `^[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*$` 判为「描述文件无效」；`extManager.scan()` 只 `extH.warn` 一条、`loadAll` 自然跳过，表现为「限流器完全没生效」。已改 `ratelimiter`。排查用 `for f in extensions/*/manifest.json; do grep '"id"' "$f"; done`。
