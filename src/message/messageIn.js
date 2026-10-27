@@ -79,8 +79,8 @@ async function resolveReply(msg, options) {
   }, (typeof options === 'object') ? options : {});
   /** 参数化消息 */
   const message = (msg instanceof NeonaicMessage) ? msg : new NeonaicMessage(msg);
-  /** 无留白文本消息 */
-  const trimmed = (typeof msg === 'string') ? msg.trim() : message.toMarkdown().trim();
+  /** 用于参与解析命令的文本 */
+  const msgForCmd = (typeof msg === 'string') ? msg.trim() : message.markdown(/* 移除不需要的消息 */{ at: () => "" }).join("").trim();
 
   // ---- 事件广播 ----
   if (config.dispatchEvent) {
@@ -105,14 +105,14 @@ async function resolveReply(msg, options) {
   }
 
   // ---- 命令匹配 ----
-  if (config.resolveCommand && trimmed) {
+  if (config.resolveCommand && msgForCmd) {
     const prefixes = neonaicConfManager.getConfig(neonaicConfManager.CONFIG_PATHS.main).getList('prefix');
     /** 解析结果；为 null 说明没有任何命令前缀匹配，即「这不是一条命令」，交给 AI 兜底 */
-    const parsed = neonaicCommandServer.resolveCommandArgs(trimmed, prefixes, true);
+    const parsed = neonaicCommandServer.resolveCommandArgs(msgForCmd, prefixes, true);
     if (parsed) {
       const [cmdName, cmdArgs] = parsed;
       if (/* 只有前缀、没有命令名 */!cmdName) return {
-        text: REPLY_FALLBACK.UNABLE_TO_GET_CMD(trimmed),
+        text: REPLY_FALLBACK.UNABLE_TO_GET_CMD(msgForCmd),
         failed: true,
         status: 'UNABLE_TO_GET_CMD'
       };
