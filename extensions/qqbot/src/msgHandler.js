@@ -58,34 +58,44 @@ async function onPrivateMessageIn(event, pp) {
 }
 
 /**
- * 群聊消息
+ * 已被 `message.group.at` 回调认领的事件。
  *
- * ⚠️ 同一条 @ 消息会**两次**进到群聊回调里，但只有一次是有效的：
+ * 同一帧 @ 消息会被 `em()` 依次 emit 给 `message.group` 与 `message.group.at`，
+ * 两次拿到的是**同一个对象**。`em()` 的循环是同步的，所以 `onGroupMessageIn` 先让出
+ * 一个微任务，等这里同步认领后再决定是否处理。
+ * @type {WeakSet<object>}
+ */
+const claimedByGroupAt = new WeakSet();
+
+/**
+ * 同一条 @ 消息会**两次**进到群聊回调里，但只能处理一次。
  *
- *   SDK 的 `em()`（qq-official-bot/lib/client.js）把事件名按 `.` 拆开、逐个前缀 `emit`。
- *   所以一帧 `GROUP_AT_MESSAGE_CREATE` 会依次触发
- *   `message` → `message.group`（本函数）→ `message.group.at`（{@link onGroupAtMessageIn}），
- *   **两次回调拿到的是同一个事件对象**，顺序固定，与监听器注册顺序无关；
- *   而一帧 `GROUP_MESSAGE_CREATE`（已授权「获取全部群消息」）只会触发到 `message.group`。
+ * SDK 的 `em()`（qq-official-bot/lib/client.js）把事件名按 `.` 拆开、逐个前缀 `emit`：
+ * 一帧 `GROUP_AT_MESSAGE_CREATE` 会依次触发
+ * `message` → `message.group`（{@link onGroupMessageIn}）→ `message.group.at`（{@link onGroupAtMessageIn}），
+ * **两次回调拿到的是同一个事件对象**，顺序固定，与监听器注册顺序无关；
+ * 而一帧 `GROUP_MESSAGE_CREATE`（已授权「获取全部群消息」）只会触发到 `message.group`。
  *
- *   这正好对应两种授权状态：
- *     - 已授权：只有本函数，`mentions` 完整 → 一切照旧；
- *     - 未授权：本函数先跑，但 `mentions` 是空数组（@ 信息不在 payload 里），
- *       若在此处理，命令会被执行一次、随后 `onGroupAtMessageIn` 再执行一次；
- *       更糟的是若用「先到先得」的锁把后者挡掉，就永远走不到它那条 `cmd + AI` 的完整流程。
+ * ⚠️ **不能用 `event.sub_type` 判别**：`Message` 基类构造时把它固定成 `'normal'`，
+ *    而 `em()` 写入的 `sub_type: 'at'` 会被同一句 `Object.assign` 末尾的 `...payload`
+ *    用事件对象自己的 `sub_type` 覆盖回去。类型声明也写明它只能是
+ *    `'direct' | 'friend' | 'temp' | 'normal'`。所以在生产环境里 `sub_type` 永远是 `'normal'`。
  *
- *   判别依据是 `em()` 预先写在事件上的 `sub_type`：来自 `message.group.at` 的帧此处为 `'at'`。
- *   因此 `sub_type === 'at'` 时**直接让出**，由 `onGroupAtMessageIn` 独占处理，
- *   结果与已授权时「一次命令、必要时一次 AI」完全一致。
+ * 判别交给 {@link claimedByGroupAt}：`em()` 的 emit 循环是**同步**的，所以本函数先让出
+ * 一个微任务；若随后确有 `.at` 回调，它会在第一个 `await` 之前同步认领该事件，
+ * 本函数醒来后直接退出。没有 `.at` 回调（已授权场景）时则照常处理。
  *
- * 以上内容由 Agent 总结，这个特性在 SDK 中没有提及。2026-10-22
+ * 两种授权状态因此都只处理一次：
+ *   - 已授权：只有本函数，`mentions` 完整 → @ 与普通消息都走这里；
+ *   - 未授权：本函数让出，由 `onGroupAtMessageIn` 独占 `cmd + AI` 的完整流程。
  *
  * @param {qqBotBackend.GroupMessageEvent} event 
  * @param {PlatformQQBot} pp 
  */
 async function onGroupMessageIn(event, pp) {
-  // 未授权「获取全部群消息」时的 @ 消息：mentions 为空，交由 onGroupAtMessageIn 统一处理
-  if (event?.sub_type === 'at') return;
+  // 让出一个微任务，等同一 tick 内随后触发的 message.group.at 认领（见函数注释）
+  await Promise.resolve();
+  if (claimedByGroupAt.has(event)) return;
 
   /** 实例的 Profile 配置 */
   const profile_config = neonaicPlatformManager.getPlatformManager().getProfile(pp.profile);
@@ -179,13 +189,17 @@ async function onGroupMessageIn(event, pp) {
  * 群聊 @ 消息
  *
  * 只有**未授权**「获取全部群消息」时才会走到这里（已授权时 QQ 只推 `GROUP_MESSAGE_CREATE`）。
- * 本函数是这类消息的**唯一**处理者：`onGroupMessageIn` 见到 `sub_type === 'at'` 会直接让出，
- * 所以命令与 AI 都只跑一次。
+ * 本函数是这类消息的**唯一**处理者：先同步认领事件，`onGroupMessageIn` 的微任务醒来后
+ * 见到认领标记就直接退出，所以命令与 AI 都只跑一次。
+ *
+ * ⚠️ 认领必须放在**第一个 `await` 之前**。`em()` 先 emit `message.group`，本函数后跑；
+ *    若认领被推迟到微任务里，`onGroupMessageIn` 会先醒来并处理，重复执行的问题就会回来。
  *
  * @param {qqBotBackend.GroupMessageEvent} event 
  * @param {PlatformQQBot} pp 
  */
 async function onGroupAtMessageIn(event, pp) {
+  claimedByGroupAt.add(event);
   /** 实例的 Profile 配置 */
   const profile_config = neonaicPlatformManager.getPlatformManager().getProfile(pp.profile);
   const user = `qUSR#${event.user_id}@${pp.selfInfo.id}`;

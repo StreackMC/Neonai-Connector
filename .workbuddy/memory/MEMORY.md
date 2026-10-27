@@ -87,12 +87,18 @@
   `message` → **`message.group`（`onGroupMessageIn`）** → **`message.group.at`（`onGroupAtMessageIn`）**，
   **两次回调拿到同一个事件对象**、顺序固定，与监听器注册顺序无关；而 `GROUP_MESSAGE_CREATE`（已授权）只到 `message.group`。
 - ⇒ 不要用「先到先得」的锁（`event.neonaicused` / WeakSet）来去重：它确实能生效（同一对象），但会让后一个回调的
-  **整条 `cmd + AI` 流程永远不执行**，表现为 @ 消息完全没有回复。正确做法是按 `em()` 预写的
-  **`event.sub_type`** 分工：`'at'` 时 `onGroupMessageIn` 直接让出，由 `onGroupAtMessageIn` 独占。
+  **整条 `cmd + AI` 流程永远不执行**，表现为 @ 消息完全没有回复。
+- ⚠️ **`event.sub_type` 不能作为判据**：`Message` 基类构造时把它固定成 `'normal'`，而 `em()` 写入的
+  `sub_type: 'at'` 会被同一句 `Object.assign` 末尾的 `...payload`（事件对象自身）覆盖回去；类型声明也只允许
+  `'direct' | 'friend' | 'temp' | 'normal'`。生产环境里它恒为 `'normal'`，`=== 'at'` 永远不成立。
+- 正确做法：**让出 + 认领**。`em()` 的 emit 循环是同步的，`onGroupMessageIn` 先 `await Promise.resolve()`
+  让出一个微任务；`onGroupAtMessageIn` 在第一个 `await` **之前**把事件加入 `claimedByGroupAt` WeakSet。
+  随后 `onGroupMessageIn` 醒来见到认领标记就直接 `return`；没有 `.at` 回调（已授权）时则照常处理。
+  ⇒ 已授权/未授权都只处理一次，顺序不依赖监听器注册次序。
 - 两个回调各自只看得到一半上下文：`all=false` 时 `group` 那一侧 `event.mentions` 恒为 `[]`（@ 信息不在 payload 里），
   所以它既判断不出「被 @」，也不能在那里跑 AI。
-- 实测三种实现（模拟 SDK 派发顺序，`exec/resolveReply/dispatch/reply`）：无锁 `2/1/1/2` 与 `0/1/2/1`；
-  加锁 `1/0/0/1` 与 `0/0/1/0`（@ 闲聊零回复）；`sub_type` 分工 `1/1/1/1` 与 `0/1/1/1`。
+- 实测（模拟 SDK 同步派发 + 真实执行 `/neonaic:help`）：修复前 group 与 at 各跑一次、命令回复 **2** 次；
+  修复后只由 at 处理、回复 **1** 次；反向验证（去掉认领）能稳定复现 2 次。
 
 ## 配置 / gitignore / 硬约束
 - `config/main.json` — 名称/次名、`prefix`、`maxLogFileSize`、`detailedLog`、`ai.*`；`config/prompts/<profile>.md` 提示词（**gitignore**）。**`config/saves` 整目录 gitignore**，但 `ext.json`/`permissions.json` 因**规则加入前已被跟踪**而仍在版本控制；**新增文件（`identities.json`、`joyous-identities.json`）不会入库**。根目录 `secret.json` 是真凭据（gitignore），`config/secret.json` 是模板（入库）。拓展自带 `extensions/<name>/config.json` ⚠️ **已入库**且用户会填自己的部署参数（开启通道、真实频道、端口）——自检**不要依赖它的内容**，要自带配置。
