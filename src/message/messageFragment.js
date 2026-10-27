@@ -137,7 +137,7 @@ export class NeonaicMessageFragment extends NeonaicNewable {
   }
 }
 
-/** @typedef {'raw-fragment'|'text'|'br'|'image'|'video'|'audio'|'link'|'emoji'|'table'} NeonaicTMessageFragmentTypes Neonai Connector 内置的消息片段类型 */
+/** @typedef {'raw-fragment'|'text'|'br'|'image'|'video'|'audio'|'link'|'emoji'|'table'|'at'} NeonaicTMessageFragmentTypes Neonai Connector 内置的消息片段类型 */
 
 /** 表示一个文本消息片段 */
 export class NeonaicTextMsgFrag extends NeonaicMessageFragment {
@@ -239,6 +239,21 @@ export class NeonaicBrMsgFrag extends NeonaicTextMsgFrag {
 
   constructor() {
     super('\n', {});
+  }
+}
+/** 表示一个 @ 片段 */
+export class NeonaicAtMsgFrag extends NeonaicMessageFragment {
+  #payload;
+  /** @returns {NeonaicTMessageFragmentTypes} */
+  get TYPE() { return 'at'; }
+
+  get target() { return this.#payload.target; }
+  toString() { return `${this.TYPE}:${this.markdown}`; }
+  get markdown() { return ` @${this.#payload.target} `; }
+
+  constructor(target) {
+    super();
+    this.#payload = { target: parseString(target) };
   }
 }
 

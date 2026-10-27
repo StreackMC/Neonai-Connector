@@ -17,7 +17,7 @@ import { neonaicEventBus } from '../../../src/event/neonaicEventBus.js';
 import { NeonaicMessageEvent } from '../../../src/event/neonaicEventInterface.js';
 import { neonaicPermissionServer } from '../../../src/command/permissionServer.js';
 import stripAnsi from 'strip-ansi';
-import { NeonaicAudioMsgFrag, NeonaicEmojiMsgFrag, NeonaicImageMsgFrag, NeonaicLinkMsgFrag, NeonaicMessage, NeonaicTextMsgFrag, NeonaicVideoMsgFrag } from '../../../src/message/messageFragment.js';
+import { NeonaicAtMsgFrag, NeonaicAudioMsgFrag, NeonaicEmojiMsgFrag, NeonaicImageMsgFrag, NeonaicLinkMsgFrag, NeonaicMessage, NeonaicTextMsgFrag, NeonaicVideoMsgFrag } from '../../../src/message/messageFragment.js';
 
 /**
  * 好友列表私聊
@@ -29,7 +29,7 @@ async function onPrivateMessageIn(event, pp) {
   /** 实例的 Profile 配置 */
   const profile_config = neonaicPlatformManager.getPlatformManager().getProfile(pp.profile);
   const user = `qUSR#${event.user_id}@${pp.selfInfo.id}`;
-  const neonaicmsg = toNeonaicMsg(event.message, pp);
+  const neonaicmsg = toNeonaicMsg(event, pp);
   const ctx = {
     executor: [user],
     privateExecutor: true,
@@ -91,7 +91,7 @@ async function onGroupMessageIn(event, pp) {
   const profile_config = neonaicPlatformManager.getPlatformManager().getProfile(pp.profile);
   const user = `qUSR#${event.user_id}@${pp.selfInfo.id}`;
   const group = `qGRP#${event.group_id}@${pp.selfInfo.id}`;
-  const neonaicmsg = toNeonaicMsg(event.message, pp);
+  const neonaicmsg = toNeonaicMsg(event, pp);
   const markdown = neonaicmsg.toMarkdown();
   const ctx = {
     executor: [user, group],
@@ -190,13 +190,13 @@ async function onGroupAtMessageIn(event, pp) {
   const profile_config = neonaicPlatformManager.getPlatformManager().getProfile(pp.profile);
   const user = `qUSR#${event.user_id}@${pp.selfInfo.id}`;
   const group = `qGRP#${event.group_id}@${pp.selfInfo.id}`;
-  const neonaicmsg = toNeonaicMsg(event.message, pp);
+  const neonaicmsg = toNeonaicMsg(event, pp);
   const ctx = {
     executor: [user, group],
     privateExecutor: false,
     internalCall: false,
   };
-  /** @type {object[]} 在 qq-official-bot 修复 #123 之前，此处没有类型声明 */
+  /** 注意没授权时无论 @ 谁这里也没有内容 @type {object[]} 在 qq-official-bot 修复 #123 之前，此处没有类型声明 */
   const mentioned = Array.isArray(event.mentions) ? event.mentions : [];
   noteKnownNames(event, { user, group });
   pp.logMsgIn('GroupAt:', `where=${group} | from=${user} | msg=` + parseString(event.message, false).replace(/\n/g, "\\n"));
@@ -273,12 +273,13 @@ function noteKnownNames(event, targets) {
 }
 
 /**
- * @param {qqBotBackend.Sendable} raw 原始信息
+ * @param {qqBotBackend.PrivateMessageEvent} event 原始信息
  * @param {PlatformQQBot} pp 
  * @param {boolean} [textOnly=false] 开启后将只处理可用文本表达的消息片段，其余部分自动忽略，这将替换图片视频等内容为无意义占位符而非链接、Base64 等带内容的 Payload
  * @returns {NeonaicMessage}
  */
-function toNeonaicMsg(raw, pp, textOnly = false) {
+function toNeonaicMsg(event, pp, textOnly = false) {
+  const raw = event.message || [];
   let result = new NeonaicMessage();
   raw.forEach((piece) => {
     try {
@@ -315,6 +316,11 @@ function toNeonaicMsg(raw, pp, textOnly = false) {
       pp.log('warn', "无法将消息片段", piece, "转换为 Markdown，无法获取消息内容：", error);
     }
   });
+
+  const mentioned = Array.isArray(event.mentions) ? event.mentions : [];
+  for (const user of mentioned) {
+    result.appendFragment(new NeonaicAtMsgFrag(user));
+  }
   return result;
 }
 
