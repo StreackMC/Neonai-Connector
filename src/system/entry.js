@@ -2,21 +2,21 @@
  * system/entry.js — 系统层入口（组合根 Composition Root）
  *
  * 职责：
- *   1. 获取 PID 进程锁
+ *   1. 启动内核生命周期（PID 锁 / 事件循环保活 / 信号监听）—— 具体由 lifeCycleManager.js 承担
  *   2. 初始化平台管理器，导入并注册各平台，按配置启动
- *   3. 启动 CLI 命令系统（含保活）
- *   4. 注册信号处理并优雅关闭
+ *   3. 启动 CLI 命令系统
+ *   4. 把关闭步骤交给生命周期管理器，由它按「后进先出」顺序执行
  *
+ * 本文件不再自己持有任何常量或进程级状态：常量归 lifeCycleManager.js，
  * 配置 / 日志 / 平台管理器单例分别由 confManager.js / Logger.js / platformManager.js 提供。
  */
 
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { platform, release, tmpdir } from 'node:os';
 
 import { neonaicConfManager } from './confManager.js';
 import { neonaicLogger, getLogger } from '../logger/Logger.js';
-import { neonaicPidManager } from './pidManager.js';
+import { neonaicLifeCycleManager } from './lifeCycleManager.js';
 import { neonaicCommandServer } from '../command/commandServer.js';
 import { neonaicCommandInterface } from '../command/commandInterface.js';
 import { neonaicPermissionServer } from '../command/permissionServer.js';
@@ -31,50 +31,17 @@ import { neonaicUtilsSupport } from '../utils/registerUtilsSupport.js';
 
 // ---- 常量 ----
 
-const CYAN = '\x1b[36m';
-const DIM = '\x1b[2m';
-const R = '\x1b[0m';
-const T = 'Neo';
-
-/** 当前是否在调试 */
-const DEBUGING = process.argv.some((a) => a === '--debug=true' || a === '--debug');
-/** 项目根路径 */
-const ROOT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-/** 项目名称 */
-const APP_NAME = neonaicConfManager.getConfig(neonaicConfManager.CONFIG_PATHS.app).getString('name', 'neonai-connector');
-/** 项目版本 */
-const APP_VERSION = neonaicConfManager.getConfig(neonaicConfManager.CONFIG_PATHS.app).getString('version', '0.0.0');
-/** PID 锁文件路径 */
-const PID_FILE_PATH = resolve(ROOT_PATH, '.neonai.pid');
+// 内核级常量统一由生命周期管理器持有，这里只做本地取用
+const { DEBUGING, ROOT_PATH, APP_NAME, APP_VERSION, ANSI } = neonaicLifeCycleManager;
 
 // ---- 安全关闭 ----
 
-let shuttingDown = false;
-
-/** 优雅关闭：清理 CLI → 释放所有平台 → 释放 PID 锁 */
+/**
+ * 优雅关闭：由生命周期管理器按注册顺序的反向执行全部关闭步骤。
+ * @param {string} signal 触发关闭的原因
+ */
 async function shutdown(signal) {
-  if (shuttingDown) return;
-  shuttingDown = true;
-
-  // 先关闭 CLI，避免后续日志叠加在 readline prompt 上
-  neonaicCliProcessor.stopCLI();
-
-  getLogger().main.warn(`收到 ${signal}，正在关闭…`);
-
-  // 兜底：5 秒内未能优雅退出则强制退出
-  const forceTimer = setTimeout(() => process.exit(1), 5000);
-  forceTimer.unref();
-
-  // 释放所有平台
-  const pm = PlatformManager.instance;
-  if (pm) {
-    await Promise.allSettled(pm.getClosers().map((close) => close()));
-  }
-
-  getLogger().main.info('服务已关闭');
-  // 如果在调试使用断点避免停止运行
-  if (DEBUGING) debugger;
-  process.exit(0);
+  return neonaicLifeCycleManager.shutdown(signal);
 }
 
 // ---- 系统级 CLI 命令 ----
@@ -95,7 +62,7 @@ neonaicCommandServer.registerCommand('neonaic', 'version', function () {
     ` | |  | | | |  \\| | | | |  _| | |_) |\n` +
     ` | |__| |_| | |\\  | | | | |___|  _ < \n` +
     `  \\____\\___/|_| \\_| |_| |_____|_| \\_\\\n\n`;
-  if (!ctx.internalCall) projectName = T + 'nai' + 'Connector';
+  if (!ctx.internalCall) projectName = 'Neo' + 'nai' + 'Connector';
 
   const AUTHOR = 'kdxiaoyi' + ' & ' + 'StreackMC' + ' Tea' + 'm';
   const CPR = 'Copy' + 'right ' + (/\u00A9/.test('\u00A9') ? '\u00A9' : '(c)') + ' 2026 ' + AUTHOR.split(' & ')[0] + ', ' + AUTHOR.split(' & ')[1];
@@ -108,10 +75,10 @@ neonaicCommandServer.registerCommand('neonaic', 'version', function () {
   const cwd = process.cwd();
   const tmp = tmpdir();
 
-  const B = '\x1b[1m';
-  const C = '\x1b[36m';
-  const D = '\x1b[2m';
-  const R = '\x1b[0m';
+  const B = ANSI.bold;
+  const C = ANSI.cyan;
+  const D = ANSI.dim;
+  const R = ANSI.reset;
 
   const mayShowSys = neonaicPermissionServer.checkPermissionFromContext(this, [[neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.commmand.version.detailed"]]);
   const sysLine = mayShowSys ? (
@@ -160,15 +127,11 @@ neonaicCommandServer.registerCommand('neonaic', 'stop', function () {
 async function bootstrap() {
   const when_started = new Date();
 
-  // PID锁
-  neonaicPidManager.acquirePidLock(PID_FILE_PATH, getLogger());
   getLogger().main.info(`正在启动 ${APP_NAME} v${APP_VERSION}`);
 
-  // 监听 SIGNAL 等
-  getLogger().main.debug(`初始化 SIGNAL 监听`);
-  process.on('SIGINT', () => shutdown('SIGINT'));
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
-  process.on('exit', () => neonaicPidManager.releasePidLock(PID_FILE_PATH));
+  // 内核生命周期：PID 锁、事件循环保活、SIGNAL 监听（含退出时释放 PID 锁）
+  // 这三件事与「有没有平台 / 有没有拓展」无关，必须在任何可能失败的动作之前完成
+  neonaicLifeCycleManager.start();
 
   // 调试模式分支
   if (DEBUGING) {
@@ -200,6 +163,22 @@ async function bootstrap() {
 
   // 日志输出与 REPL 提示符协作：每次输出先清掉旧提示符，输出后重绘新提示符
   neonaicLogger.setConsoleHooks(neonaicCliProcessor.erasePrompt, neonaicCliProcessor.redrawPrompt);
+
+  // 关闭步骤：后注册的先执行，所以按「pid-lock → platforms → extensions → cli」注册，
+  // 实际执行顺序是 CLI → 拓展 → 平台 → PID 锁（先把提示符收起来，再拆上层依赖）。
+  // 在拓展加载之前注册，是为了让「加载到一半失败」也能走完整套关闭流程。
+  neonaicLifeCycleManager.registerCloser('platforms', async () => {
+    const pm = PlatformManager.instance;
+    if (!pm) return;
+    await Promise.allSettled(pm.getClosers().map((close) => close()));
+  });
+  neonaicLifeCycleManager.registerCloser('extensions', async () => {
+    const status = await neonaicExtensionManager.unloadAll();
+    status.failed.forEach((item) => {
+      getLogger().extH.error(`拓展“${item.id}”卸载失败：${item.error?.message ?? '未知原因'}`);
+    });
+  });
+  neonaicLifeCycleManager.registerCloser('cli', () => neonaicCliProcessor.stopCLI());
 
   // 自动发现并加载扩展
   getLogger().extH.info(`正在加载可用拓展`);
@@ -246,10 +225,11 @@ async function bootstrap() {
 }
 
 export const neonaicEntry = {
+  // 常量已移交 neonaicLifeCycleManager；这里保留同名转发，便于调试脚本沿用旧引用
   DEBUGING,
   ROOT_PATH,
   APP_NAME,
   APP_VERSION,
-  PID_FILE_PATH,
+  PID_FILE_PATH: neonaicLifeCycleManager.PID_FILE_PATH,
   bootstrap,
 };

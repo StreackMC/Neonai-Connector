@@ -2,8 +2,17 @@
 
 ## 概览与架构
 - **Neonai-Connector** — Node.js (ESM) 服务端，与「澪奈 (Neonai)」沟通的桥梁；显示名取 `config/main.json` 的 `name`/`subname`。License **AGPL-3.0 + 附加条款**（禁止复用美术资源、禁止把 "Neonai"/「澪奈」当自身品牌）。
-- 组合根 + 依赖注入：`src/system/`（entry、confManager、cliProcessor、pidManager）｜`logger/`｜`command/`（commandServer、permissionServer、commandInterface）｜`message/`（ai、messageIn、userDirectory）｜`event/`｜`platform/`｜`extension/`（extLoader、extManager）｜`utils/`（NeonaicConfig、NeonaicNewableClass、NeonaicNewableError、NeonaicUriMeta、io、chore、math）；拓展在 `extensions/`。`main.js` 瘦入口，`debug.cjs` 调试入口（非 TTY 下 `$("cmd")` 模拟 CLI）。错误统一抛 `Neonaic*Error`（IllegalState/IllegalArgument/IO/Protocol/Network ↔ Java 同名），不抛裸 `Error`。
+- 组合根 + 依赖注入：`src/system/`（entry、**lifeCycleManager**、confManager、cliProcessor、pidManager）｜`logger/`｜`command/`（commandServer、permissionServer、commandInterface）｜`message/`（ai、messageIn、userDirectory）｜`event/`｜`platform/`｜`extension/`（extLoader、extManager）｜`utils/`（NeonaicConfig、NeonaicNewableClass、NeonaicNewableError、NeonaicUriMeta、io、chore、math）；拓展在 `extensions/`。`main.js` 瘦入口，`debug.cjs` 调试入口（非 TTY 下 `$("cmd")` 模拟 CLI）。错误统一抛 `Neonaic*Error`（IllegalState/IllegalArgument/IO/Protocol/Network ↔ Java 同名），不抛裸 `Error`。
 - 函数/常量**只导出单个命名空间对象**（`export const neonaicXxx = {...}`）；**类一律 `export class`，不嵌套**；camelCase（含 extensions 侧）。例外只有 `chore.js` 的 `parseString`、`Logger.js` 的 `getLogger()`、`log4js_inject.js` 的 `configure`。对象字面量放文件**末尾**（`class` 不提升 → TDZ）；JSDoc 类型引用写 `import('./x.js').类名`，**不写悬空 `{@link}`**。
+
+## 系统层 / 生命周期（`src/system/lifeCycleManager.js`）
+- **内核级常量全部归管理器**：`DEBUGING`、`ROOT_PATH`、`APP_NAME`、`APP_VERSION`、`PID_FILE_PATH`、`ANSI`（cyan/dim/bold/reset）。`entry.js` 只做本地解构取用，`neonaicEntry` 保留同名转发（外部无消费者，只是向后兼容）。
+- **保活由管理器持有**（`startKeepAlive`/`stopKeepAlive`）：一个 **ref 状态的 `setInterval`**（1h，空回调），`keepAliveActive` 可查。**不能**放在 `cliProcessor`：非 TTY 下 `startCLI()` 提前 return 会连带丢保活，`stopCLI()` 会连进程生命周期一起停掉。也**不要**用 `process.stdin.resume()`（抢输入流、与 readline 打架）。
+- **状态机** `idle → running → stopping → stopped`：`start()` 幂等（第二次返回 false）、`stopped` 后再 start 抛 `NeonaicIllegalStateError`；`stop()` 幂等（重复调用返回**同一个 Promise/报告**）。
+- **关闭编排**：`registerCloser(name, fn)` 存入 Map（后注册先执行），`stop()` 反向遍历、单步抛错只记进报告不中断，`shutdown()` = `stop()` + 超时兜底（5s，`unref` 定时器）+ `process.exit(0)`。注册顺序在 entry 里是 `pid-lock → platforms → extensions → cli`，实际执行 `cli → extensions → platforms → pid-lock`。
+- ⚠️ **保活必须最后再停**：`runStop` 里若先 `stopKeepAlive()` 再跑 closers，当 closer 只 await 已 resolve 的 Promise 时事件循环会立刻空转退出，后面的关闭步骤永远跑不到。
+- ⚠️ **`main.js` 不能 `process.exit(0)`**：必须 `await bootstrap()`，否则异步启动被截断（日志停在「正在加载可用拓展」，退出码却是 0，且 PID 锁被 exit 钩子清掉，排障极难）。`bootstrap` 抛错（如 PID 锁冲突）现在会真的以 1 退出并打印 `[FATAL]`。
+- 卸载拓展现在走 closer（`unloadAll()`），会执行各拓展 `onDisable`——顺带暴露了 `twenty-four-points` 的缺 import（`getAllSessionUser`）。
 
 ## 内核要点
 **NeonaicConfig**：五种 `WRITE_MODES`（**默认 AUTOSAVE**）、自动重载 + `onAutoReloaded`/`onLoadFailure`、`reload`/`getFile`、`isExist`/`remove`、全套类型化 getter/putter、`getSection`（浅拷贝，非对象回退 `def`）、链式、原子写入、`\.` 转义点号、静态 `fromObject`/`fromJSON5`。有意不做：多格式（只 JSON5）、注释、RootName、BigDecimal。

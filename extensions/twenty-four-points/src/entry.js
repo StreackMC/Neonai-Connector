@@ -1,5 +1,5 @@
 import { registerMathSupportForAI as registerHicky } from './hicky.js';
-import { clearSession } from './session.js';
+import { clearSession, getAllSessionUser } from './session.js';
 
 /**
  * @this {import('../../../src/extension/extLoader.js').NeonaicExtItem}

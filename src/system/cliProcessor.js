@@ -6,7 +6,10 @@
  *   - TAB 补全（自动隐藏，不驻留）
  *   - 上下键历史命令（readline 内置）
  *   - 命令执行后的染色输出（蓝色命令、红色错误）
- *   - 保活定时器
+ *
+ * @apiNote 事件循环保活**不在这里**：那是内核生命周期（lifeCycleManager.js）的职责。
+ *          否则非 TTY 环境下 `startCLI()` 提前返回会顺带丢掉保活，
+ *          而 `stopCLI()` 又会把整个进程的生命周期一起停掉。
  */
 
 import { createInterface } from 'node:readline';
@@ -21,15 +24,11 @@ const R      = '\x1b[0m';
 
 // ---- 内部状态 ----
 let _rl = null;
-let keepAliveTimer = null;
 
 /**
  * 启动 REPL。
  */
 function startCLI() {
-  clearInterval(keepAliveTimer);
-  keepAliveTimer = setInterval(() => {}, 86400000);
-
   if (!process.stdin.isTTY) return;
 
   _rl = createInterface({
@@ -77,10 +76,8 @@ function startCLI() {
   _rl.on('close', () => {});
 }
 
-/** 停止 CLI */
+/** 停止 CLI（只收起提示符，不影响事件循环与进程生命周期） */
 function stopCLI() {
-  clearInterval(keepAliveTimer);
-  keepAliveTimer = null;
   if (_rl) { _rl.close(); _rl = null; }
 }
 
