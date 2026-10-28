@@ -180,7 +180,7 @@ async function bootstrap() {
       const result = neonaicCommandServer.executeCommand(cmdName, { internalCall: true, privateExecutor: true }, ...cmdArgs);
       return result;
     };
-    getLogger().main.info('调试模式已启用，$(cmd) 可用。也可使用 await $(cmd) 解决 Promise 问题。');
+    getLogger().main.warn('你正处于调试模式，已启用某些有助于调试的特性。');
   } else {
     // 正常模式：劫持 console 到日志系统
     globalThis.$ = null;
