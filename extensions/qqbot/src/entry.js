@@ -11,13 +11,14 @@ import qqBotBackend from 'qq-official-bot';
 const { Bot, ReceiverMode } = qqBotBackend;
 import MsgHandler, { sendMsg } from "./msgHandler.js";
 import { EVENTS, INTENTS } from "./enums.js";
-import { NeonaicIllegalArgumentError, NeonaicIOError } from '../../../src/utils/NeonaicNewableError.js';
+import { NeonaicError, NeonaicIllegalArgumentError, NeonaicIOError } from '../../../src/utils/NeonaicNewableError.js';
 import { getLogger } from '../../../src/logger/Logger.js';
 import { parseString } from '../../../src/utils/chore.js';
 import { neonaicConfManager } from '../../../src/system/confManager.js';
 
 export class PlatformQQBot extends NeonaiPlatform {
   static type = 'qqbot';
+  /** @type {qqBotBackend.Bot|null} */
   #botInstance = null;
   #selfInfo = null;
 
@@ -78,6 +79,33 @@ export class PlatformQQBot extends NeonaiPlatform {
     clearInterval(this.#watchdog);
   }
 
+  async restart() {
+    // 停止是可以强制停止的（无引用导致实例被回收）
+    await this.stop().catch();
+    // 启动需要考虑指数退让
+    try {
+      let cooldown = 1000;
+      let i = 0;
+      while (true) {
+        i++;
+        await new Promise(resolve => setTimeout(resolve, cooldown * 2 ** (i - 1)));
+        try {
+          await this.start();
+          break;
+        } catch (err) {
+          getLogger().platP.error(`QQBot[${this.profile}]: 重启失败，${cooldown}毫秒后重试：`, err);
+        }
+
+        // 如果连续失败次数过多，抛出异常
+        if (i >= 9) {
+          throw new NeonaicError(`QQBot[${this.profile}]: 重启失败次数过多，已放弃重试。`, this);
+        }
+      }
+    } catch (err) {
+      getLogger().platP.error(`QQBot[${this.profile}]: 重启失败：`, err);
+    }
+  }
+
   #watchdog = -1; #watchdogTicking = false;
   /** 主动式看门狗，qqbot框架没有喂狗接口 */
   onWatchdogTick() {
@@ -86,19 +114,11 @@ export class PlatformQQBot extends NeonaiPlatform {
     this.#watchdogTicking = true;
     this.bot.getSelfInfo().then(() => {
       this.#watchdogTicking = false;
-      getLogger().platP.debug(`QQBot[${this.profile}]: 看门狗探测成功，机器人运行正常。`);
+      getLogger().platP.debug(`QQBot[${this.profile}]/Watchdog: 看门狗探测成功，机器人服务运行正常。`);
     }).catch((err) => {
       this.#watchdogTicking = false;
-      getLogger().platP.warn(`QQBot[${this.profile}]: 看门狗反馈异常，尝试重启机器人。`, err);
-      this.stop().then(() => {
-        this.#watchdogTicking = false;
-        setTimeout(() => this.start().catch((err) => {
-          getLogger().platP.error(`QQBot[${this.profile}]: 看门狗重启失败，无法启动 Platform Profile，请检查配置。`, err);
-        }), 1000);
-      }).catch((err) => {
-        getLogger().platP.error(`QQBot[${this.profile}]: 看门狗重启失败，无法关闭 Platform Profile，请检查配置。`, err);
-      }
-      );
+      getLogger().platP.warn(`QQBot[${this.profile}]/Watchdog: 看门狗探测失败，尝试重启机器人服务。`);
+      this.restart();
     });
   }
 
