@@ -2,8 +2,13 @@ name: Build & Release
 
 on:
   push:
+    branches:
+      - '**'
     tags:
-      - 'v*' # 在打 tag 时触发，用于发布
+      - '**'
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -37,24 +42,56 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20 # 根据你的应用要求调整
-      
+          node-version: 21
+          cache: npm
       - run: npm ci
-      
-      # 构建单体二进制（以 nexe 为例）
-      # 注意：Windows 上 nexe 的 --target 可能需要调整为 windows-x64
-      - name: Build Binary with nexe
-        run: |
-          npx nexe main.js --target ${{ matrix.target }} -o my-app-${{ matrix.platform }}-${{ matrix.arch }}
-        shell: bash # 在 Windows 上也使用 bash 以确保命令一致
 
-      # 重命名 Windows 产物为 .exe（nexe 可能已自动处理，视版本而定）
-      - name: Rename for Windows
-        if: matrix.platform == 'win32'
-        run: mv my-app-win32-x64 my-app-win32-x64.exe
+      - name: Build release binary
+        if: startsWith(github.ref, 'refs/tags/')
         shell: bash
+        run: .ci/build.sh main.js "neonai-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.platform == 'win32' && '.exe' || '' }}" "${{ matrix.target }}"
+
+      - name: Build preview binary
+        if: startsWith(github.ref, 'refs/tags/') == false
+        shell: bash
+        run: .ci/build.sh debug.cjs "neonai-preview-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.platform == 'win32' && '.exe' || '' }}" "${{ matrix.target }}"
 
       - uses: actions/upload-artifact@v4
+        if: startsWith(github.ref, 'refs/tags/') == false
         with:
-          name: my-app-${{ matrix.platform }}-${{ matrix.arch }}
-          path: my-app-${{ matrix.platform }}-${{ matrix.arch }}*
+          name: neonai-preview-${{ matrix.platform }}-${{ matrix.arch }}
+          path: neonai-preview-${{ matrix.platform }}-${{ matrix.arch }}*
+
+      - uses: actions/upload-artifact@v4
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          name: neonai-${{ matrix.platform }}-${{ matrix.arch }}
+          path: neonai-${{ matrix.platform }}-${{ matrix.arch }}*
+
+  release:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          pattern: neonai-*
+          merge-multiple: true
+
+      - name: Prepare release notes
+        shell: bash
+        run: |
+          if [[ -s .ci/release-note.md ]] && grep -q '[^[:space:]]' .ci/release-note.md; then
+            cp .ci/release-note.md .ci/release-note.generated.md
+          else
+            printf '%s\n' '*No Notes Yet*' > .ci/release-note.generated.md
+          fi
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: .ci/release-note.generated.md
+          prerelease: ${{ contains(fromJSON('["dev", "beta", "alpha", "cannary"]'), github.ref_name) || contains(github.ref_name, 'dev') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'cannary') }}
+          files: release-assets/*

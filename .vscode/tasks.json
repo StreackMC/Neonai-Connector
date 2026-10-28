@@ -1,0 +1,16 @@
+{
+  "tasks": [
+    {
+      "type": "shell",
+      "command": "npx",
+      "args": [
+        "pkg",
+        "."
+      ],
+      "problemMatcher": [],
+      "label": "npx: pkg",
+      "detail": "Compile binary project"
+    }
+  ],
+  "version": "2.0.0"
+}
