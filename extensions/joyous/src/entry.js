@@ -491,7 +491,7 @@ function subscribeUdsEvents(rt) {
  * 处理一条内核消息事件，必要时内播到 MC。
  * @param {NonNullable<typeof runtime>} rt
  * @param {Array<{ joyousKey: string, platform: string, channels: string[] }>} targets
- * @param {Event} event
+ * @param {NeonaicMessageEvent} event
  * @returns {Promise<void>}
  */
 async function handleInboundChat(rt, targets, event) {
@@ -506,7 +506,7 @@ async function handleInboundChat(rt, targets, event) {
   const hit = matchChannel(targets, codes);
   if (!hit) return;
 
-  const message = normalizeBroadcastText(detail.message);
+  const message = normalizeBroadcastText(detail.message.toMarkdown());
   if (!message) return;
 
   // 执行者链里越靠前越近，故第一个不是该频道的标识即说话者

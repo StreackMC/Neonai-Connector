@@ -1,5 +1,6 @@
 import { neonaicConfManager } from '../system/confManager.js';
 import { neonaicMath } from './math.js';
+import { NeonaicNewable } from './NeonaicNewableClass.js';
 import { NeonaicIllegalArgumentError, NeonaicIllegalStateError, NeonaicNullPointerError } from './NeonaicNewableError.js';
 
 /** 当前是否处于调试模式（与 entry.js / Logger.js 保持同一判定） */
@@ -63,8 +64,21 @@ export function parseString(val, short = false, processString = false) {
   }
 
   // 只对非普通对象使用 toString
-  if (Object.prototype.toString.call(val) !== '[object Object]' && typeof val.toString === 'function') {
-    return val.toString();
+  if (typeof val?.toString === 'function' && val.toString !== Object.prototype.toString) {
+    try {
+      return parseString(val.toString(), short, processString);
+    } catch (error) {
+      // 静默忽略
+    }
+  }
+
+  // 只对非普通对象使用 toJSON，作为回退
+  if (typeof val?.toJSON === 'function' && val.toJSON !== Object.prototype.toJSON) {
+    try {
+      return parseString(JSON.stringify(val), short, processString);
+    } catch (error) {
+      // 静默忽略，走属性枚举
+    }
   }
 
   // 对象

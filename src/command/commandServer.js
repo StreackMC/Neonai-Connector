@@ -321,6 +321,16 @@ export class NeonaicCommandContext extends NeonaicNewable {
   clone() {
     return new NeonaicCommandContext(this);
   }
+
+  toJSON() {
+    return {
+      privateExecutor: this.#privateExecutor,
+      internalCall: this.#internalCall,
+      this: this.#this,
+      executor: this.#executor.slice(0),
+      timestamp: new Date(this.#timestamp),
+    }
+  }
 }
 
 /** 尝试解析执行者 @return {String} */

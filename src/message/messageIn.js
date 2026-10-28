@@ -13,6 +13,8 @@ import stripAnsi from 'strip-ansi';
 import { NeonaicMessageEvent } from '../event/neonaicEventInterface.js';
 import { neonaicChore, parseString } from '../utils/chore.js';
 import { neonaicPermissionServer } from '../command/permissionServer.js';
+import { NeonaicMessage, NeonaicMessageFragment } from './messageFragment.js';
+import { NeonaicIllegalArgumentError } from '../utils/NeonaicNewableError.js';
 
 /**
  * @typedef {Object} NeonaicTReplyPayload
@@ -25,7 +27,9 @@ import { neonaicPermissionServer } from '../command/permissionServer.js';
 /** 回复因各种原因失败的预设值 */
 const REPLY_FALLBACK = Object.freeze({
   /** 被事件中断 */
-  CANCELED_BY_EVENT: () => `（${neonaicConfManager.getBotName()}静静地看着你，并未言语）`,
+  CANCELED_BY_EVENT: (r) => r ?
+    `（${r}）`
+    :`（${neonaicConfManager.getBotName()}静静地看着你，并未言语）`,
   /** 无权限使用 AI */
   PERMISSION_OF_AI_DENIED: (pardonTime) =>
     `（${neonaicConfManager.getBotName()}静静地看着别处，并未言语）`
@@ -48,7 +52,7 @@ const REPLY_FALLBACK = Object.freeze({
 });
 
 /**
- * @param {string} msg
+ * @param {string|NeonaicMessage|NeonaicMessageFragment|NeonaicMessageFragment[]|string[]} msg
  * @param {object} [options]
  * @param {boolean} [options.dispatchEvent=true] 是否要广播事件
  * @param {boolean} [options.preventedByEvent=true] 本回复是否能通过事件来取消
@@ -57,6 +61,7 @@ const REPLY_FALLBACK = Object.freeze({
  * @param {boolean} [options.resolveCommand=true] 是否要执行命令
  * @param {import('../command/commandServer.js').NeonaicCommandContext} options.resolveCommandWith 执行时命令上下文
  * @returns {Promise<NeonaicTReplyPayload>}
+ * @throws {NeonaicIllegalArgumentError} 参数不合法
  */
 async function resolveReply(msg, options) {
   getLogger().tool.debug('[msgIn] 正为消息生成回复：', { msg, options });
@@ -72,25 +77,27 @@ async function resolveReply(msg, options) {
     preventedByEvent: true,
     dispatchEvent: true,
   }, (typeof options === 'object') ? options : {});
-
-  const trimmed = msg.trim();
+  /** 参数化消息 */
+  const message = (msg instanceof NeonaicMessage) ? msg : new NeonaicMessage(msg);
+  /** 用于参与解析命令的文本 */
+  const msgForCmd = (typeof msg === 'string') ? msg.trim() : message.markdown(/* 移除不需要的消息 */{ at: () => "" }).join("").trim();
 
   // ---- 事件广播 ----
   if (config.dispatchEvent) {
     const eventBus = (await import('../event/neonaicEventBus.js')).neonaicEventBus;
-    if (!eventBus.dispatchEvent(
-      new NeonaicMessageEvent(
-        null,
-        config.resolveCommandWith.executor,
-        msg,
-        {
-          cancelable: config?.preventedByEvent,
-        }
-      )
-    )) {
-      getLogger().tool.debug('[msgIn] 消息被事件取消，返回默认回复。');
+    const event = new NeonaicMessageEvent(
+      null,
+      config.resolveCommandWith.executor,
+      message,
+      undefined,
+      {
+        cancelable: config?.preventedByEvent,
+      }
+    );
+    if (!eventBus.dispatchEvent(event)) {
+      getLogger().tool.debug('[msgIn] 消息被事件取消：', event.reason);
       return {
-        text: REPLY_FALLBACK.CANCELED_BY_EVENT(),
+        text: REPLY_FALLBACK.CANCELED_BY_EVENT(event.reason),
         failed: true,
         status: 'CANCELED_BY_EVENT'
       };
@@ -98,14 +105,14 @@ async function resolveReply(msg, options) {
   }
 
   // ---- 命令匹配 ----
-  if (config.resolveCommand && trimmed) {
+  if (config.resolveCommand && msgForCmd) {
     const prefixes = neonaicConfManager.getConfig(neonaicConfManager.CONFIG_PATHS.main).getList('prefix');
     /** 解析结果；为 null 说明没有任何命令前缀匹配，即「这不是一条命令」，交给 AI 兜底 */
-    const parsed = neonaicCommandServer.resolveCommandArgs(msg, prefixes, true);
+    const parsed = neonaicCommandServer.resolveCommandArgs(msgForCmd, prefixes, true);
     if (parsed) {
       const [cmdName, cmdArgs] = parsed;
       if (/* 只有前缀、没有命令名 */!cmdName) return {
-        text: REPLY_FALLBACK.UNABLE_TO_GET_CMD(trimmed),
+        text: REPLY_FALLBACK.UNABLE_TO_GET_CMD(msgForCmd),
         failed: true,
         status: 'UNABLE_TO_GET_CMD'
       };
@@ -152,7 +159,7 @@ async function resolveReply(msg, options) {
     failed: false,
     status: 'AI_DISABLED'
   };
-  const aiBan = neonaicAI.isAIBanned(config.resolveCommandWith?.executor)
+  const aiBan = neonaicAI.isAIBanned(config.resolveCommandWith?.executor);
   if (/* 无权使用 AI */aiBan.banned) return {
     text: REPLY_FALLBACK.PERMISSION_OF_AI_DENIED(aiBan.until),
     failed: true,
@@ -160,7 +167,7 @@ async function resolveReply(msg, options) {
   };
   try {
     return {
-      text: stripAnsi(await neonaicAI.askAI(msg, { AIlist: config.AIlist, caller: config.resolveCommandWith?.executor })).trim(),
+      text: stripAnsi(await neonaicAI.askAI(message, { AIlist: config.AIlist, caller: config.resolveCommandWith?.executor })).trim(),
       failed: false,
       status: 'SUCCESS'
     };

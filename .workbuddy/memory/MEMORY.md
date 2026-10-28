@@ -22,6 +22,39 @@
 - **两套语义正交**：`load`/`unload` 只管运行期；`enable`/`disable` 只管 `ext.json` 开关。⚠️ **`load` 会吞掉 onEnable 异常并返回 `status:'failed'`**（不 throw）⇒ 验证 onEnable 必须**检查返回值**或直接调 `entry.onEnable()`。
 - 布局：`extensions/<name>/src/*.js` + 同级 `manifest.json`（`entry` 写 `./src/entry.js`）；`meta.id` 须匹配 `^[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*$`（**不能带连字符**，目录名可以）；拓展内导入内核用 `../../../src/...`。`enable()` 要求入口同时导出 `onEnable`/`onDisable`。会话式拓展模板：私有 `Map` + 超时清理器 + 魔术 token。
 
+## 表格 / 矩阵（`utils/math.js` 的 `NeonaicTable` / `NeonaicMatrix`）
+- 五种数据源：`object-row`（对象数组，键＝列名）、`object-col`（列对象 / 对象数组，键＝行名）、`csv`、`markdown`、`array[]`。`option.rows/cols` 与数据冲突时**按 option 来**（小则截断、大则补空；矩阵补 0）。
+- **表头**：`option.header` ∈ `true|false|'auto'`（默认 `auto`），只对 `csv`/`markdown`/`array[]` 生效。**`auto` 只在 Markdown 上推断**——分隔行紧跟首行 ⇒ 首行是表头；CSV 首行没有任何语法线索，一律视为数据（猜错会吞掉一整行真实数据），需要时必须显式 `header: true`。
+- **冲突裁决：option 优先**。文本源自带表头 + `option.colTitle` ⇒ 标题用 option，表头行**仍然从数据中移除**（否则同一份标题出现两次）。object 源的键序与 option 标题序冲突 ⇒ **按 option 重排原始数据**（键→列有映射）；文本源标题是位置性的，只能整体覆盖、无法重排。
+- 列数取「数据最大宽度」与「表头行宽度」的较大者（否则只有表头的表会被判成 0 列、标题被 `normalizeTitles` 截成空数组）。`colTitle`/`rowTitle` 接受数组或单值（单值曾被 `Array.isArray` 静默丢弃）。
+- ⚠️ **`math.js` 的 import 顺序有讲究**：`NeonaicNewable` 必须写在 `NeonaicNewableError`/`chore` **之后**，否则本文件成了既有环（NewableClass ↔ Error ↔ chore → confManager → NeonaicConfig → NewableClass）的入口，直接 `import` 即 TDZ。
+- ⚠️ `toCsv()` 的转义是错的（转义 `|` 而非 `,`/`"`），含逗号的单元格导出后无法原样解析；且 `toCsv` 写出标题行后，重新解析**必须**显式传 `header: true`。
+- `NeonaicMatrix`：`rank` 已实现（高斯消元 + 部分主元，容差按元素最大绝对值 ×1e-9 缩放；`this.matrix` 本身是副本，可原地消元）。`inverse()` **直接构造 `NeonaicMatrix`**，不要走 `map` —— 基类 `map` 返回普通 `NeonaicTable`，会把 `det()`/`squared`/`inverse()` 丢掉。`map` 第三态 `'cell'` 原先被 `assertTableDirection(…, true)` 挡住（分支成了死代码），现已放开。
+- ⚠️ **`neonaicMath.toNumber` 原先会删掉负号**（`'-1'` → `1`），矩阵里就是静默算错；现已单独处理前导 `-` / `−`（U+2212）。下游（`calc`/`solve24`/`parseStorageText`/`timeout`）均已回归。
+- `neonaic:matrix` 工具（`utils/registerUtilsSupport.js`）：行分隔容忍换行与分号；**先校验形状与单元格是否可解析为数字**再建矩阵（`NeonaicTable` 对不齐数据是截断/补空，不校验会算出「看起来正常的错答案」）；输出字段 `singular`（布尔，原 `signature` 是不存在的方法）；奇异矩阵**不返回** `inverse`；`rank/fullrank/squared` 在 schema 里改为可选，失败只回 `info`。
+
+## 科学常量与算式（同一文件的 `PHYSICAL_CONSTANTS` / `HIGH_PRECISION_CONSTANTS` / `calcExpression`）
+- **两张表，不再靠 `typeof` 分辨**：`PHYSICAL_CONSTANTS`（15 个名字，**全是 `number`**：π/pi、e、φ/phi、c、R、F、α/a、mppme、VM/Vm/V_M/V_m）与 `HIGH_PRECISION_CONSTANTS`（41 个名字，值是 **CODATA 2022 十进制字面量字符串**，允许负号与 `e` 指数）。浮点表是高精表的**子集**，模块加载时断言「浮点表每个名字都在高精表里」，缺项直接抛 `NeonaicIllegalStateError`。导出为 `neonaicMath.constants` / `neonaicMath.highPrecisionConstants`。
+- 高精表用字面量而不用 `mantissa×10^exponent`：旧整指存储位数少（`h` 只有 7 位、`NA` 7 位），混进 50 位 π 的算式会平白损失精度；字面量按 scale 精确移位，同一个常量在 science=20/100 下是同一个数。**`ħ` 由精确 h 与 50 位 π 推出**（1.054571817646156391262428003302280744722e-34），`VM` 由 R·T/p 推出。
+- **`toNumber` 只查浮点表**（整串匹配，允许前置 `-`），表里全是 number，故**没有 `typeof` 判断**；高精常量一律不转换（`'NA'`/`'h'` → NaN）。查表用 `hasOwnProperty`，否则 `constructor`/`__proto__` 会被当成常量。
+- **`calc` 的新特性**：常量（`basicConstant` 默认 true）、隐式乘法（`2π`、`3(1+2)`、`(1+2)(3+4)`，但**不认数字**，`2 3` 仍报错）、对数（`log` 默认 false；`ln2`/`lg 100`，操作数取一元表达式，`lg8/lg2` 换底）、**后缀阶乘 `!`**（`factorial` 默认 false）。解析链：加减 → 乘除模(含隐式) → 一元 → 幂 → 根号 → 对数 → **阶乘** → 常量/括号/数字。阶乘比 `^` 更紧：`2^3!`=64、`-3!`=-6、`3!!`=`(3!)!`=720；浮点 170! 封顶、高精 10000! 封顶，参数必须是非负整数。
+- 浮点算式里用只有高精版本的常量（NA/h/…）会**明确报错**并提示开 `science`；高精模式用未知/无高精版本的名字也会分别报错。
+- **`science` = 小数位数（1..200），已实现 BigInt 定点引擎**：`+ - * /`、整数次幂、n 次根、`ln`/`lg`、阶乘，返回 `NeonaicTDecimalStore`。内部值 = 真实值 × 10^scale 的 BigInt；工作精度 = scale+12，**只在最后舍入一次**。
+  - `ln` 用 `2·atanh((m-1)/(m+1))` 级数，先把值归一化到 [1,10) 再折半到 [1,2)（y ≤ 1/3，每项缩到 1/9）；`ln2`/`ln10` 按精度缓存。`lg` 的分子分母都取到工作精度再相除（否则 `lg8/lg2` 会明显漂）。
+  - n 次根：integerRoot（牛顿 + 末位修正）在 `a·10^(scale(n-1)+n)` 上取整根，再 `/10` 四舍五入 —— 少算这一位会让末位总是偏小。
+  - ⚠️ 每步都按 scale 舍入，链式除法/换底末位会漂 1 ulp（`lg8/lg2` → `3.00000000000000000003`），属定点固有行为。
+  - ⚠️ **常量在给定 scale 下会舍入为 0 时必须报错**（如 `h` 在 science=20）：`scaledFromDecimal` 检测到非零字面量转出 0 就抛 `NeonaicIllegalArgumentError`，并算出「至少多少位才不为 0」与「保留全部有效数字需要多少位」（h 分别是 34 / 42）。静默变 0 曾让 `h*NA` 整条算式失效。
+  - 明确拒绝的情形：非整数指数、非法 `science`（非 1..200 整数）、阶乘参数非整数/超上限。`decimalToString` 与 JS 的 `Number#toString` 对齐（小数点后超 6 个 0 才科学记数法）。
+- ⚠️ `µ`(U+00B5) 与 `μ`(U+03BC) 码位不同但长得一样，`CALC_SYMBOLS` 已把前者折成后者，否则 `µ0` 查不到常量。`！`（全角）也会折成 `!`。
+
+## 消息片段协议（`src/message/messageFragment.js`）
+- `NeonaicMessage` 持有片段链：`markdown(override)` 返回**数组**（可按 `TYPE` 替换或置 null），`toMarkdown()` 拼成字符串；`forEachFrag`/`mapFrag` 的回调第三个参数是 `TYPE`。构造函数接受 `string | fragment | fragment[] | string[] | NeonaicMessage`，留空创建空消息。⚠️ 构造函数末尾曾有一个**无条件 `throw`**，任何消息都构造失败。
+- 片段类型：`text`/`br`/`link`/`emoji`/`table`/`image`/`audio`/`video`，共同基类 `NeonaicMessageFragment`（抽象，直接实例化抛错）。
+- ⚠️ **ESM 私有字段不能跨类访问**：在基类声明 `#payload`、子类写 `this.#payload` 会在**解析期**报 `Private field '#payload' must be declared in an enclosing class`（不是运行期）。每个类必须自己声明 `#payload`。
+- 媒体统一继承 `NeonaicMediaMsgFrag`（抽象；子类用静态 `KIND`/`TAG` 声明身份）：负责 `Buffer|Blob|URL|Request|NeonaicUriMeta|string` 归一化（Buffer → data URL；Blob 在浏览器走 object URL，需 `dispose()`）、MIME 推断（magic number + 扩展名兜底）、HTML 标签生成（`src`/`title`/`aria-label`/`controls`/`loop`/`muted`/`autoplay`/`preload`，`poster` 仅 video）。图片只覆写 `markdown` 为 `![alt](url "title")`。
+- ⚠️ `NeonaicTable.map(cb)` 默认 `direction='row'`，回调收到的是**整行数组**；逐格处理必须传 `'cell'`（`NeonaicTableMsgFrag` 曾因此把每行 stringify 成 `"['a','b']"`）。
+- ⚠️ `NeonaicUriMeta.toString()` 会补尾斜杠（`https://e.com` → `https://e.com/`），断言链接输出时要按规范化后的值。
+
 ## Joyous 桥接拓展（`extensions/joyous/`）
 与 Java 插件 [StreackMC/Joyous](https://github.com/StreackMC/Joyous) 协作的双通道桥接。**V1 见 `PROTOCOL.md`（§16 是 V2 落地说明）；V2 增量以 `PROTOCOL-V2.md` 为唯一约定来源，必需改动清单见 `NEONAIC-REQUIRED-CHANGES.md`**（后两份是对端 `docs/neonaic/` 的副本）。常量以 `src/protocol/constants.js` 为准，对端以 `Neonaic/bridge/BridgeProtocol.java` 为准，**自检解析该 Java 文件逐项比对**。
 - 分层：`src/entry.js` 组合根｜`config.js`｜`identity.js`｜`status.js`｜`protocol/`（`constants`/`codec`/`session`/`http`/`uds`/`dispatch`/`methods`）。**`protocol/` 下导入内核是 4 层** `../../../../src/...`。两个接缝：`dispatch.js` 认识命令系统、`methods.js` 认识平台/AI/身份，**都不认识具体传输**；http.js/uds.js 只认「handler + {method,payload}」。
@@ -37,12 +70,35 @@
 - ⚠️ 改 `extensions/joyous/config.json` 后要 `/neonaic:reload` **并重启拓展**，通道不热切换。
 
 ## AI 调用链
-- 链路：平台事件 → 平台拓展（qqbot/msgHandler）→ `neonaicMessageIn.resolveReply(msg, {AI, AIlist, resolveCommandWith})` → `neonaicAI.askAI(msg, {AIlist, caller, speaker, overridePrompt, overrideAITool})` → `callProvider`。**AI Profile = `secret.json` 的 `oai[]`**：`{name, available, address, token, model, tools, maxToolcall, prompt}`（`prompt` 指向 `config/prompts/<file>.md`）。
+- 链路：平台事件 → 平台拓展（qqbot/msgHandler）→ `neonaicMessageIn.resolveReply(msg, {AI, AIlist, resolveCommandWith})` → `neonaicAI.askAI(msg, {AIlist, caller, speaker, overridePrompt, overrideAITool})` → `callProvider`。**AI Profile = `secret.json` 的 `oai[]`**：`{name, available, address, token, model, tools, maxToolcall, prompt}`（`prompt` 指向 `config/prompts/<file>.md`）。`address` 是 **base URL**（如 `https://api.deepseek.com/v1/`），端点由 SDK 追加（chat → `/chat/completions`，responses → `/responses`）；**不再要求用户手写完整端点，也没有 fetch 中间件改写 URL**。
 - **`AIlist` 只过滤、不决定顺序**（`getList('oai').filter(...)` 保持源顺序）⇒ **尝试顺序恒等于 `oai` 声明顺序**。`available:false` 是**独立闸门**；内核已内置「跳过不可用 + 逐个 try 失败换下一个」。
 - **模式列表（`tools` 与 `AIlist` 共用 `resolvePatternList`）**：`"*"` 全选 / `"!name"` 排除（排除优先）/ `"!*"` 全排除。**严格度不同**：`AIlist` **严格**（只写排除项 → 抛错），`tools` **宽松**（`["!x"]` = 一个都不给）。
 - **`PlatformManager` 构造 profile 是 `{...raw, _debug}`** ⇒ 平台 Profile 可携带任意自定义键并原样透传（qqbot 的 `platforms[].aiRouting` 由 `extensions/qqbot/src/aiRoute.js` 的 `pickAIList` 消费：维度 `scene`/`group`/`user`/`permission`/`match`，when 字段间 AND、字段内 OR，首条命中即用，`use:"*"`=沿用 `allowedAI` 只能收窄）。⚠️ `_writeProfileEnabled` 用 `JSON5.stringify` 整体重写 `secret.json`，**会丢手写注释**。
 - **用户名录**：`src/message/userDirectory.js` 的 `neonaicUserDirectory`，`code → {name, pronoun?, note?}`，存 `config/saves/identities.json`。**判据**：名录是通用概念 ⇒ 内核；「某平台怎么拿到名字」是平台特定 ⇒ 拓展。投递走 `askAI` 注册的**临时 AI 工具** `neonaic:speaker`，**不注入提示词**；入口 `/neonaic:ai whois <list|get|set|unset|show>`。qqbot 用免费的 `group_name` 自动登记；**QQ 群/C2C 拿不到发送者昵称**，只能人工登记。**未登记的 code 一律丢弃**。
 - `askAI` 的 tools 合并坑（已修）：`provider.tools` 解析为空时整个 `tools` 键曾被省略、**overrideAITool 被静默丢弃**；必须**先合并再判空**。
+- **多模态**：由 Profile 的 `multimodal`（兼容历史拼写 `mutimodal`，正字优先）声明，形如 `{ image: ["image/png"], video: [], audio: [] }`；空数组/缺省=不支持，`true` 等价 `["*"]`。`askAI` 先把 `string|fragment|fragment[]` 归一成 `NeonaicMessage`，再**按 Profile 逐个**构建内容：模态已开启时 **URL 与 base64 都会发**（URL → `data:{type:'url'}`，base64 → `data:{type:'data'}`）；未开启/格式不在白名单 → 降级 markdown（**只有这条路禁止 base64**，base64、`blob:`、`file:` 换成占位文本 `[图片已省略：来源不是可公开访问的 URL]`）。
+  - ⚠️ MIME 未知时**不放行**（配置写的是「理解哪些 MIME」）；要全收就写 `"*"` / `"image"` / `"image/*"`。`image/jpg`→`image/jpeg`、`audio/mp3`→`audio/mpeg` 等别名已折叠。
+  - ⚠️ `@ai-sdk/openai` 的 **Chat Completions**：图片 URL/data 都行；音频只收 **wav/mp3 的内联 data**（URL 会被拒）；**视频不接受内联**（URL 也传不了）。**Responses API**：非图片 URL → `input_file.file_url`；非图片内联需要 `providerOptions.openai.passThroughUnsupportedFiles = true`（Key 固定 `openai`/`azure`，**不是 Profile 名**）。
+  - ⚠️ AI SDK 默认会**下载**不在 `model.supportedUrls` 里的文件 URL 再内联 base64；`callProvider` 已按 Profile 声明给 Responses 模型补上 `audio/*` / `video/*` 的 URL 白名单，否则视频会被整个拉下来。
+
+### qqbot 的事件投递语义（`extensions/qqbot/`）
+- ⚠️ **一帧事件会被多次 `emit`**：SDK 的 `client.em()` 把事件名按 `.` 拆开、逐个前缀 emit。所以
+  `GROUP_AT_MESSAGE_CREATE`（未授权「获取全部群消息」时 QQ 只推这一种）会依次触发
+  `message` → **`message.group`（`onGroupMessageIn`）** → **`message.group.at`（`onGroupAtMessageIn`）**，
+  **两次回调拿到同一个事件对象**、顺序固定，与监听器注册顺序无关；而 `GROUP_MESSAGE_CREATE`（已授权）只到 `message.group`。
+- ⇒ 不要用「先到先得」的锁（`event.neonaicused` / WeakSet）来去重：它确实能生效（同一对象），但会让后一个回调的
+  **整条 `cmd + AI` 流程永远不执行**，表现为 @ 消息完全没有回复。
+- ⚠️ **`event.sub_type` 不能作为判据**：`Message` 基类构造时把它固定成 `'normal'`，而 `em()` 写入的
+  `sub_type: 'at'` 会被同一句 `Object.assign` 末尾的 `...payload`（事件对象自身）覆盖回去；类型声明也只允许
+  `'direct' | 'friend' | 'temp' | 'normal'`。生产环境里它恒为 `'normal'`，`=== 'at'` 永远不成立。
+- 正确做法：**让出 + 认领**。`em()` 的 emit 循环是同步的，`onGroupMessageIn` 先 `await Promise.resolve()`
+  让出一个微任务；`onGroupAtMessageIn` 在第一个 `await` **之前**把事件加入 `claimedByGroupAt` WeakSet。
+  随后 `onGroupMessageIn` 醒来见到认领标记就直接 `return`；没有 `.at` 回调（已授权）时则照常处理。
+  ⇒ 已授权/未授权都只处理一次，顺序不依赖监听器注册次序。
+- 两个回调各自只看得到一半上下文：`all=false` 时 `group` 那一侧 `event.mentions` 恒为 `[]`（@ 信息不在 payload 里），
+  所以它既判断不出「被 @」，也不能在那里跑 AI。
+- 实测（模拟 SDK 同步派发 + 真实执行 `/neonaic:help`）：修复前 group 与 at 各跑一次、命令回复 **2** 次；
+  修复后只由 at 处理、回复 **1** 次；反向验证（去掉认领）能稳定复现 2 次。
 
 ## 配置 / gitignore / 硬约束
 - `config/main.json` — 名称/次名、`prefix`、`maxLogFileSize`、`detailedLog`、`ai.*`；`config/prompts/<profile>.md` 提示词（**gitignore**）。**`config/saves` 整目录 gitignore**，但 `ext.json`/`permissions.json` 因**规则加入前已被跟踪**而仍在版本控制；**新增文件（`identities.json`、`joyous-identities.json`）不会入库**。根目录 `secret.json` 是真凭据（gitignore），`config/secret.json` 是模板（入库）。拓展自带 `extensions/<name>/config.json` ⚠️ **已入库**且用户会填自己的部署参数（开启通道、真实频道、端口）——自检**不要依赖它的内容**，要自带配置。
@@ -62,4 +118,6 @@
 - **`commandServer.js` 的 `executeCommand`/`executeCommandSilent` 只拦同步异常**：`async` 处理器抛出的异常以 Promise 拒绝逸出、不会被包成 `NeonaicCommandError`（产生未处理拒绝）。joyous 的 `dispatch.classify` 兜住了这一类，**内核侧应单独修**。影响全项目所有 async 命令。
 - `extLoader.js`：`disable()` 无空守卫；`replaceAll('.', '\.')` 是空操作，且键名用 `.enabled` 而 `ext.json` 样例写的是 `enable`。
 - `ai.js` 的 `neonaic:webfetch` 是半成品（`uri = new URL(address)` 赋给未声明变量，严格模式必抛，被 catch 吞掉）。`entry.js` 的 `checkPermissionFromContext(this)` 只传 1 个参数，`systemLine` 永远为空。`NeonaicUriMeta.js:184` 的 `{@link resolveUri}` 悬空。
-- ✅ 已修：joyous `dispatch.js` 调不存在的 `checkCommandPerms`；`codec.js` 漏 `super()`；`JoyousUdsLink` 缺 `notify()`；`uds.js` 异步连接失败不发 `error`；`config.js` 的 `bridge.ai.AIlist` 缺省误报 issue。
+- **`NeonaicTable.toCsv()` 的转义仍未按 RFC4180**：只转义 `|`，含 `,`/`"`/换行的单元格往返即错（`neonaic:matrix` 只输出纯数字，暂不受影响）。
+- ✅ 已修：joyous `dispatch.js` 调不存在的 `checkCommandPerms`；`codec.js` 漏 `super()`；`JoyousUdsLink` 缺 `notify()`；`uds.js` 异步连接失败不发 `error`；`config.js` 的 `bridge.ai.AIlist` 缺省误报 issue；`NeonaicMatrix.rank`（高斯消元）、`neonaic:matrix` 的 `singular` 字段与 `toCsv()` 调用。
+- ⚠️ **拓展 id 的连字符会让整个拓展静默不加载**：`extensions/rate-limiter/manifest.json` 曾写 `"id": "rate-limiter"`，被 `extLoader` 的 `^[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*$` 判为「描述文件无效」；`extManager.scan()` 只 `extH.warn` 一条、`loadAll` 自然跳过，表现为「限流器完全没生效」。已改 `ratelimiter`。排查用 `for f in extensions/*/manifest.json; do grep '"id"' "$f"; done`。

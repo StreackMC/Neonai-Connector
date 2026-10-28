@@ -53,9 +53,11 @@ export class PlatformQQBot extends NeonaiPlatform {
     if (this.bot === null) throw new NeonaicIOError(`无法创建 QQBot 实例，请检查配置`, this);
 
     // 注册消息事件
+    // 注意：message.group 与 message.group.at 谁先跑由 SDK 的 em() 决定（按事件名前缀逐个
+    // emit，恒为 message → message.group → message.group.at），与这里注册的先后无关；
+    // 两者的分工见 msgHandler.js 中 onGroupMessageIn 的注释。
     this.bot.on(EVENTS.message.group, (e) => MsgHandler.onGroupMessageIn(e, this));
-    // see JSDoc of the func
-    //this.bot.on(EVENTS.message.groupAt, (e) => MsgHandler.onGroupAtMessageIn(e, this));
+    this.bot.on(EVENTS.message.groupAt, (e) => MsgHandler.onGroupAtMessageIn(e, this));
     this.bot.on(EVENTS.message.private, (e) => MsgHandler.onPrivateMessageIn(e, this));
     await this.bot.start();
 
@@ -76,14 +78,25 @@ export class PlatformQQBot extends NeonaiPlatform {
     clearInterval(this.#watchdog);
   }
 
-  #watchdog = -1;
+  #watchdog = -1; #watchdogTicking = false;
   /** 主动式看门狗，qqbot框架没有喂狗接口 */
   onWatchdogTick() {
     if (!this.bot) return;
-    this.bot.getSelfInfo().catch((err) => {
+    if (this.#watchdogTicking) return;
+    this.#watchdogTicking = true;
+    this.bot.getSelfInfo().then(() => {
+      this.#watchdogTicking = false;
+      getLogger().platP.debug(`QQBot[${this.profile}]: 看门狗探测成功，机器人运行正常。`);
+    }).catch((err) => {
+      this.#watchdogTicking = false;
       getLogger().platP.warn(`QQBot[${this.profile}]: 看门狗反馈异常，尝试重启机器人。`, err);
-      this.stop().then(() => setTimeout(() => this.start(), 1000)).catch((err) => {
-        getLogger().platP.error(`QQBot[${this.profile}]: 看门狗重启失败，请检查配置。`, err);
+      this.stop().then(() => {
+        this.#watchdogTicking = false;
+        setTimeout(() => this.start().catch((err) => {
+          getLogger().platP.error(`QQBot[${this.profile}]: 看门狗重启失败，无法启动 Platform Profile，请检查配置。`, err);
+        }), 1000);
+      }).catch((err) => {
+        getLogger().platP.error(`QQBot[${this.profile}]: 看门狗重启失败，无法关闭 Platform Profile，请检查配置。`, err);
       }
       );
     });

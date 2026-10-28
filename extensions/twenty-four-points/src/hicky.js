@@ -47,9 +47,9 @@ const MAX_LISTED_IN_GAME = 5;
 export function registerMathSupportForAI() {
   // ai tool
   neonaicAI.registerAITool('twentyfourpoints', '24solver', {
-    description: '求解指定的 24 点游戏',
+    description: '求解指定的 24 点游戏及其变种',
     inputSchema: z.object({
-      poker: z.array(z.number().int().min(1).max(13)).length(4).describe('四张牌的点数，范围 1~13'),
+      poker: z.array(z.number().int().min(1).max(Number.MAX_SAFE_INTEGER)).length(4).describe('四张牌的点数，必须是正整数'),
       target: z.number().int().min(1).max(100).optional().default(24).describe('目标点数，默认 24'),
     }).describe('四张牌的点数和目标点数'),
     execute: ({ poker, target }) => {

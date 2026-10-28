@@ -1,4 +1,5 @@
 import { NeonaicCommandContext } from "../command/commandServer.js";
+import { NeonaicMessage } from "../message/messageFragment.js";
 import { NeonaiPlatform } from "../platform/platformInterface.js";
 import { parseString } from "../utils/chore.js";
 import { NeonaicNewable } from "../utils/NeonaicNewableClass.js";
@@ -126,7 +127,7 @@ export class NeonaicEvent extends CustomEvent {
 
 /**
  * @typedef {Object} NeonaicTMessageEventPayload
- * @property {string|*} message 消息内容；消息内容不会自动转文本
+ * @property {NeonaicMessage} message 消息内容
  * @property {string[]} user 消息来自哪个场景上下文；可以参考 {@link import('../command/commandServer.js').NeonaicCommandContext.executor()}
  * @property {NeonaiPlatform|null} pm 平台连接器实例
  * @property {(msg: string) => (Promise<void>|void)} [reply] 回复消息接口；存在时用于表述「被动等待回复」而非「主动请求回复」。
@@ -144,7 +145,7 @@ export class NeonaicMessageEvent extends NeonaicEvent {
    * 构造一个事件
    * @param {NeonaiPlatform|null} p 平台连接器实例
    * @param {string|string[]} user 消息来自哪个场景上下文；可以参考 {@link import('../command/commandServer.js').NeonaicCommandContext.executor()}
-   * @param {string|*} message 消息内容；消息内容不会自动转文本，但不能是 undefined
+   * @param {string|NeonaicMessage|NeonaicMessageFragment[]|NeonaicMessageFragment|string[]} message 消息内容；消息内容不会自动转文本，但不能是 undefined
    * @param {(msg: string) => (Promise<void>|void)} [replyFunc] 回复消息接口；存在时用于表述「被动等待回复」而非「主动请求回复」。
    * @param {NeonaicTEventOptions} [options] 事件选项
    * @throws {NeonaicIllegalArgumentError} 参数不合法
@@ -152,12 +153,32 @@ export class NeonaicMessageEvent extends NeonaicEvent {
   constructor(p, user, message, replyFunc = null, options = {}) {
     if (!(p instanceof NeonaiPlatform) && !(p === null)) throw new NeonaicIllegalArgumentError("pm must be an instance of NeonaiPlatform");
     if (typeof message === 'undefined') throw new NeonaicIllegalArgumentError("message must be defined");
+    const msg = (message instanceof NeonaicMessage) ? message : new NeonaicMessage(message);
     super(NeonaicMessageEvent.EVENT_TYPE, {
-      message: message,
+      message: msg,
       user: Array.isArray(user) ? user.map(parseString) : [parseString(user)],
       pm: p,
       reply: (typeof replyFunc === 'function') ? replyFunc : undefined,
     }, options);
+  }
+
+  #reason = "";
+
+  /** 获取拒绝原因 @returns {string} */
+  get reason() { return this.#reason; };
+
+  /** 以指定理由拒绝产生回复 */
+  refuse(why) {
+    super.preventDefault();
+    this.#reason = parseString(why ?? '');
+  }
+
+  /**
+   * @deprecated 不推荐使用本内置方法，因为语义不明
+   * @param {string} [v] 拒绝理由
+   */
+  preventDefault(v) {
+    this.refuse(v);
   }
 }
 

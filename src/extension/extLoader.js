@@ -100,9 +100,9 @@ export class NeonaicExtItem extends NeonaicNewable {
   /** 获取拓展入口文件地址 */
   get entry_path() { return this.#entry; }
   /** 获取启用状态 @returns {null|boolean} */
-  get enabled() { return this.#global_config.getBoolean(this.id.replaceAll('.', '\.') + ".enabled", true); }
+  get enabled() { return this.#global_config.getBoolean(this.id.replaceAll('.', '\\.') + ".enabled", true); }
   /** 设置启用状态，**不会**影响插件的现行状态 */
-  set enabled(v) { this.#global_config.putBoolean(this.id.replaceAll('.', '\.') + ".enabled", v); }
+  set enabled(v) { this.#global_config.putBoolean(this.id.replaceAll('.', '\\.') + ".enabled", v); }
 
   /**
    * 加载拓展

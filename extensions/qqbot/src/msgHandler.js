@@ -17,6 +17,7 @@ import { neonaicEventBus } from '../../../src/event/neonaicEventBus.js';
 import { NeonaicMessageEvent } from '../../../src/event/neonaicEventInterface.js';
 import { neonaicPermissionServer } from '../../../src/command/permissionServer.js';
 import stripAnsi from 'strip-ansi';
+import { NeonaicAtMsgFrag, NeonaicAudioMsgFrag, NeonaicEmojiMsgFrag, NeonaicImageMsgFrag, NeonaicLinkMsgFrag, NeonaicMessage, NeonaicTextMsgFrag, NeonaicVideoMsgFrag } from '../../../src/message/messageFragment.js';
 
 /**
  * 好友列表私聊
@@ -28,7 +29,7 @@ async function onPrivateMessageIn(event, pp) {
   /** 实例的 Profile 配置 */
   const profile_config = neonaicPlatformManager.getPlatformManager().getProfile(pp.profile);
   const user = `qUSR#${event.user_id}@${pp.selfInfo.id}`;
-  const markdown = toMarkdown(event.message, pp);
+  const neonaicmsg = toNeonaicMsg(event, pp);
   const ctx = {
     executor: [user],
     privateExecutor: true,
@@ -37,10 +38,10 @@ async function onPrivateMessageIn(event, pp) {
   noteKnownNames(event, { user });
 
   pp.logMsgIn('Private:', `from=${user} | msg=` + parseString(event.message, false).replace(/\n/g, "\\n"));
-  const reply = await neonaicMessageIn.resolveReply(markdown, {
+  const reply = await neonaicMessageIn.resolveReply(neonaicmsg, {
     AI: profile_config.useAI,
     AIlist: pickAIList(profile_config.aiRouting, profile_config.allowedAI, {
-      scene: 'private', profile: pp.profile, user, group: '', executor: [user], text: markdown,
+      scene: 'private', profile: pp.profile, user, group: '', executor: [user], text: neonaicmsg.toMarkdown(),
     }),
     resolveCommandWith: ctx,
   });
@@ -57,17 +58,51 @@ async function onPrivateMessageIn(event, pp) {
 }
 
 /**
- * 群聊消息，处理「获取全部消息」
- * 
+ * 已被 `message.group.at` 回调认领的事件。
+ *
+ * 同一帧 @ 消息会被 `em()` 依次 emit 给 `message.group` 与 `message.group.at`，
+ * 两次拿到的是**同一个对象**。`em()` 的循环是同步的，所以 `onGroupMessageIn` 先让出
+ * 一个微任务，等这里同步认领后再决定是否处理。
+ * @type {WeakSet<object>}
+ */
+const claimedByGroupAt = new WeakSet();
+
+/**
+ * 同一条 @ 消息会**两次**进到群聊回调里，但只能处理一次。
+ *
+ * SDK 的 `em()`（qq-official-bot/lib/client.js）把事件名按 `.` 拆开、逐个前缀 `emit`：
+ * 一帧 `GROUP_AT_MESSAGE_CREATE` 会依次触发
+ * `message` → `message.group`（{@link onGroupMessageIn}）→ `message.group.at`（{@link onGroupAtMessageIn}），
+ * **两次回调拿到的是同一个事件对象**，顺序固定，与监听器注册顺序无关；
+ * 而一帧 `GROUP_MESSAGE_CREATE`（已授权「获取全部群消息」）只会触发到 `message.group`。
+ *
+ * ⚠️ **不能用 `event.sub_type` 判别**：`Message` 基类构造时把它固定成 `'normal'`，
+ *    而 `em()` 写入的 `sub_type: 'at'` 会被同一句 `Object.assign` 末尾的 `...payload`
+ *    用事件对象自己的 `sub_type` 覆盖回去。类型声明也写明它只能是
+ *    `'direct' | 'friend' | 'temp' | 'normal'`。所以在生产环境里 `sub_type` 永远是 `'normal'`。
+ *
+ * 判别交给 {@link claimedByGroupAt}：`em()` 的 emit 循环是**同步**的，所以本函数先让出
+ * 一个微任务；若随后确有 `.at` 回调，它会在第一个 `await` 之前同步认领该事件，
+ * 本函数醒来后直接退出。没有 `.at` 回调（已授权场景）时则照常处理。
+ *
+ * 两种授权状态因此都只处理一次：
+ *   - 已授权：只有本函数，`mentions` 完整 → @ 与普通消息都走这里；
+ *   - 未授权：本函数让出，由 `onGroupAtMessageIn` 独占 `cmd + AI` 的完整流程。
+ *
  * @param {qqBotBackend.GroupMessageEvent} event 
  * @param {PlatformQQBot} pp 
  */
 async function onGroupMessageIn(event, pp) {
+  // 让出一个微任务，等同一 tick 内随后触发的 message.group.at 认领（见函数注释）
+  await Promise.resolve();
+  if (claimedByGroupAt.has(event)) return;
+
   /** 实例的 Profile 配置 */
   const profile_config = neonaicPlatformManager.getPlatformManager().getProfile(pp.profile);
   const user = `qUSR#${event.user_id}@${pp.selfInfo.id}`;
   const group = `qGRP#${event.group_id}@${pp.selfInfo.id}`;
-  const markdown = toMarkdown(event.message, pp);
+  const neonaicmsg = toNeonaicMsg(event, pp);
+  const markdown = neonaicmsg.toMarkdown();
   const ctx = {
     executor: [user, group],
     privateExecutor: false,
@@ -80,7 +115,7 @@ async function onGroupMessageIn(event, pp) {
 
   // 处理 @ 机器人的情形以及提到澪奈的情形，也就是主动式回复
   if (Array.isArray(mentioned) && mentioned.length > 0 && mentioned.some((u) => !!u.is_you)) {
-    const reply = await neonaicMessageIn.resolveReply(markdown, {
+    const reply = await neonaicMessageIn.resolveReply(neonaicmsg, {
       AI: profile_config.useAI,
       AIlist: pickAIList(profile_config.aiRouting, profile_config.allowedAI, {
         scene: 'group', profile: pp.profile, user, group, executor: [user, group], text: markdown,
@@ -136,7 +171,7 @@ async function onGroupMessageIn(event, pp) {
   }
 
   // 再使用被动回复
-  neonaicEventBus.dispatchEvent(new NeonaicMessageEvent(pp, [user, group], markdown, async (msg) => {
+  neonaicEventBus.dispatchEvent(new NeonaicMessageEvent(pp, [user, group], neonaicmsg, async (msg) => {
     event.reply([
       segment.reply(event.message_id),
       segment.text(msg),
@@ -145,36 +180,45 @@ async function onGroupMessageIn(event, pp) {
     }).catch((e) => {
       pp.log('error', 'Failed to send message to group:', `where=${group} | to=${user} | error=`, e, ` | reply=`, parseString(msg, false).replace(/\n/g, "\\n"));
     });
+  }, {
+    cancelable: false,
   }));
 }
 
 /**
- * 群聊消息，当没有授权「获取全部消息」时走此路由
- * @deprecated 根据业务实践，实际上没有授权但 @ 了仍能触发 {@link onGroupMessageIn}，所以本函数属于重复调用，不再使用
+ * 群聊 @ 消息
+ *
+ * 只有**未授权**「获取全部群消息」时才会走到这里（已授权时 QQ 只推 `GROUP_MESSAGE_CREATE`）。
+ * 本函数是这类消息的**唯一**处理者：先同步认领事件，`onGroupMessageIn` 的微任务醒来后
+ * 见到认领标记就直接退出，所以命令与 AI 都只跑一次。
+ *
+ * ⚠️ 认领必须放在**第一个 `await` 之前**。`em()` 先 emit `message.group`，本函数后跑；
+ *    若认领被推迟到微任务里，`onGroupMessageIn` 会先醒来并处理，重复执行的问题就会回来。
+ *
  * @param {qqBotBackend.GroupMessageEvent} event 
  * @param {PlatformQQBot} pp 
  */
 async function onGroupAtMessageIn(event, pp) {
-  return;
+  claimedByGroupAt.add(event);
   /** 实例的 Profile 配置 */
   const profile_config = neonaicPlatformManager.getPlatformManager().getProfile(pp.profile);
   const user = `qUSR#${event.user_id}@${pp.selfInfo.id}`;
   const group = `qGRP#${event.group_id}@${pp.selfInfo.id}`;
-  const markdown = toMarkdown(event.message, pp);
+  const neonaicmsg = toNeonaicMsg(event, pp);
   const ctx = {
     executor: [user, group],
     privateExecutor: false,
     internalCall: false,
   };
-  /** @type {object[]} 在 qq-official-bot 修复 #123 之前，此处没有类型声明 */
+  /** 注意没授权时无论 @ 谁这里也没有内容 @type {object[]} 在 qq-official-bot 修复 #123 之前，此处没有类型声明 */
   const mentioned = Array.isArray(event.mentions) ? event.mentions : [];
   noteKnownNames(event, { user, group });
   pp.logMsgIn('GroupAt:', `where=${group} | from=${user} | msg=` + parseString(event.message, false).replace(/\n/g, "\\n"));
 
-  const reply = await neonaicMessageIn.resolveReply(markdown, {
+  const reply = await neonaicMessageIn.resolveReply(neonaicmsg, {
     AI: profile_config.useAI,
     AIlist: pickAIList(profile_config.aiRouting, profile_config.allowedAI, {
-      scene: 'group', profile: pp.profile, user, group, executor: [user, group], text: markdown,
+      scene: 'group', profile: pp.profile, user, group, executor: [user, group], text: neonaicmsg.toMarkdown(),
     }),
     resolveCommandWith: ctx,
   });
@@ -243,44 +287,38 @@ function noteKnownNames(event, targets) {
 }
 
 /**
- * @param {qqBotBackend.Sendable} raw 原始信息
+ * @param {qqBotBackend.PrivateMessageEvent} event 原始信息
  * @param {PlatformQQBot} pp 
  * @param {boolean} [textOnly=false] 开启后将只处理可用文本表达的消息片段，其余部分自动忽略，这将替换图片视频等内容为无意义占位符而非链接、Base64 等带内容的 Payload
- * @returns {String} Markdown 格式的信息
+ * @returns {NeonaicMessage}
  */
-function toMarkdown(raw, pp, textOnly = false) {
-  let result = "";
+function toNeonaicMsg(event, pp, textOnly = false) {
+  const raw = event.message || [];
+  let result = new NeonaicMessage();
   raw.forEach((piece) => {
     try {
       const msgMeta = piece?.data || {};
       switch (parseString(piece?.type).trim().toLowerCase()) {
         case 'text':// 纯文本
-          result += msgMeta.text;
+          result.appendFragment(new NeonaicTextMsgFrag(msgMeta?.text ?? ''));
           break;
         case 'face':// 表情1
-          result += ` :[${fromQQElement(msgMeta, 'face')?.text ?? 'Unknown Emoji'}]: `;
+          result.appendFragment(new NeonaicEmojiMsgFrag(`:${fromQQElement(msgMeta, 'face')?.text ?? 'Unknown Emoji'}:`));
           break;
         case 'emoji':// 表情2
-          result += ` :[${fromQQElement(msgMeta, 'emoji')?.text ?? 'Unknown Emoji'}]: `;
+          result.appendFragment(new NeonaicEmojiMsgFrag(`:${fromQQElement(msgMeta, 'emoji')?.text ?? 'Unknown Emoji'}:`));
           break;
         case 'image':// 图片
-          result += textOnly
-            ? ` ![Image:${msgMeta?.name ?? 'Untitled Image'}](//noUrl)`
-            : ` ![Image:${msgMeta?.name ?? 'Untitled Image'}](${msgMeta?.url ?? '//UnknownUrl'}) `;
+          result.appendFragment(new NeonaicImageMsgFrag(msgMeta?.url ?? 'about:unknown', msgMeta?.name ?? 'Untitled Image'));
           break;
         case 'audio':// 音频
-          result += textOnly
-            ? ` <audio title="${he.escape(msgMeta?.name ?? 'Untitled Audio')}">NoSource</audio> `
-            : ` <audio controls title="${he.escape(msgMeta?.name ?? 'Untitled Audio')}"><source src="${he.escape(msgMeta?.url ?? '//UnknownUrl')}"></audio> `;
+          result.appendFragment(new NeonaicAudioMsgFrag(textOnly ? 'about:nosource' :msgMeta?.url ?? 'about:unknown', msgMeta?.name ?? 'Untitled Audio'));
           break;
         case 'video':// 视频
-          result += textOnly
-            ? ` <video title="${he.escape(msgMeta?.name ?? 'Untitled Video')}">NoSource</video> `
-            : ` <video controls title="${he.escape(msgMeta?.name ?? 'Untitled Video')}"><source src="${he.escape(msgMeta?.url ?? '//UnknownUrl')}"></video> `;
+          result.appendFragment(new NeonaicVideoMsgFrag(textOnly ? 'about:nosource' : msgMeta?.url ?? 'about:unknown', msgMeta?.name ?? 'Untitled Video'));
           break;
         case 'link':// 链接
-          // Warn: 没有转义
-          result += `[${msgMeta?.text ?? msgMeta?.url ?? '//UnknownUrl'}](${msgMeta?.url ?? '//UnknownUrl'} "${msgMeta?.description ?? 'A link'}")`;
+          result.appendFragment(new NeonaicLinkMsgFrag(msgMeta?.url ?? 'about:unknown', msgMeta?.text ?? msgMeta?.url ?? 'Untitled Link', msgMeta?.description ?? 'A link'));
           break;
 
         default:
@@ -292,6 +330,11 @@ function toMarkdown(raw, pp, textOnly = false) {
       pp.log('warn', "无法将消息片段", piece, "转换为 Markdown，无法获取消息内容：", error);
     }
   });
+
+  const mentioned = Array.isArray(event.mentions) ? event.mentions : [];
+  for (const user of mentioned) {
+    result.appendFragment(new NeonaicAtMsgFrag(user));
+  }
   return result;
 }
 
