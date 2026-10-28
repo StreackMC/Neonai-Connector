@@ -301,4 +301,31 @@ export const neonaicChore = Object.freeze({
     hourCycle: 'h23',
   }),
 
+  /** 
+   * 将输入的毫秒数解析为人类可读的时间长度，如 "1天2小时3分钟4秒"。
+   * @param {number} ms 毫秒数
+   * @param {Partial<Record<('days'|'hours'|'minutes'|'seconds'),string>>} spiltToken 分隔符配置，默认使用中文时间单位
+   * @returns {string} 人类可读的时间长度
+   */
+  parseDuration2Text: (ms, spiltToken = {}) => {
+    if (typeof ms !== 'number' || isNaN(ms) || ms < 0) return '0秒';
+    const seconds = Math.floor(ms / 1000);
+    const days = Math.floor(seconds / (24 * 3600));
+    const hours = Math.floor((seconds % (24 * 3600)) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    const { days: daysSplit, hours: hoursSplit, minutes: minutesSplit, seconds: secondsSplit } = Object.assign({
+      days: '天',
+      hours: '小时',
+      minutes: '分钟',
+      seconds: '秒'
+    }, spiltToken);
+
+    let result = '';
+    if (days > 0) result += `${days}${daysSplit || '天'}`;
+    if (hours > 0) result += `${hours}${hoursSplit || '小时'}`;
+    if (minutes > 0) result += `${minutes}${minutesSplit || '分钟'}`;
+    if (secs > 0 || result === '') result += `${secs}${secondsSplit || '秒'}`;
+    return result;
+  }
 });

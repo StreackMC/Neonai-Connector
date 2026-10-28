@@ -69,35 +69,19 @@ neonaicCommandServer.registerCommand('neonaic', 'version', function () {
   const LICENSE = 'AGPL' + '-3.0' + ' (with a' + 'dditional terms)';
   const REPO = 'https' + '://' + 'github' + '.com' + '/' + 'Strea' + 'ckMC' + '/' + 'Neo' + 'nai-Connector';
 
-  // ---- 运行时读取 ----
-  const nodeVer = process.version;
-  const osVer = platform() + ' ' + release();
-  const cwd = process.cwd();
-  const tmp = tmpdir();
-
   const B = ANSI.bold;
   const C = ANSI.cyan;
   const D = ANSI.dim;
   const R = ANSI.reset;
 
-  const mayShowSys = neonaicPermissionServer.checkPermissionFromContext(this, [[neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.commmand.version.detailed"]]);
-  const sysLine = mayShowSys ? (
-    `${B}Node.js${R}   ${nodeVer}\n` +
-    `${B}OS${R}        ${osVer}\n` +
-    `${B}CWD${R}       ${cwd}\n` +
-    `${B}PID${R}       ${process.pid}\n` +
-    `${B}Memory${R}    ${neonaicChore.parseStorageText(process.memoryUsage().rss)} Used\n` +
-    `${B}TempDir${R}   ${tmp}\n`
-  ) : '';
-
   return (
     `${B}${projectName}${R} v${APP_VERSION}\n` +
     `${D}----------------------------${R}\n` +
-    `${B}Author${R}    ${AUTHOR}\n` +
-    `${B}License${R}   ${LICENSE}\n` +
-    `${B}       ${R}   ${CPR}\n` +
-    `${B}Repo${R}      ${REPO}\n` +
-    `${D}----------------------------${R}\n` + sysLine
+    `${B}作者${R}    ${AUTHOR}\n` +
+    `${B}版权${R}   ${LICENSE}\n` +
+    `${B}    ${R}   ${CPR}\n` +
+    `${B}网址${R}      ${REPO}\n` +
+    `${D}----------------------------${R}\n`
   );
 }, {
   description: '显示版本与版权信息',
@@ -107,9 +91,38 @@ neonaicCommandServer.registerCommand('neonaic', 'version', function () {
 });
 
 neonaicCommandServer.registerCommand('neonaic', 'ping', function () {
-  return `Pong!\n${neonaicCommandServer.executeCommandSilent('neonaic:version', this)}`;
+  // ---- 格式化字符 ----
+  const B = ANSI.bold;
+  const C = ANSI.cyan;
+  const D = ANSI.dim;
+  const R = ANSI.reset;
+
+  // ---- 运行时读取 ----
+  const nodeVer = process.version;
+  const osVer = platform() + ' ' + release();
+  const cwd = process.cwd();
+  const tmp = tmpdir();
+
+  // ---- 额外信息 ----
+  const mayShowAdditionalSys = neonaicPermissionServer.checkPermissionFromContext(this, [[neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN, "neonaic.commmand.version.detailed"]]);
+  const AdditionalSysLine = mayShowAdditionalSys ? ([
+    "\n",
+    `${B}Node.js版本：${R}${nodeVer}`,
+    `${B}操作系统：${R}${osVer}`,
+    `${B}工作目录：${R}${cwd}`,
+    `${B}PID：${R}${process.pid}`,
+    `${B}父进程PID：${R}${process.ppid}`,
+    `${B}内存：${R}已用${neonaicChore.parseStorageText(process.memoryUsage().rss)}`,
+    `${B}临时目录：${R}${tmp}`,
+    `${B}调试模式：${R}${DEBUGING ? '✓ 已启用' : '× 未启用'}`,
+  ].join('\n')) : '';
+  return [
+    "Pong!",
+    `${B}Neonaic版本：${R}${APP_VERSION}`,
+    `${B}已运行：${R}${neonaicChore.parseDuration2Text(neonaicLifeCycleManager.KEEP_ALIVE_INTERVAL_MS)}`,
+  ].join('\n') + AdditionalSysLine;
 }, {
-  description: 'PingPong',
+  description: '获取 Neonai Connector 的运行状态',
   permissions: ['neonaic.command.ping'],
   permissionDefault: true,
 });
