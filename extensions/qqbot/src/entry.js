@@ -78,14 +78,25 @@ export class PlatformQQBot extends NeonaiPlatform {
     clearInterval(this.#watchdog);
   }
 
-  #watchdog = -1;
+  #watchdog = -1; #watchdogTicking = false;
   /** 主动式看门狗，qqbot框架没有喂狗接口 */
   onWatchdogTick() {
     if (!this.bot) return;
-    this.bot.getSelfInfo().catch((err) => {
+    if (this.#watchdogTicking) return;
+    this.#watchdogTicking = true;
+    this.bot.getSelfInfo().then(() => {
+      this.#watchdogTicking = false;
+      getLogger().platP.debug(`QQBot[${this.profile}]: 看门狗探测成功，机器人运行正常。`);
+    }).catch((err) => {
+      this.#watchdogTicking = false;
       getLogger().platP.warn(`QQBot[${this.profile}]: 看门狗反馈异常，尝试重启机器人。`, err);
-      this.stop().then(() => setTimeout(() => this.start(), 1000)).catch((err) => {
-        getLogger().platP.error(`QQBot[${this.profile}]: 看门狗重启失败，请检查配置。`, err);
+      this.stop().then(() => {
+        this.#watchdogTicking = false;
+        setTimeout(() => this.start().catch((err) => {
+          getLogger().platP.error(`QQBot[${this.profile}]: 看门狗重启失败，无法启动 Platform Profile，请检查配置。`, err);
+        }), 1000);
+      }).catch((err) => {
+        getLogger().platP.error(`QQBot[${this.profile}]: 看门狗重启失败，无法关闭 Platform Profile，请检查配置。`, err);
       }
       );
     });
