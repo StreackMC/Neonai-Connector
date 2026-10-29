@@ -73,16 +73,20 @@ export function convert_qqBotMsg_to_NeonaicMsg(event, pp, textOnly = false) {
  * @throws {NeonaicIllegalStateError} 消息的参数不合法
  */
 export function convert_NeonaicMsg_to_qqBotMsg(msg, allowTempSave = false) {
-  return new NeonaicMessage(msg).mapFrag((frag, index, type) => {
+  const nmsg = new NeonaicMessage(msg);
+  return nmsg.mapFrag((frag, index, type) => {
     switch (type) {
       case 'text':
-        return qbSegment.text(frag.markdown);
+        return qbSegment.markdown(frag.markdown);
       case 'br':
-        return qbSegment.text('\n');
+        // qq-official-bot #132 ，混用出现未定义行为，必须使用 Markdown
+        return qbSegment.markdown('\n');
       case 'at': {
-        const target = frag.target;
+        const target = frag.target.replace(/@.*$/, '');
         if (target.startsWith('qGRP#')) throw new NeonaicIllegalStateError(`无法@一个群聊`);
-        return qbSegment.at(target.replace(/^qUSR#/, '').replace(/@.*$/, ''));
+        // return qbSegment.at(target.replace(/^qUSR#/, ''));
+        // qq-official-bot #131 ，@单个成员有bug，需要强转 markdown 消息。
+        return qbSegment.markdown(`<qqbot-at-user id="${target.replace(/^qUSR#/, '') }" />`);
       }
       case 'link':
         // 因为 qqbot 的 link 片段语义不同，所以使用 Markdown 实现
