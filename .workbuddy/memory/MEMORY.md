@@ -109,6 +109,29 @@
 - 实测（模拟 SDK 同步派发 + 真实执行 `/neonaic:help`）：修复前 group 与 at 各跑一次、命令回复 **2** 次；
   修复后只由 at 处理、回复 **1** 次；反向验证（去掉认领）能稳定复现 2 次。
 
+### qqbot 的 `NeonaicTValidMessage` 转换层（`msgPayloadConvertor.js`，WIP）
+- 两个方向：入站 `convert_qqBotMsg_to_NeonaicMsg(event, pp, textOnly)`、出站 `convert_NeonaicMsg_to_qqBotMsg(msg, allowTempSave)`；
+  `msgHandler.sendMsg(instance, who, msg)` 会先 `toQbSendable` 再按 `qUSR#`/`qGRP#` 分派；`PlatformQQBot.sendMsg(who, ...msg)` 负责组装 NeonaicMessage。
+- ⚠️ **`#/` 子路径别名有版本差异**（顶级别名是实验性功能）：**Node 26 接受** `"#/*": "./src/*"` + `#/a.js`；
+  **Node 22 拒绝**，报 `ERR_INVALID_MODULE_SPECIFIER`（是 specifier 层面的校验，与 package.json 是否被探测到无关）。
+  为让 `engines: >=18` 的项目在两边都能跑，**2026-10-29 已全量改用 `#src/`**（两边实测都可用）：53 个源文件的
+  `'#/…'`/`"#/…"` 换成 `#src/…`，`package.json` 的 imports 与 `jsconfig.json` 的 paths 同步。
+  批量替换只能匹配引号紧邻的形式 —— 正则 `/^qUSR#/` 里也含 `#/`。
+- 2026-10-29 修完的缺陷（由 `scripts/qqbot-msg-convertor.test.mjs` + 临时拓展线上复验）：
+  `frag.userId` → `frag.target`（At 片段只有 target，原来任意 @ 都抛 TypeError）；
+  `msgPayloadConvertor.js` 漏 import `fromQQElement`（表情恒丢弃）与 `NeonaicIllegalArgumentError`；
+  `event.message` 非数组时 `raw.forEach` 直接崩；
+  `emoji.js` 的 `fromQQElement` 把字符串 `'face'` 当 type 传给 `getEmoji`（store 键是 `1:id`）；
+  `NeonaicLinkMsgFrag.markdown` 的 `url + alt ? … : ""` 优先级错（URL 丢失）+ `alt` 缺省被 `parseString(undefined)` 变成 `"undefined"`；
+  `PlatformQQBot.sendMsg` 的 `who.replace(/@.*$/,'').split('@')` 让 botId 恒空（跨 bot 拦截失效）+ `messageContent.replace(...)`（消息已发出却回「无法发送」）；
+  以及 **`sendMsg(who, ...msg)` 把单个 `NeonaicMessage` 包成数组**（构造函数只收片段/字符串数组）⇒ `NeonaicTValidMessage` 的单消息形态反而不可用。
+- 线上实测（临时拓展 + 真内核）：纯文本、@、markdown 链接、图片（URL/base64）都能发出；`SendResult.brief` 可用来对照内容。
+- **做需要内核能力的测试时不要 mock**：写临时拓展，授权后用 `node main.js` 拉起真内核，跑完删掉。见项目技能
+  `.workbuddy/skills/neonai-temp-extension-live-test/SKILL.md`（含 onEnable 早于平台启动、异常被吞、兜底收尾等坑）。
+- 测试脚本 `scripts/qqbot-msg-convertor.test.mjs`：默认离线（桩 bot / 合成事件，零网络）；`--live --send` 真发、
+  `--live --send --only=<子串>` 只跑部分用例、`--live --listen=N` 只观测。沙箱标识：用户 `qUSR#DE5D74452748FAFEF5063175198C950C@8528533035224324959`、
+  群 `qGRP#588A721FF0F068E24B68628F087AFB31@8528533035224324959`（`@` 后是机器人 id）。
+
 ## 配置 / gitignore / 硬约束
 - `config/main.json` — 名称/次名、`prefix`、`maxLogFileSize`、`detailedLog`、`ai.*`；`config/prompts/<profile>.md` 提示词（**gitignore**）。**`config/saves` 整目录 gitignore**，但 `ext.json`/`permissions.json` 因**规则加入前已被跟踪**而仍在版本控制；**新增文件（`identities.json`、`joyous-identities.json`）不会入库**。根目录 `secret.json` 是真凭据（gitignore），`config/secret.json` 是模板（入库）。拓展自带 `extensions/<name>/config.json` ⚠️ **已入库**且用户会填自己的部署参数（开启通道、真实频道、端口）——自检**不要依赖它的内容**，要自带配置。
 - **内核不得出现任何拓展名**（解耦硬判据）：看一处改动**会不会留下「本体只在某拓展存在时才有意义」的东西**。拓展专属的合成执行者身份（`$joyous`）必须定义在拓展内，**不得写进内核 `COMMAND_ENUMS`**；`$` 前缀是内核保留的合成身份命名空间（内核只占 `$console`/`$unknown`），权限按执行者字符串存授权。反例：`NeonaicProtocolError` 这类**通用错误词汇**进内核不算耦合。

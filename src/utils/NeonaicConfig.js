@@ -22,12 +22,12 @@
  * @since 0.1.0
  */
 
-import { NeonaicNewable } from '#/utils/NeonaicNewableClass.js';
+import { NeonaicNewable } from '#src/utils/NeonaicNewableClass.js';
 import {
   NeonaicIllegalArgumentError,
   NeonaicIllegalStateError,
   NeonaicIOError,
-} from '#/utils/NeonaicNewableError.js';
+} from '#src/utils/NeonaicNewableError.js';
 import JSON5 from 'json5';
 import {
   existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync,

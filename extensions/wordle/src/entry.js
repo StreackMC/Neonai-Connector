@@ -1,8 +1,8 @@
-import { neonaicCommandInterface } from '#/command/commandInterface.js';
-import { NeonaicCommandContext, neonaicCommandServer } from '#/command/commandServer.js';
-import { neonaicPermissionServer } from '#/command/permissionServer.js';
-import { parseString } from '#/utils/chore.js';
-import { NeonaicIllegalArgumentError, NeonaicIllegalStateError } from '#/utils/NeonaicNewableError.js';
+import { neonaicCommandInterface } from '#src/command/commandInterface.js';
+import { NeonaicCommandContext, neonaicCommandServer } from '#src/command/commandServer.js';
+import { neonaicPermissionServer } from '#src/command/permissionServer.js';
+import { parseString } from '#src/utils/chore.js';
+import { NeonaicIllegalArgumentError, NeonaicIllegalStateError } from '#src/utils/NeonaicNewableError.js';
 import { clearSession, getAllSessionUser, newSession as getSession, hasSession, resolveDifficulty, WordleDifficulty, WordleEnums, WordleSession } from './session.js';
 import { toFullLetter } from './word_provider.js';
 
@@ -52,7 +52,7 @@ const HELP_TEXT = `Wordle Game for Neonaic By @kdxiaoyi
 没有进行中的对局时，直接给出 5 个字母会当作本局的第一次猜测，给出 hard / uhard 会以该难度开局。`;
 
 /**
- * @this {import('#/extension/extLoader.js').NeonaicExtItem}
+ * @this {import('#src/extension/extLoader.js').NeonaicExtItem}
  * @param {{ manifest: Object, pwd: String, ext_item_id: String, ext_item_timestamp: Number }} [ctx] 拓展上下文
  */
 export function onEnable(ctx) {
@@ -119,7 +119,7 @@ export function onEnable(ctx) {
 }
 
 /**
- * @this {import('#/extension/extLoader.js').NeonaicExtItem}
+ * @this {import('#src/extension/extLoader.js').NeonaicExtItem}
  */
 export function onDisable() {
   getAllSessionUser().map(clearSession);

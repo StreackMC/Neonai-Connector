@@ -23,8 +23,8 @@ import {
   NeonaicIllegalArgumentError,
   NeonaicIllegalStateError,
   NeonaicProtocolError,
-} from '#/utils/NeonaicNewableError.js';
-import { neonaicNetwork } from '#/utils/io.js';
+} from '#src/utils/NeonaicNewableError.js';
+import { neonaicNetwork } from '#src/utils/io.js';
 import {
   DEFAULT_TIMEOUTS,
   ERROR_CODES,

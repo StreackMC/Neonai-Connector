@@ -23,7 +23,7 @@
 import {
   NeonaicIllegalArgumentError,
   NeonaicIllegalStateError,
-} from '#/utils/NeonaicNewableError.js';
+} from '#src/utils/NeonaicNewableError.js';
 import { connect } from 'node:net';
 import { basename } from 'node:path';
 import { JoyousNewable } from '../utils.js';

@@ -24,15 +24,15 @@
  *   /neonaic:permission set $joyous joyous.bridge.business true
  */
 
-import { neonaicPermissionServer } from '#/command/permissionServer.js';
-import { neonaicAI } from '#/message/ai.js';
-import { neonaicUserDirectory } from '#/message/userDirectory.js';
-import { neonaicPlatformManager } from '#/platform/platformManager.js';
-import { parseString } from '#/utils/chore.js';
+import { neonaicPermissionServer } from '#src/command/permissionServer.js';
+import { neonaicAI } from '#src/message/ai.js';
+import { neonaicUserDirectory } from '#src/message/userDirectory.js';
+import { neonaicPlatformManager } from '#src/platform/platformManager.js';
+import { parseString } from '#src/utils/chore.js';
 import {
   NeonaicIllegalArgumentError,
   NeonaicIllegalStateError,
-} from '#/utils/NeonaicNewableError.js';
+} from '#src/utils/NeonaicNewableError.js';
 
 import { joyousIdentity } from '../identity.js';
 import { ERROR_CODES, EVENTS, METHODS, TRANSPORTS } from './constants.js';
@@ -309,7 +309,7 @@ function findProfileTarget(cfg, profile) {
 /**
  * 取平台实例。
  * @param {string} name Neonaic 的平台 Profile 名
- * @returns {import('#/platform/platformInterface.js').NeonaiPlatform}
+ * @returns {import('#src/platform/platformInterface.js').NeonaiPlatform}
  * @throws {NeonaicCommandError} `internal_error`
  */
 function resolvePlatform(name) {

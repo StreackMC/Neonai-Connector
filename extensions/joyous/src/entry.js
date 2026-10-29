@@ -25,16 +25,16 @@
 
 import z from 'zod';
 
-import { neonaicCommandInterface } from '#/command/commandInterface.js';
-import { neonaicCommandServer } from '#/command/commandServer.js';
-import { neonaicPermissionServer } from '#/command/permissionServer.js';
-import { neonaicEventBus } from '#/event/neonaicEventBus.js';
-import { NeonaicMessageEvent } from '#/event/neonaicEventInterface.js';
-import { getLogger } from '#/logger/Logger.js';
-import { neonaicAI } from '#/message/ai.js';
-import { neonaicConfManager } from '#/system/confManager.js';
+import { neonaicCommandInterface } from '#src/command/commandInterface.js';
+import { neonaicCommandServer } from '#src/command/commandServer.js';
+import { neonaicPermissionServer } from '#src/command/permissionServer.js';
+import { neonaicEventBus } from '#src/event/neonaicEventBus.js';
+import { NeonaicMessageEvent } from '#src/event/neonaicEventInterface.js';
+import { getLogger } from '#src/logger/Logger.js';
+import { neonaicAI } from '#src/message/ai.js';
+import { neonaicConfManager } from '#src/system/confManager.js';
 
-import { neonaicChore, parseString } from '#/utils/chore.js';
+import { neonaicChore, parseString } from '#src/utils/chore.js';
 import { joyousConfig } from './config.js';
 import { joyousIdentity } from './identity.js';
 import { BUSINESS_METHODS, METHODS, NEONAI_CAPABILITIES } from './protocol/constants.js';
@@ -226,7 +226,7 @@ neonaicAI.registerAITool('joyous', 'serverStatus', {
 
 /**
  * 拓展启用钩子。
- * @this {import('#/src/extension/extLoader.js').NeonaicExtItem}
+ * @this {import('#src/src/extension/extLoader.js').NeonaicExtItem}
  * @param {{ manifest: Object, pwd: String, ext_item_id: String, ext_item_timestamp: Number }} [ctx] 拓展上下文
  */
 export async function onEnable(ctx) {
@@ -349,7 +349,7 @@ export async function onEnable(ctx) {
 
 /**
  * 拓展卸载钩子。幂等：未启用时静默返回。
- * @this {import('#/src/extension/extLoader.js').NeonaicExtItem}
+ * @this {import('#src/src/extension/extLoader.js').NeonaicExtItem}
  */
 export async function onDisable() {
   const rt = runtime;
@@ -622,7 +622,7 @@ async function shutdown(rt, reason) {
  * @apiNote 两条自助命令（`/joyous:bind`、`/joyous:chatsync`）都只能作用于**调用者自己**：
  *          一律拒绝内部调用（没有聊天身份）与 `$` 开头的合成执行者（桥接/控制台），
  *          这样既不需要额外权限，也不存在越权改他人数据的可能。
- * @param {import('#/src/command/commandServer.js').NeonaicCommandContext} ctx
+ * @param {import('#src/src/command/commandServer.js').NeonaicCommandContext} ctx
  * @returns {{ ok: true, chatId: string } | { ok: false, message: string }}
  */
 function requireSelfExecutor(ctx) {

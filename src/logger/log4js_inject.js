@@ -1,6 +1,6 @@
 /** 用于注入log4js的模块 */
 
-import { NeonaicError } from "#/utils/NeonaicNewableError.js";
+import { NeonaicError } from "#src/utils/NeonaicNewableError.js";
 
 let emit = (type, level, timestamp = new Date(), ...msgs) => { };
 let emitSet = false;

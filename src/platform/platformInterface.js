@@ -8,9 +8,9 @@
  * 所有运行时参数通过 this.profile 获取。
  */
 
-import { getLogger } from "#/logger/Logger.js";
-import { NeonaicNewable } from "#/utils/NeonaicNewableClass.js";
-import { NeonaicUnsupportedOperationError } from "#/utils/NeonaicNewableError.js";
+import { getLogger } from "#src/logger/Logger.js";
+import { NeonaicNewable } from "#src/utils/NeonaicNewableClass.js";
+import { NeonaicUnsupportedOperationError } from "#src/utils/NeonaicNewableError.js";
 
 export class NeonaiPlatform extends NeonaicNewable {
   /** Platform Profile 名称 @type {String} */

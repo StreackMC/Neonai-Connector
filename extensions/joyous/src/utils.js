@@ -1,4 +1,4 @@
-import { NeonaicNewable } from "#/utils/NeonaicNewableClass.js";
+import { NeonaicNewable } from "#src/utils/NeonaicNewableClass.js";
 
 /**
  * 将任意值转为可读字符串：

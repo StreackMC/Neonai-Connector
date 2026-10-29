@@ -17,7 +17,7 @@ import {
   NeonaicIllegalArgumentError,
   NeonaicIllegalStateError,
   NeonaicProtocolError,
-} from '#/utils/NeonaicNewableError.js';
+} from '#src/utils/NeonaicNewableError.js';
 import { JoyousNewable } from '../utils.js';
 import { JoyousLineFrameCodec } from './codec.js';
 import {

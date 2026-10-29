@@ -21,10 +21,10 @@
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { getLogger } from '#/logger/Logger.js';
-import { neonaicConfManager } from '#/system/confManager.js';
-import { neonaicPidManager } from '#/system/pidManager.js';
-import { NeonaicIllegalArgumentError, NeonaicIllegalStateError } from '#/utils/NeonaicNewableError.js';
+import { getLogger } from '#src/logger/Logger.js';
+import { neonaicConfManager } from '#src/system/confManager.js';
+import { neonaicPidManager } from '#src/system/pidManager.js';
+import { NeonaicIllegalArgumentError, NeonaicIllegalStateError } from '#src/utils/NeonaicNewableError.js';
 
 // ---- 常量 ----
 

@@ -26,15 +26,15 @@ import { opendir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { neonaicCommandInterface } from '#/command/commandInterface.js';
-import { NeonaicCommandContext, neonaicCommandServer } from '#/command/commandServer.js';
-import { NeonaicExtItem } from '#/extension/extLoader.js';
-import { getLogger } from '#/logger/Logger.js';
-import { neonaicConfManager } from '#/system/confManager.js';
-import { NeonaicConfig } from '#/utils/NeonaicConfig.js';
-import { NeonaicExtensionError, NeonaicIllegalArgumentError } from '#/utils/NeonaicNewableError.js';
-import { parseString } from '#/utils/chore.js';
-import { neonaicLifeCycleManager } from '#/system/lifeCycleManager.js';
+import { neonaicCommandInterface } from '#src/command/commandInterface.js';
+import { NeonaicCommandContext, neonaicCommandServer } from '#src/command/commandServer.js';
+import { NeonaicExtItem } from '#src/extension/extLoader.js';
+import { getLogger } from '#src/logger/Logger.js';
+import { neonaicConfManager } from '#src/system/confManager.js';
+import { NeonaicConfig } from '#src/utils/NeonaicConfig.js';
+import { NeonaicExtensionError, NeonaicIllegalArgumentError } from '#src/utils/NeonaicNewableError.js';
+import { parseString } from '#src/utils/chore.js';
+import { neonaicLifeCycleManager } from '#src/system/lifeCycleManager.js';
 
 // ---- 颜色 ----
 const CYAN   = '\x1b[36m';
@@ -47,7 +47,7 @@ const R      = '\x1b[0m';
 /** 拓展默认根目录：<项目根>/extensions */
 const EXT_ROOT = resolve(neonaicLifeCycleManager.ROOT_PATH, 'extensions');
 /** 拓展启用状态的持久化载体（默认 AUTOSAVE，赋值即写盘） */
-const EXT_SAVE = new NeonaicConfig('#/extension/config/saves/ext.json');
+const EXT_SAVE = new NeonaicConfig('#src/extension/config/saves/ext.json');
 /** 已识别拓展：id → NeonaicExtItem @type {Map<String, NeonaicExtItem>} */
 const EXT_MAP = new Map();
 

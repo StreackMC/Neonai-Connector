@@ -8,7 +8,7 @@
  * @author kdxhub
  */
 
-import { NeonaicEventServices } from "#/event/neonaicEventInterface.js";
+import { NeonaicEventServices } from "#src/event/neonaicEventInterface.js";
 
 let bus = null;
 
@@ -40,12 +40,12 @@ export const neonaicEventBus = {
    * 分发一个事件
    * @apiNote 事件类型将强制小写 + trim() 处理，建议使用常量枚举和 namespace:name 式命名
    * @template T 事件的业务类型
-   * @param {import('#/event/neonaicEventInterface.js').NeonaicEvent<T>|String} event 传入一个 Neonaic 事件，此时后两参数无效；或者传入一个事件名。传入错误类型将抛出异常
+   * @param {import('#src/event/neonaicEventInterface.js').NeonaicEvent<T>|String} event 传入一个 Neonaic 事件，此时后两参数无效；或者传入一个事件名。传入错误类型将抛出异常
    * @param {T} [payload] 业务数据
-   * @param {import('#/event/neonaicEventInterface.js').NeonaicTEventOptions} [options] 事件配置
+   * @param {import('#src/event/neonaicEventInterface.js').NeonaicTEventOptions} [options] 事件配置
    * @returns {boolean} 事件是否被否决
-   * @throws {import('#/event/utils/NeonaicNewableError.js').NeonaicIllegalArgumentError} 参数不合法
-   * @throws {import('#/event/utils/NeonaicNewableError.js').NeonaicError} 新建事件语法糖无法生效
+   * @throws {import('#src/event/utils/NeonaicNewableError.js').NeonaicIllegalArgumentError} 参数不合法
+   * @throws {import('#src/event/utils/NeonaicNewableError.js').NeonaicError} 新建事件语法糖无法生效
    */
   dispatchEvent: (event, payload, options) => getEventBus().dispatchEvent(event, payload, options),
 };

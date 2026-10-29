@@ -1,5 +1,5 @@
-import { NeonaicNewable } from "#/utils/NeonaicNewableClass.js";
-import { parseString } from "#/utils/chore.js";
+import { NeonaicNewable } from "#src/utils/NeonaicNewableClass.js";
+import { parseString } from "#src/utils/chore.js";
 
 /**
  * Neonaic 相关错误

@@ -14,7 +14,7 @@
     "checkJs": false,
     "maxNodeModuleJsDepth": 0,
     "paths": {
-      "#/*": [
+      "#src/*": [
         "./src/*"
       ],
     }

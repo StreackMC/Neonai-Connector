@@ -1,5 +1,5 @@
-import { neonaicMath } from "#/utils/math.js";
-import { NeonaicIllegalArgumentError, NeonaicIllegalStateError, NeonaicNullPointerError } from '#/utils/NeonaicNewableError.js';
+import { neonaicMath } from "#src/utils/math.js";
+import { NeonaicIllegalArgumentError, NeonaicIllegalStateError, NeonaicNullPointerError } from '#src/utils/NeonaicNewableError.js';
 
 /** 当前是否处于调试模式（与 entry.js / Logger.js 保持同一判定） */
 const DEBUGING = process.argv.some((a) => a === '--debug=true' || a === '--debug');

@@ -14,19 +14,19 @@
 import { platform, release, tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 
-import { neonaicCommandInterface } from '#/command/commandInterface.js';
-import { neonaicCommandServer } from '#/command/commandServer.js';
-import { neonaicPermissionServer } from '#/command/permissionServer.js';
-import { neonaicEventBus } from '#/event/neonaicEventBus.js';
-import { NeonaicLoadedEvent } from '#/event/neonaicEventInterface.js';
-import { neonaicExtensionManager } from '#/extension/extManager.js';
-import { getLogger, neonaicLogger } from '#/logger/Logger.js';
-import { PlatformManager } from '#/platform/platformManager.js';
-import { neonaicCliProcessor } from '#/system/cliProcessor.js';
-import { neonaicConfManager } from '#/system/confManager.js';
-import { neonaicLifeCycleManager } from '#/system/lifeCycleManager.js';
-import { neonaicChore } from '#/utils/chore.js';
-import { neonaicUtilsSupport } from '#/utils/registerUtilsSupport.js';
+import { neonaicCommandInterface } from '#src/command/commandInterface.js';
+import { neonaicCommandServer } from '#src/command/commandServer.js';
+import { neonaicPermissionServer } from '#src/command/permissionServer.js';
+import { neonaicEventBus } from '#src/event/neonaicEventBus.js';
+import { NeonaicLoadedEvent } from '#src/event/neonaicEventInterface.js';
+import { neonaicExtensionManager } from '#src/extension/extManager.js';
+import { getLogger, neonaicLogger } from '#src/logger/Logger.js';
+import { PlatformManager } from '#src/platform/platformManager.js';
+import { neonaicCliProcessor } from '#src/system/cliProcessor.js';
+import { neonaicConfManager } from '#src/system/confManager.js';
+import { neonaicLifeCycleManager } from '#src/system/lifeCycleManager.js';
+import { neonaicChore } from '#src/utils/chore.js';
+import { neonaicUtilsSupport } from '#src/utils/registerUtilsSupport.js';
 
 // ---- 常量 ----
 
@@ -46,7 +46,7 @@ async function shutdown(signal) {
 // ---- 系统级 CLI 命令 ----
 
 neonaicCommandServer.registerCommand('neonaic', 'version', function () {
-  /** @type {import('#/command/commandServer.js').NeonaicCommandContext} */
+  /** @type {import('#src/command/commandServer.js').NeonaicCommandContext} */
   const ctx = this;
 
   // ---- 硬编码 ----

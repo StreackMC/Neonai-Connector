@@ -21,11 +21,11 @@
  * 故检查结果恒为布尔，调用方通过 fallback 表达「未设置怎么算」，不再有 null 三态。
  */
 
-import { neonaicCommandInterface } from '#/command/commandInterface.js';
-import { neonaicConfManager } from '#/system/confManager.js';
-import { neonaicLifeCycleManager } from '#/system/lifeCycleManager.js';
-import { neonaicChore, parseString } from '#/utils/chore.js';
-import { NeonaicIllegalArgumentError } from '#/utils/NeonaicNewableError.js';
+import { neonaicCommandInterface } from '#src/command/commandInterface.js';
+import { neonaicConfManager } from '#src/system/confManager.js';
+import { neonaicLifeCycleManager } from '#src/system/lifeCycleManager.js';
+import { neonaicChore, parseString } from '#src/utils/chore.js';
+import { NeonaicIllegalArgumentError } from '#src/utils/NeonaicNewableError.js';
 import JSON5 from 'json5';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';

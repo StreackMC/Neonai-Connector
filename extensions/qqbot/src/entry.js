@@ -5,12 +5,13 @@
  * 运行时配置通过 PlatformManager.getProfile(this.profile) 获取。
  */
 
-import { getLogger } from '#/logger/Logger.js';
-import { NeonaiPlatform } from '#/platform/platformInterface.js';
-import { neonaicPlatformManager, PlatformManager } from '#/platform/platformManager.js';
-import { neonaicConfManager } from '#/system/confManager.js';
-import { parseString } from '#/utils/chore.js';
-import { NeonaicError, NeonaicIllegalArgumentError, NeonaicIOError } from '#/utils/NeonaicNewableError.js';
+import { getLogger } from '#src/logger/Logger.js';
+import { NeonaicMessage } from '#src/message/messageFragment.js';
+import { NeonaiPlatform } from '#src/platform/platformInterface.js';
+import { neonaicPlatformManager, PlatformManager } from '#src/platform/platformManager.js';
+import { neonaicConfManager } from '#src/system/confManager.js';
+import { parseString } from '#src/utils/chore.js';
+import { NeonaicError, NeonaicIllegalArgumentError, NeonaicIOError } from '#src/utils/NeonaicNewableError.js';
 import qqBotBackend from 'qq-official-bot';
 import { EVENTS, INTENTS } from "./enums.js";
 import MsgHandler, { sendMsg } from "./msgHandler.js";
@@ -125,37 +126,59 @@ export class PlatformQQBot extends NeonaiPlatform {
   /**
    * 向指定用户发送消息
    * @param {string} who 用户标识
-   * @param  {...import('#/message/messageFragment.js').NeonaicTValidMessage} msg 要发送的消息
+   * @param  {...import('#src/message/messageFragment.js').NeonaicTValidMessage} msg 要发送的消息
    * @returns {Promise<string>} 发送结果
    */
   async sendMsg(who, ...msg) {
-    const messageContent = msg.map(v => parseString(v, false)).join('');
-    const [user, platform = ""] = parseString(who).replace(/@.*$/, '').split('@');
+    // sendMsg(who, 'a', 'b') 与 sendMsg(who, message) 都要能进来。
+    // 直接把 rest 数组交给构造函数，在「只传一个 NeonaicMessage」时会变成 [NeonaicMessage]，
+    // 而构造函数只接受片段/字符串数组 ⇒ 抛 IllegalArgument（NeonaicTValidMessage 的单个形态反而不可用）
+    const messageContent = new NeonaicMessage(msg.length === 1 ? msg[0] : msg);
+    // 先 split 再判空：原来的 `replace(/@.*$/,'').split('@')` 会先把 @ 之后全砍掉，
+    // 第二段永远不存在 ⇒ botId 恒为 ''，下面的拦截形同虚设
+    const [user, botId = ""] = parseString(who).trim().split('@');
 
-    // 语法糖，如果 platform 不是本实例的，且存在+有效，那么自动转发
-    if (
-      platform
-      && platform !== this.profile
-      && (PlatformManager?.instance?.getPlatform?.(platform) instanceof PlatformQQBot)
-    ) {
-      return PlatformManager.instance.getPlatform(platform).sendMsg(user, messageContent);
+    // 拦截 botId 错误
+    if (botId && botId !== this.selfInfo?.id) {
+      return `“${neonaicConfManager.getBotName()}”无法向[${user}@${botId}]发送指定消息，因为 botId 不匹配：指定了 ${botId ?? '未知'}，但期待 ${this.selfInfo?.id ?? '未知'}`;
     }
 
     // 发送消息
     try {
       const result = await sendMsg(this, user, messageContent);
-      getLogger().platP.debug(`[qqbot] 向`, user, `发送消息`, msg, `：`, result);
-      this.logMsgOut('Command:', `to=${user} | msg=`, messageContent.replace(/\n/g, "\\n"));
+      getLogger().platP.debug(`[qqbot] 向`, user, `发送消息`, messageContent, `：`, result);
+      this.logMsgOut('Command:', `to=${user} | msg=`, logPreview(messageContent));
       // SendResult 可能为「消息审核中」状态
       if (result?.audit_status === 'pending') {
-        return `“${neonaicConfManager.getBotName()}”已向[${user}@${platform}]发送消息，但消息正在审核中。`;
+        return `“${neonaicConfManager.getBotName()}”已向[${user}@${botId}]发送消息，但消息正在审核中。`;
       }
-      return `“${neonaicConfManager.getBotName()}”成功向[${user}@${platform}]发送指定消息。`;
+      return `“${neonaicConfManager.getBotName()}”成功向[${user}@${botId}]发送指定消息。`;
     } catch (err) {
       getLogger().platP.debug(`[qqbot] 向`, user, `发送消息失败：`, err.message);
-      return `“${neonaicConfManager.getBotName()}”无法向[${user}@${platform}]发送指定消息，因为“${err.message}”。`;
+      return `“${neonaicConfManager.getBotName()}”无法向[${user}@${botId}]发送指定消息，因为“${err.message}”。`;
     }
   }
+}
+
+/**
+ * 把消息渲染成适合写进日志的一行文本。
+ *
+ * @apiNote 不能对 `NeonaicMessage` 直接调 `.replace()`（它没有这个方法，会把「已发送」变成
+ *          「无法发送：replace is not a function」）；也不能无脑 `toMarkdown()`——base64 图片
+ *          会把几 MB 的 data URL 全塞进日志，所以这里还要截断。
+ * @param {NeonaicMessage} message 消息
+ * @param {number} [limit=200] 最大字符数
+ * @returns {string}
+ */
+function logPreview(message, limit = 200) {
+  let text;
+  try {
+    text = message.toMarkdown();
+  } catch {
+    text = String(message);
+  }
+  text = parseString(text).replace(/\n/g, '\\n');
+  return text.length > limit ? `${text.slice(0, limit)}…(${text.length} 字符)` : text;
 }
 
 neonaicPlatformManager.registerPlatform(PlatformQQBot);
@@ -169,7 +192,7 @@ neonaicPlatformManager.registerPlatform(PlatformQQBot);
  * 按 Profile 驱动，因此这里没有需要额外做的事；保留空实现以满足拓展加载器的
  * 入口函数契约（`onEnable` / `onDisable` 必须同时存在且为函数）。
  *
- * @this {import('#/extension/extLoader.js').NeonaicExtItem}
+ * @this {import('#src/extension/extLoader.js').NeonaicExtItem}
  * @param {{ manifest: Object, pwd: String, ext_item_id: String, ext_item_timestamp: Number }} [ctx] 拓展上下文
  */
 export function onEnable(ctx) {
@@ -180,7 +203,7 @@ export function onEnable(ctx) {
  *
  * 同 {@link onEnable}：平台实例的启停由 PlatformManager 负责，这里保持空实现。
  *
- * @this {import('#/extension/extLoader.js').NeonaicExtItem}
+ * @this {import('#src/extension/extLoader.js').NeonaicExtItem}
  */
 export function onDisable() {
 }

@@ -1,20 +1,20 @@
-import { neonaicCommandServer } from '#/command/commandServer.js';
-import { neonaicPermissionServer } from '#/command/permissionServer.js';
-import { neonaicEventBus } from '#/event/neonaicEventBus.js';
-import { NeonaicMessageEvent } from '#/event/neonaicEventInterface.js';
-import { getLogger } from '#/logger/Logger.js';
-import { NeonaicAtMsgFrag, NeonaicAudioMsgFrag, NeonaicEmojiMsgFrag, NeonaicImageMsgFrag, NeonaicLinkMsgFrag, NeonaicMessage, NeonaicTextMsgFrag, NeonaicVideoMsgFrag } from '#/message/messageFragment.js';
-import { neonaicMessageIn } from '#/message/messageIn.js';
-import { neonaicUserDirectory } from '#/message/userDirectory.js';
-import { neonaicPlatformManager } from '#/platform/platformManager.js';
-import { neonaicConfManager } from '#/system/confManager.js';
-import { parseString } from '#/utils/chore.js';
-import { NeonaicIllegalArgumentError } from '#/utils/NeonaicNewableError.js';
+import { neonaicCommandServer } from '#src/command/commandServer.js';
+import { neonaicPermissionServer } from '#src/command/permissionServer.js';
+import { neonaicEventBus } from '#src/event/neonaicEventBus.js';
+import { NeonaicMessageEvent } from '#src/event/neonaicEventInterface.js';
+import { getLogger } from '#src/logger/Logger.js';
+import { NeonaicMessage } from '#src/message/messageFragment.js';
+import { neonaicMessageIn } from '#src/message/messageIn.js';
+import { neonaicUserDirectory } from '#src/message/userDirectory.js';
+import { neonaicPlatformManager } from '#src/platform/platformManager.js';
+import { neonaicConfManager } from '#src/system/confManager.js';
+import { parseString } from '#src/utils/chore.js';
+import { NeonaicIllegalArgumentError } from '#src/utils/NeonaicNewableError.js';
 import qqBotBackend, { segment } from 'qq-official-bot';
 import stripAnsi from 'strip-ansi';
 import { pickAIList } from './aiRoute.js';
-import { fromQQElement } from './emoji.js';
 import { PlatformQQBot } from './entry.js';
+import { convert_qqBotMsg_to_NeonaicMsg as toNeonaicMsg, convert_NeonaicMsg_to_qqBotMsg as toQbSendable } from './msgPayloadConvertor.js';
 
 /**
  * 好友列表私聊
@@ -234,20 +234,28 @@ async function onGroupAtMessageIn(event, pp) {
  * 向对象发送消息
  * @param {PlatformQQBot} instance QQ机器人实例
  * @param {string} who 目标对象，**尾随 @ 与否不影响执行，也不影响实际使用的实例**
- * @param {qqBotBackend.Sendable|String} msg 消息内容
+ * @param {qqBotBackend.Sendable|NeonaicMessage} msg 消息内容
  * @returns {Promise<import('qq-official-bot').SendResult|null>} 结果（发送失败时 throw）
  * @throws 无法识别参数 / 发送失败
  */
 export async function sendMsg(instance, who, msg) {
+  // 检查实例状态
   if (!(instance instanceof PlatformQQBot)) throw new NeonaicIllegalArgumentError("指定的 Platform 无效");
   if (!instance.bot) throw new NeonaicIllegalArgumentError("QQBot 实例尚未启动");
-  who = parseString(who).trim();
+
+  // 格式化参数
+  who = parseString(who).trim().replace(/@.*$/, '');
+  if (msg instanceof NeonaicMessage) {
+    msg = toQbSendable(msg);
+  }
+
+  // 分类型发送
   if (who.startsWith('qUSR#')) {
     // 私聊
-    return await instance.bot.sendPrivateMessage(who.slice(5).replace(/@.*$/, ''), msg);
+    return await instance.bot.sendPrivateMessage(who.slice(5), msg);
   } else if (who.startsWith('qGRP#')) {
     // 群聊
-    return await instance.bot.sendGroupMessage(who.slice(5).replace(/@.*$/, ''), msg);
+    return await instance.bot.sendGroupMessage(who.slice(5), msg);
   }
   // 无效用户
   throw new NeonaicIllegalArgumentError("无法识别的用户：" + parseString(who));
@@ -280,59 +288,6 @@ function noteKnownNames(event, targets) {
       getLogger().platP.debug(`[qqbot] 无法把可读名登记进用户名录（${code}）：${e?.message ?? e}`);
     }
   }
-}
-
-/**
- * @param {qqBotBackend.PrivateMessageEvent|qqBotBackend.GroupMessageEvent} event 原始信息
- * @param {PlatformQQBot} pp 
- * @param {boolean} [textOnly=false] 开启后将只处理可用文本表达的消息片段，其余部分自动忽略，这将替换图片视频等内容为无意义占位符而非链接、Base64 等带内容的 Payload
- * @returns {NeonaicMessage}
- */
-function toNeonaicMsg(event, pp, textOnly = false) {
-  const raw = event.message || [];
-  let result = new NeonaicMessage();
-  raw.forEach((piece) => {
-    try {
-      const msgMeta = piece?.data || {};
-      switch (parseString(piece?.type).trim().toLowerCase()) {
-        case 'text':// 纯文本
-          result.appendFragment(new NeonaicTextMsgFrag(msgMeta?.text ?? ''));
-          break;
-        case 'face':// 表情1
-          result.appendFragment(new NeonaicEmojiMsgFrag(`:${fromQQElement(msgMeta, 'face')?.text ?? 'Unknown Emoji'}:`));
-          break;
-        case 'emoji':// 表情2
-          result.appendFragment(new NeonaicEmojiMsgFrag(`:${fromQQElement(msgMeta, 'emoji')?.text ?? 'Unknown Emoji'}:`));
-          break;
-        case 'image':// 图片
-          result.appendFragment(new NeonaicImageMsgFrag(msgMeta?.url ?? 'about:unknown', msgMeta?.name ?? 'Untitled Image'));
-          break;
-        case 'audio':// 音频
-          result.appendFragment(new NeonaicAudioMsgFrag(textOnly ? 'about:nosource' :msgMeta?.url ?? 'about:unknown', msgMeta?.name ?? 'Untitled Audio'));
-          break;
-        case 'video':// 视频
-          result.appendFragment(new NeonaicVideoMsgFrag(textOnly ? 'about:nosource' : msgMeta?.url ?? 'about:unknown', msgMeta?.name ?? 'Untitled Video'));
-          break;
-        case 'link':// 链接
-          result.appendFragment(new NeonaicLinkMsgFrag(msgMeta?.url ?? 'about:unknown', msgMeta?.text ?? msgMeta?.url ?? 'Untitled Link', msgMeta?.description ?? 'A link'));
-          break;
-
-        default:
-          //TODO: 还有其他富文本消息类型没有转换
-          pp.log('warn', "无法将消息片段", piece, "转换为 Markdown，未知的消息类型：", piece.type);
-          break;
-      }
-    } catch (error) {
-      pp.log('warn', "无法将消息片段", piece, "转换为 Markdown，无法获取消息内容：", error);
-    }
-  });
-
-  /** @type {import('qq-official-bot').MentionedGroupMember[]} */
-  const mentioned = Array.isArray(event.mentions) ? event.mentions : [];
-  for (const user of mentioned) {
-    result.appendFragment(new NeonaicAtMsgFrag(`qUSR#${user.id}@${pp.selfInfo.id}`));
-  }
-  return result;
 }
 
 export default {

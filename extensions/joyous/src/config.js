@@ -15,7 +15,7 @@
  *   `bridge`     V2 业务层：出站传输、profile↔频道映射、业务方法白名单、限流等
  */
 
-import { neonaicConfManager } from '#/system/confManager.js';
+import { neonaicConfManager } from '#src/system/confManager.js';
 import {
   BUSINESS_METHODS,
   DEFAULT_TIMEOUTS,

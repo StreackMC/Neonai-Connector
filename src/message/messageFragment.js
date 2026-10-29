@@ -1,8 +1,8 @@
-import { parseString } from "#/utils/chore.js";
-import { NeonaicTable } from "#/utils/math.js";
-import { NeonaicNewable } from "#/utils/NeonaicNewableClass.js";
-import { NeonaicIllegalArgumentError } from "#/utils/NeonaicNewableError.js";
-import { NeonaicUriMeta } from "#/utils/NeonaicUriMeta.js";
+import { parseString } from "#src/utils/chore.js";
+import { NeonaicTable } from "#src/utils/math.js";
+import { NeonaicNewable } from "#src/utils/NeonaicNewableClass.js";
+import { NeonaicIllegalArgumentError } from "#src/utils/NeonaicNewableError.js";
+import { NeonaicUriMeta } from "#src/utils/NeonaicUriMeta.js";
 
 /** base64 形式的 data URL，第一个捕获组是 MIME */
 const BASE64_DATA_URL_RE = /^data:([^;,]*);base64,/i;
@@ -275,10 +275,14 @@ export class NeonaicLinkMsgFrag extends NeonaicMessageFragment {
   get alt() { return this.#payload.alt; }
   toString() { return `${this.TYPE}:${this.markdown}`; }
   get markdown() {
-    const url = escapeMarkdownUrl(this.#payload.uri.toString()) + this.alt ? ` "${escapeMarkdownTitle(this.alt.markdown)}"` : "";
+    // 注意优先级：原来的 `url + alt ? … : ""` 会先做字符串拼接再判真假，
+    // 恒为真 ⇒ 链接目标被替换成 alt，URL 整个丢掉
+    const target = escapeMarkdownUrl(this.#payload.uri.toString());
+    const alt = this.#payload.alt?.markdown ?? "";
+    const title = alt ? ` "${escapeMarkdownTitle(alt)}"` : "";
     // 描述文本里的 [ ] \ 会打断链接语法，必须转义；空描述退回显示 URL 本身
-    const label = escapeMarkdownAlt(this.#payload.description.markdown) || url;
-    return `[${label}](${url})`;
+    const label = escapeMarkdownAlt(this.#payload.description.markdown) || target;
+    return `[${label}](${target}${title})`;
   }
 
   /**
@@ -296,7 +300,13 @@ export class NeonaicLinkMsgFrag extends NeonaicMessageFragment {
     } catch (error) {
       throw new NeonaicIllegalArgumentError(`invalid url: ${parseString(url)}`);
     }
-    this.#payload = { uri, description: desc instanceof NeonaicTextMsgFrag ? desc : new NeonaicTextMsgFrag(desc), alt: alt instanceof NeonaicTextMsgFrag ? alt : new NeonaicTextMsgFrag(alt) };
+    // 缺省必须落成空串：`parseString(undefined)` 得到的是字面量 "undefined"，
+    // 会让 `[文本](url "undefined")` 这种畸形标题跑到输出里
+    this.#payload = {
+      uri,
+      description: desc instanceof NeonaicTextMsgFrag ? desc : new NeonaicTextMsgFrag(desc ?? ""),
+      alt: alt instanceof NeonaicTextMsgFrag ? alt : new NeonaicTextMsgFrag(alt ?? ""),
+    };
   }
 }
 

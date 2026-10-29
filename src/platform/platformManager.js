@@ -10,13 +10,13 @@
 import JSON5 from 'json5';
 import { readFileSync, writeFileSync } from 'node:fs';
 
-import { neonaicCommandInterface } from '#/command/commandInterface.js';
-import { neonaicCommandServer } from '#/command/commandServer.js';
-import { getLogger, neonaicLogger } from '#/logger/Logger.js';
-import { neonaicConfManager } from '#/system/confManager.js';
-import { NeonaicNewable } from '#/utils/NeonaicNewableClass.js';
-import { NeonaicIllegalStateError } from '#/utils/NeonaicNewableError.js';
-import { parseString } from '#/utils/chore.js';
+import { neonaicCommandInterface } from '#src/command/commandInterface.js';
+import { neonaicCommandServer } from '#src/command/commandServer.js';
+import { getLogger, neonaicLogger } from '#src/logger/Logger.js';
+import { neonaicConfManager } from '#src/system/confManager.js';
+import { NeonaicNewable } from '#src/utils/NeonaicNewableClass.js';
+import { NeonaicIllegalStateError } from '#src/utils/NeonaicNewableError.js';
+import { parseString } from '#src/utils/chore.js';
 
 // ---- 颜色 ----
 const CYAN   = '\x1b[36m';
@@ -38,7 +38,7 @@ export class PlatformManager extends NeonaicNewable {
   /**
    * @param {object} opts
    * @param {string} opts.configPath secret.json 的绝对路径
-   * @param {import('#/logger/Logger.js').neonaicLogger} opts.logger
+   * @param {import('#src/logger/Logger.js').neonaicLogger} opts.logger
    */
   constructor({ configPath, logger }) {
     super();
@@ -89,7 +89,7 @@ export class PlatformManager extends NeonaicNewable {
   _registerCLI() {
     const clazzThis = this;
     neonaicCommandServer.registerCommand('neonaic', 'platform', async function (...args) {
-      /** @type {import('#/command/commandServer.js').NeonaicCommandContext} */
+      /** @type {import('#src/command/commandServer.js').NeonaicCommandContext} */
       const ctx = this;
       const [sub, name, ...otherPayload] = args;
       if (!ctx.privateExecutor) return `${RED}“${neonaicConfManager.getBotName()}”无法执行“platform”，因为当前上下文不是私密的。`;

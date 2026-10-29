@@ -445,8 +445,10 @@ export function fromQQElement(el, emojiType) {
     return decodeFaceExt(el.ext);
   }
   if (typeof el.id !== 'number') return null;
+  // 索引键是 `<数字类型>:<id>`（1=小黄脸、2=Emoji），必须传折算后的 type；
+  // 直接传 'face' / 'emoji' 会查 `face:4`，永远查不到
   const type = emojiType === 'face' ? EMOJI_TYPES.FACE : emojiType === 'emoji' ? EMOJI_TYPES.EMOJI : undefined;
-  return emojiType === undefined ? null : getEmoji(emojiType, el.id);
+  return type === undefined ? null : getEmoji(type, el.id);
 }
 
 /**

@@ -5,10 +5,10 @@ import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { neonaicChore, parseString } from '#/utils/chore.js';
-import { NeonaicIllegalArgumentError, NeonaicInterruptError, NeonaicIOError, NeonaicNetworkError } from '#/utils/NeonaicNewableError.js';
-import { NeonaicUriMeta } from '#/utils/NeonaicUriMeta.js';
-import { neonaicLifeCycleManager } from '#/system/lifeCycleManager.js';
+import { neonaicChore, parseString } from '#src/utils/chore.js';
+import { NeonaicIllegalArgumentError, NeonaicInterruptError, NeonaicIOError, NeonaicNetworkError } from '#src/utils/NeonaicNewableError.js';
+import { NeonaicUriMeta } from '#src/utils/NeonaicUriMeta.js';
+import { neonaicLifeCycleManager } from '#src/system/lifeCycleManager.js';
 
 export const neonaicNetwork = Object.freeze({
   /**

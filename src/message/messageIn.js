@@ -5,15 +5,15 @@
  * 2. 无匹配 → AI 回复
  */
 
-import { NeonaicCommandContext, neonaicCommandServer } from '#/command/commandServer.js';
-import { neonaicPermissionServer } from '#/command/permissionServer.js';
-import { NeonaicMessageEvent } from '#/event/neonaicEventInterface.js';
-import { getLogger } from '#/logger/Logger.js';
-import { neonaicAI } from '#/message/ai.js';
-import { NeonaicMessage } from '#/message/messageFragment.js';
-import { neonaicConfManager } from '#/system/confManager.js';
-import { neonaicChore, parseString } from '#/utils/chore.js';
-import { NeonaicIllegalArgumentError } from '#/utils/NeonaicNewableError.js';
+import { NeonaicCommandContext, neonaicCommandServer } from '#src/command/commandServer.js';
+import { neonaicPermissionServer } from '#src/command/permissionServer.js';
+import { NeonaicMessageEvent } from '#src/event/neonaicEventInterface.js';
+import { getLogger } from '#src/logger/Logger.js';
+import { neonaicAI } from '#src/message/ai.js';
+import { NeonaicMessage } from '#src/message/messageFragment.js';
+import { neonaicConfManager } from '#src/system/confManager.js';
+import { neonaicChore, parseString } from '#src/utils/chore.js';
+import { NeonaicIllegalArgumentError } from '#src/utils/NeonaicNewableError.js';
 import stripAnsi from 'strip-ansi';
 
 /**
@@ -52,14 +52,14 @@ const REPLY_FALLBACK = Object.freeze({
 });
 
 /**
- * @param {import('#/message/messageFragment.js').NeonaicTValidMessage} msg
+ * @param {import('#src/message/messageFragment.js').NeonaicTValidMessage} msg
  * @param {object} [options]
  * @param {boolean} [options.dispatchEvent=true] 是否要广播事件
  * @param {boolean} [options.preventedByEvent=true] 本回复是否能通过事件来取消
  * @param {boolean} [options.AI=true] 是否要使用 AI
  * @param {string[]|string} [options.AIlist="*"]
  * @param {boolean} [options.resolveCommand=true] 是否要执行命令
- * @param {import('#/command/commandServer.js').NeonaicCommandContext} options.resolveCommandWith 执行时命令上下文
+ * @param {import('#src/command/commandServer.js').NeonaicCommandContext} options.resolveCommandWith 执行时命令上下文
  * @returns {Promise<NeonaicTReplyPayload>}
  * @throws {NeonaicIllegalArgumentError} 参数不合法
  */

@@ -23,9 +23,9 @@
  *   但在当前内核下该顺序对结果无影响。
  */
 
-import { neonaicPermissionServer } from '#/command/permissionServer.js';
-import { getLogger } from '#/logger/Logger.js';
-import { parseString } from '#/utils/chore.js';
+import { neonaicPermissionServer } from '#src/command/permissionServer.js';
+import { getLogger } from '#src/logger/Logger.js';
+import { parseString } from '#src/utils/chore.js';
 
 /** 规则里代表「沿用平台白名单」的写法 */
 const INHERIT = '*';

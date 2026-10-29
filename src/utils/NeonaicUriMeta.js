@@ -1,4 +1,4 @@
-import { NeonaicNewable } from '#/utils/NeonaicNewableClass.js';
+import { NeonaicNewable } from '#src/utils/NeonaicNewableClass.js';
 
 /**
  * 判断主机地址的格式类型

@@ -13,9 +13,9 @@
  */
 
 import { createInterface } from 'node:readline';
-import { neonaicCommandServer } from '#/command/commandServer.js';
-import { neonaicCommandInterface } from '#/command/commandInterface.js';
-import { getLogger } from '#/logger/Logger.js';
+import { neonaicCommandServer } from '#src/command/commandServer.js';
+import { neonaicCommandInterface } from '#src/command/commandInterface.js';
+import { getLogger } from '#src/logger/Logger.js';
 
 // ---- 颜色 ----
 const CYAN   = '\x1b[36m';

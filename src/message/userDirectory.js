@@ -23,10 +23,10 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { getLogger } from '#/logger/Logger.js';
-import { parseString } from '#/utils/chore.js';
-import { NeonaicIllegalArgumentError } from '#/utils/NeonaicNewableError.js';
-import { neonaicLifeCycleManager } from '#/system/lifeCycleManager.js';
+import { getLogger } from '#src/logger/Logger.js';
+import { parseString } from '#src/utils/chore.js';
+import { NeonaicIllegalArgumentError } from '#src/utils/NeonaicNewableError.js';
+import { neonaicLifeCycleManager } from '#src/system/lifeCycleManager.js';
 
 const ROOT_PATH = neonaicLifeCycleManager.ROOT_PATH;
 const FILE = resolve(ROOT_PATH, 'config/saves/identities.json');

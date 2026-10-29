@@ -13,7 +13,7 @@
   },
   "license": "AGPL-3.0",
   "imports": {
-    "#/*": "./src/*"
+    "#src/*": "./src/*"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.40",

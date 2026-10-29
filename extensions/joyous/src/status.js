@@ -8,8 +8,8 @@
  * 这样切分之后，「加一种新传输」不需要碰本文件，而「改一段文案」也不需要碰协议层。
  */
 
-import { neonaicConfManager } from '#/system/confManager.js';
-import { NeonaicIllegalArgumentError } from '#/utils/NeonaicNewableError.js';
+import { neonaicConfManager } from '#src/system/confManager.js';
+import { NeonaicIllegalArgumentError } from '#src/utils/NeonaicNewableError.js';
 import { formatDateTime, formatMcTime, JoyousNewable, valToString } from './utils.js';
 
 /**
