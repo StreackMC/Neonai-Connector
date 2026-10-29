@@ -52,7 +52,7 @@ const REPLY_FALLBACK = Object.freeze({
 });
 
 /**
- * @param {string|NeonaicMessage|NeonaicMessageFragment|NeonaicMessageFragment[]|string[]} msg
+ * @param {import('./messageFragment.js').NeonaicTValidMessage} msg
  * @param {object} [options]
  * @param {boolean} [options.dispatchEvent=true] 是否要广播事件
  * @param {boolean} [options.preventedByEvent=true] 本回复是否能通过事件来取消

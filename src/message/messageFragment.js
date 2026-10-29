@@ -8,12 +8,16 @@ import { NeonaicUriMeta } from "../utils/NeonaicUriMeta.js";
 const BASE64_DATA_URL_RE = /^data:([^;,]*);base64,/i;
 const HEX_COLOR_RE = /^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
 
+/**
+ * @typedef {NeonaicMessage|NeonaicMessageFragment|NeonaicMessageFragment[]|string|string[]} NeonaicTValidMessage 可被 {@link NeonaicMessage} 构造函数接受的消息类型，也即允许传递的消息负荷类型。
+ */
+
 export class NeonaicMessage extends NeonaicNewable {
   /** @type {NeonaicMessageFragment[]} */
   #frag = [];
 
   /**
-   * @param {NeonaicMessage|NeonaicMessageFragment|NeonaicMessageFragment[]|string|string[]} [msg] 消息内容；留空时创建空消息
+   * @param {NeonaicTValidMessage} [msg] 消息内容；留空时创建空消息
    * @throws {NeonaicIllegalArgumentError} 参数不合法
    */
   constructor(msg) {
