@@ -108,7 +108,6 @@ async function onGroupMessageIn(event, pp) {
     privateExecutor: false,
     internalCall: false,
   };
-  /** @type {object[]} 在 qq-official-bot 修复 #123 之前，此处没有类型声明 */
   const mentioned = Array.isArray(event.mentions) ? event.mentions : [];
   noteKnownNames(event, { user, group });
   pp.logMsgIn('Group:', `where=${group} | from=${user} | msg=` + parseString(event.message, false).replace(/\n/g, "\\n"));
@@ -210,7 +209,7 @@ async function onGroupAtMessageIn(event, pp) {
     privateExecutor: false,
     internalCall: false,
   };
-  /** 注意没授权时无论 @ 谁这里也没有内容 @type {object[]} 在 qq-official-bot 修复 #123 之前，此处没有类型声明 */
+  /** 注意没授权时无论 @ 谁这里也没有内容 */
   const mentioned = Array.isArray(event.mentions) ? event.mentions : [];
   noteKnownNames(event, { user, group });
   pp.logMsgIn('GroupAt:', `where=${group} | from=${user} | msg=` + parseString(event.message, false).replace(/\n/g, "\\n"));
@@ -287,7 +286,7 @@ function noteKnownNames(event, targets) {
 }
 
 /**
- * @param {qqBotBackend.PrivateMessageEvent} event 原始信息
+ * @param {qqBotBackend.PrivateMessageEvent|qqBotBackend.GroupMessageEvent} event 原始信息
  * @param {PlatformQQBot} pp 
  * @param {boolean} [textOnly=false] 开启后将只处理可用文本表达的消息片段，其余部分自动忽略，这将替换图片视频等内容为无意义占位符而非链接、Base64 等带内容的 Payload
  * @returns {NeonaicMessage}
@@ -331,9 +330,10 @@ function toNeonaicMsg(event, pp, textOnly = false) {
     }
   });
 
+  /** @type {import('qq-official-bot').MentionedGroupMember[]} */
   const mentioned = Array.isArray(event.mentions) ? event.mentions : [];
   for (const user of mentioned) {
-    result.appendFragment(new NeonaicAtMsgFrag(user));
+    result.appendFragment(new NeonaicAtMsgFrag(`qUSR#${user.id}@${pp.selfInfo.id}`));
   }
   return result;
 }
