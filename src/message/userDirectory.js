@@ -26,10 +26,9 @@ import { fileURLToPath } from 'node:url';
 import { getLogger } from '#/logger/Logger.js';
 import { parseString } from '#/utils/chore.js';
 import { NeonaicIllegalArgumentError } from '#/utils/NeonaicNewableError.js';
+import { neonaicLifeCycleManager } from '#/system/lifeCycleManager.js';
 
-// 本模块自算项目根路径，避免与组合根形成循环依赖
-// userDirectory.js 位于 <根>/src/message/，故向上 2 层为项目根
-const ROOT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const ROOT_PATH = neonaicLifeCycleManager.ROOT_PATH;
 const FILE = resolve(ROOT_PATH, 'config/saves/identities.json');
 
 /**

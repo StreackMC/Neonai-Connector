@@ -1,11 +1,14 @@
-import { lstatSync, realpathSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { lstatSync, realpathSync, writeFileSync } from 'node:fs';
 import { lstat, realpath } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { neonaicChore, parseString } from '#/utils/chore.js';
 import { NeonaicIllegalArgumentError, NeonaicInterruptError, NeonaicIOError, NeonaicNetworkError } from '#/utils/NeonaicNewableError.js';
 import { NeonaicUriMeta } from '#/utils/NeonaicUriMeta.js';
+import { neonaicLifeCycleManager } from '#/system/lifeCycleManager.js';
 
 export const neonaicNetwork = Object.freeze({
   /**
@@ -125,7 +128,7 @@ export const neonaicNetwork = Object.freeze({
 });
 
 /** 项目根路径 */
-const ROOT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const ROOT_PATH = neonaicLifeCycleManager.ROOT_PATH;
 
 /**
  * 把输入路径按“虚拟根”语义转换为绝对路径：去掉前导分隔符后，相对基准目录解析
@@ -428,4 +431,28 @@ export const neonaicFileSystem = {
   isTraversalSync: function (p, t = ROOT_PATH) {
     return isOutsideResolvedSync(resolve(t, parseString(p)), resolve(t));
   },
+
+  /**
+   * 将临时数据保存到本地文件并返回文件路径
+   * @param {string|Buffer|Blob} data **为 String 时按 base64 解析**
+   * @returns {string} 文件路径
+   * @throws {NeonaicIOError} 无权限等 IO 错误
+   */
+  tempSaveAndGet: function (data) {
+    if (typeof data !== 'string' && !Buffer.isBuffer(data)) {
+      throw new NeonaicIllegalArgumentError("临时文件数据必须是字符串或 Buffer");
+    }
+
+    if (typeof data === 'string') {
+      data = Buffer.from(data, 'base64');
+    }
+
+    const target = join(tmpdir(), `neonaic-${randomUUID()}.tmp`);
+    try {
+      writeFileSync(target, data, { mode: 0o600, flag: 'wx' });
+      return target;
+    } catch (e) {
+      throw new NeonaicIOError("无法保存临时文件", e);
+    }
+  }
 };

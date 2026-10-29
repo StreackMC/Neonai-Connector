@@ -34,6 +34,7 @@ import { neonaicConfManager } from '#/system/confManager.js';
 import { NeonaicConfig } from '#/utils/NeonaicConfig.js';
 import { NeonaicExtensionError, NeonaicIllegalArgumentError } from '#/utils/NeonaicNewableError.js';
 import { parseString } from '#/utils/chore.js';
+import { neonaicLifeCycleManager } from '#/system/lifeCycleManager.js';
 
 // ---- 颜色 ----
 const CYAN   = '\x1b[36m';
@@ -44,7 +45,7 @@ const DIM    = '\x1b[2m';
 const R      = '\x1b[0m';
 
 /** 拓展默认根目录：<项目根>/extensions */
-const EXT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'extensions');
+const EXT_ROOT = resolve(neonaicLifeCycleManager.ROOT_PATH, 'extensions');
 /** 拓展启用状态的持久化载体（默认 AUTOSAVE，赋值即写盘） */
 const EXT_SAVE = new NeonaicConfig('#/extension/config/saves/ext.json');
 /** 已识别拓展：id → NeonaicExtItem @type {Map<String, NeonaicExtItem>} */

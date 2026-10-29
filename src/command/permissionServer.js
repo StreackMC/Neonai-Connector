@@ -23,17 +23,17 @@
 
 import { neonaicCommandInterface } from '#/command/commandInterface.js';
 import { neonaicConfManager } from '#/system/confManager.js';
+import { neonaicLifeCycleManager } from '#/system/lifeCycleManager.js';
 import { neonaicChore, parseString } from '#/utils/chore.js';
 import { NeonaicIllegalArgumentError } from '#/utils/NeonaicNewableError.js';
 import JSON5 from 'json5';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 
 // 注：本模块不 import commandServer.js 的运行期能力，避免循环依赖。
 // 权限命令由组合根（entry.js）通过 installPermissionCommands(registerCommand) 安装。
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '#/..');
+const ROOT = neonaicLifeCycleManager.ROOT_PATH;
 const PERM_FILE = resolve(ROOT, 'config/saves/permissions.json');
 
 // ---- 4 层存储 ----
