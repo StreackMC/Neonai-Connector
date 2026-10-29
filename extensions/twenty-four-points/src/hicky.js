@@ -1,11 +1,11 @@
 import z from "zod";
 import { clearSession, getAllSessionUser, hasSession, newSession as getSession, POKER_MAX, POKER_MIN, POKER_SIZE, TARGET, TwentyFourEnums, TwentyFourSession } from './session.js';
-import { neonaicAI } from "../../../src/message/ai.js";
-import { neonaicPermissionServer } from "../../../src/command/permissionServer.js";
-import { neonaicCommandInterface } from "../../../src/command/commandInterface.js";
-import { NeonaicCommandContext, neonaicCommandServer } from '../../../src/command/commandServer.js';
-import { parseString } from '../../../src/utils/chore.js';
-import { neonaicMath } from '../../../src/utils/math.js';
+import { neonaicAI } from "#/message/ai.js";
+import { neonaicPermissionServer } from "#/command/permissionServer.js";
+import { neonaicCommandInterface } from "#/command/commandInterface.js";
+import { NeonaicCommandContext, neonaicCommandServer } from '#/command/commandServer.js';
+import { parseString } from '#/utils/chore.js';
+import { neonaicMath } from '#/utils/math.js';
 
 /** 会话超时时间，单位秒 */
 const SESSION_TIMEOUT = 10 * 60;

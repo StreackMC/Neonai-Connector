@@ -11,5 +11,9 @@
 
   // 文件移动/重命名时自动改写 import 路径
   "javascript.updateImportsOnFileMove.enabled": "always",
-  "typescript.updateImportsOnFileMove.enabled": "always"
+  "typescript.updateImportsOnFileMove.enabled": "always",
+
+  // 自动 import 时使用非相对路径（即使用 # 的别名）
+  "javascript.preferences.importModuleSpecifier": "non-relative",
+  "typescript.preferences.importModuleSpecifier": "non-relative",
 }

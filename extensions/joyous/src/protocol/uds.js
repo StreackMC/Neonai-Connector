@@ -20,19 +20,19 @@
  * 协议全貌见 ../../PROTOCOL.md 。
  */
 
-import { basename } from 'node:path';
-import { connect } from 'node:net';
 import {
   NeonaicIllegalArgumentError,
   NeonaicIllegalStateError,
-} from '../../../../src/utils/NeonaicNewableError.js';
-import { JoyousBridgeSession } from './session.js';
+} from '#/utils/NeonaicNewableError.js';
+import { connect } from 'node:net';
+import { basename } from 'node:path';
+import { JoyousNewable } from '../utils.js';
 import {
   CHANNEL_STATES,
   DEFAULT_TIMEOUTS,
   HANDSHAKE_MODES,
 } from './constants.js';
-import { JoyousNewable } from '../utils.js';
+import { JoyousBridgeSession } from './session.js';
 
 /** POSIX 下的默认套接字路径 */
 export const DEFAULT_UDS_PATH = '/tmp/neonai-joyous.sock';

@@ -1,11 +1,11 @@
+import { neonaicCommandServer } from "#/command/commandServer.js";
+import { neonaicAI } from "#/message/ai.js";
+import { parseString } from "#/utils/chore.js";
+import { neonaicNetwork } from "#/utils/io.js";
+import { neonaicMath, NeonaicMatrix } from '#/utils/math.js';
+import { NeonaicNetworkError } from "#/utils/NeonaicNewableError.js";
+import { NeonaicUriMeta } from "#/utils/NeonaicUriMeta.js";
 import z from "zod";
-import { neonaicCommandServer } from "../command/commandServer.js";
-import { neonaicAI } from "../message/ai.js";
-import { parseString } from "./chore.js";
-import { neonaicNetwork } from "./io.js";
-import { neonaicMath, NeonaicMatrix } from "./math.js";
-import { NeonaicNetworkError } from "./NeonaicNewableError.js";
-import { NeonaicUriMeta } from "./NeonaicUriMeta.js";
 const [registerAITool, registerCommand] = [neonaicAI.registerAITool, neonaicCommandServer.registerCommand];
 
 const ai = () => {

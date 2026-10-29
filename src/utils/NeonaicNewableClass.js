@@ -1,4 +1,4 @@
-import { NeonaicUnsupportedOperationError } from "./NeonaicNewableError.js";
+import { NeonaicUnsupportedOperationError } from "#/utils/NeonaicNewableError.js";
 
 /**
  * @abstract Neonaic可实例化类的通用基类

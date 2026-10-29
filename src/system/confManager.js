@@ -9,9 +9,9 @@
  * 仅支持 JSON5 格式（覆盖 JSON / JSONC）。
  */
 
-import { neonaicCommandInterface } from '../command/commandInterface.js';
-import { getLogger } from '../logger/Logger.js';
-import { NeonaicConfig } from '../utils/NeonaicConfig.js';
+import { neonaicCommandInterface } from '#/command/commandInterface.js';
+import { getLogger } from '#/logger/Logger.js';
+import { NeonaicConfig } from '#/utils/NeonaicConfig.js';
 
 /** 内部名 → 配置文件相对路径 */
 const CONFIG_PATHS = Object.freeze({
@@ -20,7 +20,7 @@ const CONFIG_PATHS = Object.freeze({
   secret: './secret.json',
 });
 
-/** @type {Map<string, import('../utils/NeonaicConfig.js').NeonaicConfig>} */
+/** @type {Map<string, import('#/utils/NeonaicConfig.js').NeonaicConfig>} */
 const _cache = new Map();
 
 /**
@@ -36,7 +36,7 @@ function getConfig(path) {
 /** reload 命令处理器（清空配置缓存） */
 function reloadCmd() {
   _cache.clear();
-  /** @type { import('../command/commandServer.js').NeonaicCommandContext } */
+  /** @type { import('#/command/commandServer.js').NeonaicCommandContext } */
   const ctx = this;
   if (ctx?.internalCall) getLogger().main.info('配置文件已由控制台权限重载');
   else getLogger().main.info(`配置文件已由${ctx?.executor?.[0] ?? '未知'}重载`);

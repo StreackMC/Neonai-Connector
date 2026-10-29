@@ -12,7 +12,12 @@
     "moduleResolution": "NodeNext",
     "allowJs": true,
     "checkJs": false,
-    "maxNodeModuleJsDepth": 0
+    "maxNodeModuleJsDepth": 0,
+    "paths": {
+      "#/*": [
+        "./src/*"
+      ],
+    }
   },
   "include": [
     "main.js",

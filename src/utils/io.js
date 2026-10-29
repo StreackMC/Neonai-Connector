@@ -1,11 +1,11 @@
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { lstatSync, realpathSync } from 'node:fs';
 import { lstat, realpath } from 'node:fs/promises';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-import { NeonaicIllegalArgumentError, NeonaicInterruptError, NeonaicIOError, NeonaicNetworkError } from "./NeonaicNewableError.js";
-import { neonaicChore, parseString } from "./chore.js";
-import { NeonaicUriMeta } from './NeonaicUriMeta.js';
+import { neonaicChore, parseString } from '#/utils/chore.js';
+import { NeonaicIllegalArgumentError, NeonaicInterruptError, NeonaicIOError, NeonaicNetworkError } from '#/utils/NeonaicNewableError.js';
+import { NeonaicUriMeta } from '#/utils/NeonaicUriMeta.js';
 
 export const neonaicNetwork = Object.freeze({
   /**

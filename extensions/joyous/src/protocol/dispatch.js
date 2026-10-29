@@ -25,13 +25,13 @@
  *          它们不是「执行命令」，授权模型也不同，见 {@link ./methods.js} 的业务闸。
  */
 
-import { neonaicCommandServer } from '../../../../src/command/commandServer.js';
-import { neonaicPermissionServer } from '../../../../src/command/permissionServer.js';
+import { neonaicCommandServer } from '#/command/commandServer.js';
+import { neonaicPermissionServer } from '#/command/permissionServer.js';
 import {
   NeonaicCommandError,
   NeonaicIllegalArgumentError,
   NeonaicIllegalStateError,
-} from '../../../../src/utils/NeonaicNewableError.js';
+} from '#/utils/NeonaicNewableError.js';
 import {
   DEFAULT_TIMEOUTS,
   ERROR_CODES,

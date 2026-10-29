@@ -26,14 +26,14 @@ import { opendir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { NeonaicConfig } from '../utils/NeonaicConfig.js';
-import { NeonaicExtItem } from './extLoader.js';
-import { getLogger } from '../logger/Logger.js';
-import { neonaicConfManager } from '../system/confManager.js';
-import { NeonaicExtensionError, NeonaicIllegalArgumentError } from '../utils/NeonaicNewableError.js';
-import { parseString } from '../utils/chore.js';
-import { NeonaicCommandContext, neonaicCommandServer } from '../command/commandServer.js';
-import { neonaicCommandInterface } from '../command/commandInterface.js';
+import { neonaicCommandInterface } from '#/command/commandInterface.js';
+import { NeonaicCommandContext, neonaicCommandServer } from '#/command/commandServer.js';
+import { NeonaicExtItem } from '#/extension/extLoader.js';
+import { getLogger } from '#/logger/Logger.js';
+import { neonaicConfManager } from '#/system/confManager.js';
+import { NeonaicConfig } from '#/utils/NeonaicConfig.js';
+import { NeonaicExtensionError, NeonaicIllegalArgumentError } from '#/utils/NeonaicNewableError.js';
+import { parseString } from '#/utils/chore.js';
 
 // ---- 颜色 ----
 const CYAN   = '\x1b[36m';
@@ -46,7 +46,7 @@ const R      = '\x1b[0m';
 /** 拓展默认根目录：<项目根>/extensions */
 const EXT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'extensions');
 /** 拓展启用状态的持久化载体（默认 AUTOSAVE，赋值即写盘） */
-const EXT_SAVE = new NeonaicConfig('./config/saves/ext.json');
+const EXT_SAVE = new NeonaicConfig('#/extension/config/saves/ext.json');
 /** 已识别拓展：id → NeonaicExtItem @type {Map<String, NeonaicExtItem>} */
 const EXT_MAP = new Map();
 

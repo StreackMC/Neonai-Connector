@@ -1,12 +1,12 @@
 import { existsSync } from 'node:fs';
-import { isAbsolute, relative, resolve } from 'node:path';
+import { resolve } from 'node:path';
 
-import { parseString } from '../utils/chore.js';
-import { neonaicConfManager } from "../system/confManager.js";
-import { NeonaicConfig } from "../utils/NeonaicConfig.js";
-import { NeonaicNewable } from "../utils/NeonaicNewableClass.js";
-import { NeonaicExtensionError, NeonaicFileNotFoundError, NeonaicIllegalArgumentError, NeonaicIllegalStateError } from '../utils/NeonaicNewableError.js';
-import { neonaicFileSystem } from '../utils/io.js';
+import { neonaicConfManager } from "#/system/confManager.js";
+import { NeonaicConfig } from "#/utils/NeonaicConfig.js";
+import { NeonaicNewable } from "#/utils/NeonaicNewableClass.js";
+import { NeonaicExtensionError, NeonaicFileNotFoundError, NeonaicIllegalArgumentError, NeonaicIllegalStateError } from '#/utils/NeonaicNewableError.js';
+import { parseString } from '#/utils/chore.js';
+import { neonaicFileSystem } from '#/utils/io.js';
 
 /**
  * @typedef {Object} NeonaicTExtContext Neonaic 拓展上下文，用于告诉拓展当前环境信息

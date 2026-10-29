@@ -1,23 +1,20 @@
+import { neonaicCommandServer } from '#/command/commandServer.js';
+import { neonaicPermissionServer } from '#/command/permissionServer.js';
+import { neonaicEventBus } from '#/event/neonaicEventBus.js';
+import { NeonaicMessageEvent } from '#/event/neonaicEventInterface.js';
+import { getLogger } from '#/logger/Logger.js';
+import { NeonaicAtMsgFrag, NeonaicAudioMsgFrag, NeonaicEmojiMsgFrag, NeonaicImageMsgFrag, NeonaicLinkMsgFrag, NeonaicMessage, NeonaicTextMsgFrag, NeonaicVideoMsgFrag } from '#/message/messageFragment.js';
+import { neonaicMessageIn } from '#/message/messageIn.js';
+import { neonaicUserDirectory } from '#/message/userDirectory.js';
+import { neonaicPlatformManager } from '#/platform/platformManager.js';
+import { neonaicConfManager } from '#/system/confManager.js';
+import { parseString } from '#/utils/chore.js';
+import { NeonaicIllegalArgumentError } from '#/utils/NeonaicNewableError.js';
 import qqBotBackend, { segment } from 'qq-official-bot';
-import he from 'he';
-import JSON5 from 'json5';
-import { getLogger } from '../../../src/logger/Logger.js';
-import { parseString } from '../../../src/utils/chore.js';
-import { PlatformQQBot } from './entry.js';
-import { neonaicMessageIn } from '../../../src/message/messageIn.js';
-import { neonaicConfManager } from '../../../src/system/confManager.js';
-import { neonaicPlatformManager } from '../../../src/platform/platformManager.js';
-import { fromQQElement } from './emoji.js';
-import { pickAIList } from './aiRoute.js';
-import { neonaicUserDirectory } from '../../../src/message/userDirectory.js';
-import { neonaicCommandServer } from '../../../src/command/commandServer.js';
-import { neonaicCommandInterface } from '../../../src/command/commandInterface.js';
-import { NeonaicIllegalArgumentError } from '../../../src/utils/NeonaicNewableError.js';
-import { neonaicEventBus } from '../../../src/event/neonaicEventBus.js';
-import { NeonaicMessageEvent } from '../../../src/event/neonaicEventInterface.js';
-import { neonaicPermissionServer } from '../../../src/command/permissionServer.js';
 import stripAnsi from 'strip-ansi';
-import { NeonaicAtMsgFrag, NeonaicAudioMsgFrag, NeonaicEmojiMsgFrag, NeonaicImageMsgFrag, NeonaicLinkMsgFrag, NeonaicMessage, NeonaicTextMsgFrag, NeonaicVideoMsgFrag } from '../../../src/message/messageFragment.js';
+import { pickAIList } from './aiRoute.js';
+import { fromQQElement } from './emoji.js';
+import { PlatformQQBot } from './entry.js';
 
 /**
  * 好友列表私聊

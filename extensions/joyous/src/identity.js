@@ -27,14 +27,14 @@
  * 该目录被 `.gitignore` 忽略，因此真实身份不会进入版本库。
  */
 
+import JSON5 from 'json5';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import JSON5 from 'json5';
 
-import { parseString } from '../../../src/utils/chore.js';
-import { getLogger } from '../../../src/logger/Logger.js';
-import { NeonaicIllegalArgumentError } from '../../../src/utils/NeonaicNewableError.js';
+import { getLogger } from '#/logger/Logger.js';
+import { parseString } from '#/utils/chore.js';
+import { NeonaicIllegalArgumentError } from '#/utils/NeonaicNewableError.js';
 
 // 本模块自算项目根路径，避免与组合根形成循环依赖
 // identity.js 位于 <根>/extensions/joyous/src/，故向上 3 层为项目根

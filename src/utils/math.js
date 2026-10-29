@@ -1,10 +1,10 @@
-import { NeonaicArithmeticError, NeonaicIllegalArgumentError, NeonaicIllegalStateError } from "./NeonaicNewableError.js";
-import { parseString } from "./chore.js";
+import { NeonaicArithmeticError, NeonaicIllegalArgumentError, NeonaicIllegalStateError } from '#/utils/NeonaicNewableError.js';
+import { parseString } from "#/utils/chore.js";
 // ⚠️ 这个 import 必须放在前两者之后：NeonaicNewableClass ↔ NeonaicNewableError ↔ chore →
 // confManager → NeonaicConfig → NeonaicNewableClass 之间存在既有的 ESM 环，环的求值顺序
 // 决定了 NeonaicConfig 定义类时基类是否已就绪。若本文件从基类开始求值（写成第一行），
 // NeonaicConfig 会读到尚未初始化的 NeonaicNewable 并抛 TDZ 错误（直接 import 本文件即可复现）。
-import { NeonaicNewable } from "./NeonaicNewableClass.js";
+import { NeonaicNewable } from "#/utils/NeonaicNewableClass.js";
 
 // --- 表格 ---
 

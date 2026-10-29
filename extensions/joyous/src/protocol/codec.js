@@ -16,7 +16,7 @@
 import {
   NeonaicIllegalArgumentError,
   NeonaicProtocolError,
-} from '../../../../src/utils/NeonaicNewableError.js';
+} from '#/utils/NeonaicNewableError.js';
 import { JoyousNewable } from '../utils.js';
 import {
   ERROR_CODES,

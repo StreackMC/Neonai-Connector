@@ -1,9 +1,9 @@
 import z from 'zod';
 
-import { neonaicCommandServer } from '../../../src/command/commandServer.js';
-import { neonaicAI } from '../../../src/message/ai.js';
-import { getLogger } from '../../../src/logger/Logger.js';
-import { parseString } from '../../../src/utils/chore.js';
+import { neonaicCommandServer } from '#/command/commandServer.js';
+import { getLogger } from '#/logger/Logger.js';
+import { neonaicAI } from '#/message/ai.js';
+import { parseString } from '#/utils/chore.js';
 import { getSearchSource, searchThat, WEBSITE_ROOT } from './search.js';
 
 /** 单次最多列出的结果条数，避免刷屏 */

@@ -1,9 +1,9 @@
-import { NeonaicCommandContext } from "../command/commandServer.js";
-import { NeonaicMessage } from "../message/messageFragment.js";
-import { NeonaiPlatform } from "../platform/platformInterface.js";
-import { parseString } from "../utils/chore.js";
-import { NeonaicNewable } from "../utils/NeonaicNewableClass.js";
-import { NeonaicError, NeonaicIllegalArgumentError } from "../utils/NeonaicNewableError.js";
+import { NeonaicCommandContext } from "#/command/commandServer.js";
+import { NeonaicMessage } from "#/message/messageFragment.js";
+import { NeonaiPlatform } from "#/platform/platformInterface.js";
+import { parseString } from "#/utils/chore.js";
+import { NeonaicNewable } from "#/utils/NeonaicNewableClass.js";
+import { NeonaicError, NeonaicIllegalArgumentError } from "#/utils/NeonaicNewableError.js";
 
 /** 是否分发过 LoadedEvent @type {null|NeonaicLoadedEvent} */
 let loadedEventDispatched = null;
@@ -128,7 +128,7 @@ export class NeonaicEvent extends CustomEvent {
 /**
  * @typedef {Object} NeonaicTMessageEventPayload
  * @property {NeonaicMessage} message 消息内容
- * @property {string[]} user 消息来自哪个场景上下文；可以参考 {@link import('../command/commandServer.js').NeonaicCommandContext.executor()}
+ * @property {string[]} user 消息来自哪个场景上下文；可以参考 {@link import('#/command/commandServer.js').NeonaicCommandContext.executor()}
  * @property {NeonaiPlatform|null} pm 平台连接器实例
  * @property {(msg: string) => (Promise<void>|void)} [reply] 回复消息接口；存在时用于表述「被动等待回复」而非「主动请求回复」。
  */
@@ -144,7 +144,7 @@ export class NeonaicMessageEvent extends NeonaicEvent {
   /**
    * 构造一个事件
    * @param {NeonaiPlatform|null} p 平台连接器实例
-   * @param {string|string[]} user 消息来自哪个场景上下文；可以参考 {@link import('../command/commandServer.js').NeonaicCommandContext.executor()}
+   * @param {string|string[]} user 消息来自哪个场景上下文；可以参考 {@link import('#/command/commandServer.js').NeonaicCommandContext.executor()}
    * @param {string|NeonaicMessage|NeonaicMessageFragment[]|NeonaicMessageFragment|string[]} message 消息内容；消息内容不会自动转文本，但不能是 undefined
    * @param {(msg: string) => (Promise<void>|void)} [replyFunc] 回复消息接口；存在时用于表述「被动等待回复」而非「主动请求回复」。
    * @param {NeonaicTEventOptions} [options] 事件选项
@@ -186,7 +186,7 @@ export class NeonaicMessageEvent extends NeonaicEvent {
  * @typedef {Object} NeonaicTCommandEventPayload
  * @property {string|null} [command] 命令名，非 String 一律未知命令
  * @property {string[]|null} [args] 命令参数
- * @property {import('../command/commandServer.js').NeonaicCommandContext} context 命令上下文
+ * @property {import('#/command/commandServer.js').NeonaicCommandContext} context 命令上下文
  * @property {NeonaicTCommandEventStatus} status 命令执行状态
  * @property {*|Promise<*>|null} [result] 命令执行结果
  * @typedef {'postexecute'|'success'|'error'} NeonaicTCommandEventStatus

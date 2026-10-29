@@ -22,20 +22,20 @@
  * @since 0.1.0
  */
 
-import {
-  existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync,
-  unwatchFile, watch, watchFile, writeFileSync,
-} from 'node:fs';
-import { basename, dirname, resolve } from 'node:path';
-import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
-import JSON5 from 'json5';
-import { NeonaicNewable } from './NeonaicNewableClass.js';
+import { NeonaicNewable } from '#/utils/NeonaicNewableClass.js';
 import {
   NeonaicIllegalArgumentError,
   NeonaicIllegalStateError,
   NeonaicIOError,
-} from './NeonaicNewableError.js';
+} from '#/utils/NeonaicNewableError.js';
+import JSON5 from 'json5';
+import {
+  existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync,
+  unwatchFile, watch, watchFile, writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { basename, dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // 本模块自算项目根路径，避免与 entry.js 形成循环依赖
 // NeonaicConfig.js 位于 <根>/src/utils/，故向上 2 层为项目根

@@ -5,13 +5,13 @@
  * 运行时配置通过 PlatformManager.getProfile(this.profile) 获取。
  */
 
+import { getLogger } from '#/logger/Logger.js';
+import { NeonaiPlatform } from '#/platform/platformInterface.js';
+import { neonaicPlatformManager, PlatformManager } from '#/platform/platformManager.js';
+import { neonaicConfManager } from '#/system/confManager.js';
+import { parseString } from '#/utils/chore.js';
+import { NeonaicError, NeonaicIllegalArgumentError, NeonaicIOError } from '#/utils/NeonaicNewableError.js';
 import qqBotBackend from 'qq-official-bot';
-import { getLogger } from '../../../src/logger/Logger.js';
-import { NeonaiPlatform } from '../../../src/platform/platformInterface.js';
-import { neonaicPlatformManager, PlatformManager } from '../../../src/platform/platformManager.js';
-import { neonaicConfManager } from '../../../src/system/confManager.js';
-import { parseString } from '../../../src/utils/chore.js';
-import { NeonaicError, NeonaicIllegalArgumentError, NeonaicIOError } from '../../../src/utils/NeonaicNewableError.js';
 import { EVENTS, INTENTS } from "./enums.js";
 import MsgHandler, { sendMsg } from "./msgHandler.js";
 const { Bot, ReceiverMode } = qqBotBackend;
@@ -125,7 +125,7 @@ export class PlatformQQBot extends NeonaiPlatform {
   /**
    * 向指定用户发送消息
    * @param {string} who 用户标识
-   * @param  {...import('../../../src/message/messageFragment.js').NeonaicTValidMessage} msg 要发送的消息
+   * @param  {...import('#/message/messageFragment.js').NeonaicTValidMessage} msg 要发送的消息
    * @returns {Promise<string>} 发送结果
    */
   async sendMsg(who, ...msg) {
@@ -169,7 +169,7 @@ neonaicPlatformManager.registerPlatform(PlatformQQBot);
  * 按 Profile 驱动，因此这里没有需要额外做的事；保留空实现以满足拓展加载器的
  * 入口函数契约（`onEnable` / `onDisable` 必须同时存在且为函数）。
  *
- * @this {import('../../../src/extension/extLoader.js').NeonaicExtItem}
+ * @this {import('#/extension/extLoader.js').NeonaicExtItem}
  * @param {{ manifest: Object, pwd: String, ext_item_id: String, ext_item_timestamp: Number }} [ctx] 拓展上下文
  */
 export function onEnable(ctx) {
@@ -180,7 +180,7 @@ export function onEnable(ctx) {
  *
  * 同 {@link onEnable}：平台实例的启停由 PlatformManager 负责，这里保持空实现。
  *
- * @this {import('../../../src/extension/extLoader.js').NeonaicExtItem}
+ * @this {import('#/extension/extLoader.js').NeonaicExtItem}
  */
 export function onDisable() {
 }

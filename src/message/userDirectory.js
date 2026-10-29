@@ -18,14 +18,14 @@
  * 平台侧的自动登记走内存态（`persist: false`），不会每条消息都写盘。
  */
 
+import JSON5 from 'json5';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import JSON5 from 'json5';
 
-import { parseString } from '../utils/chore.js';
-import { getLogger } from '../logger/Logger.js';
-import { NeonaicIllegalArgumentError } from '../utils/NeonaicNewableError.js';
+import { getLogger } from '#/logger/Logger.js';
+import { parseString } from '#/utils/chore.js';
+import { NeonaicIllegalArgumentError } from '#/utils/NeonaicNewableError.js';
 
 // 本模块自算项目根路径，避免与组合根形成循环依赖
 // userDirectory.js 位于 <根>/src/message/，故向上 2 层为项目根

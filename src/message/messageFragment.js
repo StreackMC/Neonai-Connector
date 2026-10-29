@@ -1,8 +1,8 @@
-import { parseString } from "../utils/chore.js";
-import { NeonaicTable } from "../utils/math.js";
-import { NeonaicNewable } from "../utils/NeonaicNewableClass.js";
-import { NeonaicIllegalArgumentError } from "../utils/NeonaicNewableError.js";
-import { NeonaicUriMeta } from "../utils/NeonaicUriMeta.js";
+import { parseString } from "#/utils/chore.js";
+import { NeonaicTable } from "#/utils/math.js";
+import { NeonaicNewable } from "#/utils/NeonaicNewableClass.js";
+import { NeonaicIllegalArgumentError } from "#/utils/NeonaicNewableError.js";
+import { NeonaicUriMeta } from "#/utils/NeonaicUriMeta.js";
 
 /** base64 形式的 data URL，第一个捕获组是 MIME */
 const BASE64_DATA_URL_RE = /^data:([^;,]*);base64,/i;

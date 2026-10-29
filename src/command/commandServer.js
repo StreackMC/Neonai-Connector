@@ -18,13 +18,13 @@
  *   { executor, internalCall, timestamp, this: originalThis }
  */
 
-import { neonaicPermissionServer } from './permissionServer.js';
-import { getLogger } from '../logger/Logger.js';
-import { neonaicChore, parseString } from '../utils/chore.js';
+import { neonaicPermissionServer } from '#/command/permissionServer.js';
+import { getLogger } from '#/logger/Logger.js';
+import { neonaicConfManager } from '#/system/confManager.js';
+import { parseString } from '#/utils/chore.js';
+import { NeonaicNewable } from "#/utils/NeonaicNewableClass.js";
+import { NeonaicCommandError, NeonaicIllegalArgumentError, NeonaicIllegalStateError } from "#/utils/NeonaicNewableError.js";
 import { neonaicCommandInterface } from './commandInterface.js';
-import { NeonaicNewable } from "../utils/NeonaicNewableClass.js";
-import { NeonaicCommandError, NeonaicIllegalArgumentError, NeonaicIllegalStateError } from "../utils/NeonaicNewableError.js";
-import { neonaicConfManager } from '../system/confManager.js';
 
 // ---- 颜色 ----
 const RED = '\x1b[31m';
@@ -40,7 +40,7 @@ const R = '\x1b[0m';
  * @property {string} name 命令原名，命名空间内唯一
  * @property {string[]} aliases 命令别名列表（不含原名）；别名可与其它命令的原名同槽并覆盖之
  * @property {function(...*): *|Promise<*>} handler 命令处理器，参数以 `...args` 展开传入，`this` 为 {@link NeonaicCommandContext}
- * @property {import('./commandInterface.js').PermissionSpec} permissions 权限要求（表达式语义见 {@link import('./commandInterface.js').PermissionSpec}）
+ * @property {import('#/command/commandInterface.js').PermissionSpec} permissions 权限要求（表达式语义见 {@link import('./commandInterface.js').PermissionSpec}）
  * @property {boolean} permissionDefault 权限叶子未显式设置时的判定值（默认 false）
  * @property {string|undefined} description 命令描述，供 `help` 等展示
  * @property {string|undefined} usage 用法示例，权限或参数错误时提示
@@ -130,7 +130,7 @@ function resolveCommandArgs(input, prefixes, trim = false) {
  *
  * @param {string} name 命令原名
  * @param {(...args) => any} handler 参数以 ...args 展开传入，this 为命令上下文
- * @param {import('./commandInterface.js').CommandRegisterOptions} opts 命令附加信息
+ * @param {import('#/command/commandInterface.js').CommandRegisterOptions} opts 命令附加信息
  * @returns {null|NeonaicTCommandMeta[]} 成功返回 null；冲突返回冲突命令列表
  * @throws 命名空间、命名或处理器无效
  */

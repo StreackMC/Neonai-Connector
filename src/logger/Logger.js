@@ -9,14 +9,14 @@
  */
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
-import { createRequire } from 'node:module';
 
-import { neonaicConfManager } from '../system/confManager.js';
-import { neonaicLog4jsInject } from './log4js_inject.js';
-import { parseString } from '../utils/chore.js';
+import { neonaicLog4jsInject } from '#/logger/log4js_inject.js';
+import { neonaicConfManager } from '#/system/confManager.js';
+import { parseString } from '#/utils/chore.js';
 
 // 本模块自算项目根路径，避免与 entry.js 形成循环依赖
 // Logger.js 位于 <根>/src/logger/，故向上 2 层为项目根

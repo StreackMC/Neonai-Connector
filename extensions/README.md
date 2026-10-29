@@ -30,7 +30,7 @@ a js in `/extensions/xxx/src/xxx.js` should have these to make it able to be loa
 ```js
 /**
  * 拓展启用钩子
- * @this {import('../../../src/extension/extLoader.js').NeonaicExtItem}
+ * @this {import('#/extension/extLoader.js').NeonaicExtItem}
  * @param {{ manifest: Object, pwd: String, ext_item_id: String, ext_item_timestamp: Number }} [ctx] 拓展上下文
  */
 export function onEnable(ctx) {
@@ -38,7 +38,7 @@ export function onEnable(ctx) {
 
 /**
  * 拓展卸载钩子
- * @this {import('../../../src/extension/extLoader.js').NeonaicExtItem}
+ * @this {import('#/extension/extLoader.js').NeonaicExtItem}
  */
 export function onDisable() {
 }

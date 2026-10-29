@@ -1,8 +1,8 @@
-import { getLogger } from "../../../src/logger/Logger.js";
-import { neonaicChore, parseString } from "../../../src/utils/chore.js";
-import { neonaicMath } from "../../../src/utils/math.js";
-import { NeonaicNewable } from "../../../src/utils/NeonaicNewableClass.js";
-import { NeonaicIllegalArgumentError, NeonaicIllegalStateError, NeonaicUnsupportedOperationError } from "../../../src/utils/NeonaicNewableError.js";
+import { getLogger } from "#/logger/Logger.js";
+import { neonaicChore, parseString } from "#/utils/chore.js";
+import { neonaicMath } from "#/utils/math.js";
+import { NeonaicNewable } from "#/utils/NeonaicNewableClass.js";
+import { NeonaicIllegalArgumentError, NeonaicIllegalStateError, NeonaicUnsupportedOperationError } from "#/utils/NeonaicNewableError.js";
 import { ALL_FIVE_LETTER_WORDS, FRIENDLY_FIVE_LETTER_WORDS } from "./word_provider.js";
 
 /** Wordle 最大猜测次数 */

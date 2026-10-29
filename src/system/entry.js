@@ -11,23 +11,22 @@
  * 配置 / 日志 / 平台管理器单例分别由 confManager.js / Logger.js / platformManager.js 提供。
  */
 
-import { resolve } from 'node:path';
 import { platform, release, tmpdir } from 'node:os';
+import { resolve } from 'node:path';
 
-import { neonaicConfManager } from './confManager.js';
-import { neonaicLogger, getLogger } from '../logger/Logger.js';
-import { neonaicLifeCycleManager } from './lifeCycleManager.js';
-import { neonaicCommandServer } from '../command/commandServer.js';
-import { neonaicCommandInterface } from '../command/commandInterface.js';
-import { neonaicPermissionServer } from '../command/permissionServer.js';
-import { neonaicCliProcessor } from './cliProcessor.js';
-import { PlatformManager } from '../platform/platformManager.js';
-import { neonaicExtensionManager } from '../extension/extManager.js';
-import { neonaicMessageIn } from '../message/messageIn.js';
-import { neonaicChore } from '../utils/chore.js';
-import { neonaicEventBus } from '../event/neonaicEventBus.js';
-import { NeonaicLoadedEvent } from '../event/neonaicEventInterface.js';
-import { neonaicUtilsSupport } from '../utils/registerUtilsSupport.js';
+import { neonaicCommandInterface } from '#/command/commandInterface.js';
+import { neonaicCommandServer } from '#/command/commandServer.js';
+import { neonaicPermissionServer } from '#/command/permissionServer.js';
+import { neonaicEventBus } from '#/event/neonaicEventBus.js';
+import { NeonaicLoadedEvent } from '#/event/neonaicEventInterface.js';
+import { neonaicExtensionManager } from '#/extension/extManager.js';
+import { getLogger, neonaicLogger } from '#/logger/Logger.js';
+import { PlatformManager } from '#/platform/platformManager.js';
+import { neonaicCliProcessor } from '#/system/cliProcessor.js';
+import { neonaicConfManager } from '#/system/confManager.js';
+import { neonaicLifeCycleManager } from '#/system/lifeCycleManager.js';
+import { neonaicChore } from '#/utils/chore.js';
+import { neonaicUtilsSupport } from '#/utils/registerUtilsSupport.js';
 
 // ---- 常量 ----
 
@@ -47,7 +46,7 @@ async function shutdown(signal) {
 // ---- 系统级 CLI 命令 ----
 
 neonaicCommandServer.registerCommand('neonaic', 'version', function () {
-  /** @type {import('../command/commandServer.js').NeonaicCommandContext} */
+  /** @type {import('#/command/commandServer.js').NeonaicCommandContext} */
   const ctx = this;
 
   // ---- 硬编码 ----

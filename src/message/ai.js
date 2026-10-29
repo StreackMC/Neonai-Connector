@@ -12,27 +12,23 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { dirname, parse, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-import { generateText, streamText, tool, stepCountIs } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
+import { generateText, stepCountIs, streamText, tool } from 'ai';
 import JSON5 from 'json5';
 import z from 'zod';
 
-import { neonaicConfManager } from '../system/confManager.js';
-import { getLogger } from '../logger/Logger.js';
-import { neonaicChore, parseString } from '../utils/chore.js';
-import { neonaicCommandServer } from '../command/commandServer.js';
-import { neonaicCommandInterface } from '../command/commandInterface.js';
-import { neonaicPermissionServer } from '../command/permissionServer.js';
-import { NeonaicIllegalArgumentError, NeonaicIllegalStateError, NeonaicNetworkError } from '../utils/NeonaicNewableError.js';
-import { neonaicFileSystem, neonaicNetwork } from '../utils/io.js';
-import { NeonaicUriMeta } from '../utils/NeonaicUriMeta.js';
-import { neonaicMath } from '../utils/math.js';
-import { NeonaicNewable } from '../utils/NeonaicNewableClass.js';
-import { neonaicUserDirectory } from './userDirectory.js';
-import { NeonaicMessage, NeonaicMessageFragment, NeonaicMediaMsgFrag } from './messageFragment.js';
+import { neonaicCommandInterface } from '#/command/commandInterface.js';
+import { neonaicCommandServer } from '#/command/commandServer.js';
+import { neonaicPermissionServer } from '#/command/permissionServer.js';
+import { getLogger } from '#/logger/Logger.js';
+import { NeonaicMediaMsgFrag, NeonaicMessage, NeonaicMessageFragment } from '#/message/messageFragment.js';
+import { neonaicUserDirectory } from '#/message/userDirectory.js';
+import { neonaicConfManager } from '#/system/confManager.js';
+import { neonaicChore, parseString } from '#/utils/chore.js';
+import { neonaicFileSystem } from '#/utils/io.js';
+import { NeonaicNewable } from '#/utils/NeonaicNewableClass.js';
+import { NeonaicIllegalArgumentError, NeonaicIllegalStateError, NeonaicNetworkError } from '#/utils/NeonaicNewableError.js';
 
 /** 封禁用户使用 AI 的权限名 */
 const AI_BAN_PERMISSION = 'neonaic.toolcall.ai';
@@ -781,7 +777,7 @@ function findProvider(name) {
 // ---- ai 命令 ----
 
 neonaicCommandServer.registerCommand('neonaic', 'ai', async function (sub, ...args) {
-  /** @type {import('../command/commandServer.js').NeonaicCommandContext} */
+  /** @type {import('#/command/commandServer.js').NeonaicCommandContext} */
   const ctx = this;
 
   switch (sub) {
@@ -827,7 +823,7 @@ function cmdAIUsage() {
  * 如 `USR#3f2a…`（私聊/群成员）、`GRP#7E6B…`（群）。
  * @apiNote 条目还支持 `note` 字段（补充说明），仅可手工编辑 `config/saves/identities.json` 添加。
  *
- * @param {import('../command/commandServer.js').NeonaicCommandContext} ctx
+ * @param {import('#/command/commandServer.js').NeonaicCommandContext} ctx
  * @param {...string} args
  */
 function aiWhois(ctx, ...args) {
@@ -876,7 +872,7 @@ function aiWhois(ctx, ...args) {
 
 /**
  * ai tool 子命令。
- * @param {import('../command/commandServer.js').NeonaicCommandContext} ctx
+ * @param {import('#/command/commandServer.js').NeonaicCommandContext} ctx
  * @param {...string} args
  */
 async function aiTool(ctx, ...args) {
@@ -915,7 +911,7 @@ async function aiTool(ctx, ...args) {
 
 /**
  * ai profile 子命令。
- * @param {import('../command/commandServer.js').NeonaicCommandContext} ctx
+ * @param {import('#/command/commandServer.js').NeonaicCommandContext} ctx
  * @param {...string} args
  */
 async function aiProfile(ctx, ...args) {
@@ -965,7 +961,7 @@ async function aiProfile(ctx, ...args) {
 
 /**
  * ai ban 子命令：封禁用户使用 AI。
- * @param {import('../command/commandServer.js').NeonaicCommandContext} ctx
+ * @param {import('#/command/commandServer.js').NeonaicCommandContext} ctx
  * @param {string} user
  * @param {string} [time] 持续时间（如 '1h'、'2d'、'1y2M3d4h5m6s'），存在则设临时封禁
  */
@@ -987,7 +983,7 @@ function aiBan(ctx, user, time) {
 
 /**
  * ai pardon 子命令：解封用户。
- * @param {import('../command/commandServer.js').NeonaicCommandContext} ctx
+ * @param {import('#/command/commandServer.js').NeonaicCommandContext} ctx
  * @param {string} user
  */
 function aiPardon(ctx, user) {

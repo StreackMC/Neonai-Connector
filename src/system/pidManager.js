@@ -10,8 +10,8 @@
  *   process.on('exit', () => NeonaicPidManager.releasePidLock(pidFilePath));
  */
 
+import { NeonaicIllegalStateError } from '#/utils/NeonaicNewableError.js';
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
-import { NeonaicIllegalStateError } from '../utils/NeonaicNewableError.js';
 
 /**
  * 判断某 PID 是否仍在运行。
@@ -34,7 +34,7 @@ function pidAlive(pid) {
  * 获取 PID 进程锁。若锁文件存在且对应 PID 已不在运行则自动清理。
  *
  * @param {string} pidFile PID 锁文件路径
- * @param {import('../logger/Logger.js').neonaicLogger} logger 日志器实例
+ * @param {import('#/logger/Logger.js').neonaicLogger} logger 日志器实例
  * @throws {Error} 已有实例运行时拒绝启动
  */
 function acquirePidLock(pidFile, logger) {

@@ -1,4 +1,4 @@
-import { parseString } from "../../../src/utils/chore.js";
+import { parseString } from "#/utils/chore.js";
 
 /** 全角字母对照表 */
 export const FULL_LETTERS = {

@@ -1,8 +1,8 @@
-import { getLogger } from "../../../src/logger/Logger.js";
-import { neonaicChore, parseString } from "../../../src/utils/chore.js";
-import { neonaicMath } from "../../../src/utils/math.js";
-import { NeonaicNewable } from "../../../src/utils/NeonaicNewableClass.js";
-import { NeonaicIllegalArgumentError, NeonaicIllegalStateError, NeonaicUnsupportedOperationError } from "../../../src/utils/NeonaicNewableError.js";
+import { getLogger } from "#/logger/Logger.js";
+import { neonaicChore, parseString } from "#/utils/chore.js";
+import { neonaicMath } from "#/utils/math.js";
+import { NeonaicNewable } from "#/utils/NeonaicNewableClass.js";
+import { NeonaicIllegalArgumentError, NeonaicIllegalStateError, NeonaicUnsupportedOperationError } from "#/utils/NeonaicNewableError.js";
 
 /** 发牌的最小数字，对应扑克牌 A */
 export const POKER_MIN = 1;

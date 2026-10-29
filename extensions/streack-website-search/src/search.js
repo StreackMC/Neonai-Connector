@@ -1,7 +1,7 @@
+import { getLogger } from '#/logger/Logger.js';
+import { NeonaicNetworkError } from '#/utils/NeonaicNewableError.js';
+import { neonaicNetwork } from '#/utils/io.js';
 import JSON5 from 'json5';
-import { getLogger } from '../../../src/logger/Logger.js';
-import { NeonaicNetworkError } from '../../../src/utils/NeonaicNewableError.js';
-import { neonaicNetwork } from '../../../src/utils/io.js';
 
 /** Streack 站点根地址（不含结尾斜杠） */
 export const WEBSITE_ROOT = "https://streack.top";

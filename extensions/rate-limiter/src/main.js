@@ -1,12 +1,8 @@
-import { neonaicCommandServer } from '../../../src/command/commandServer.js';
-import { neonaicPermissionServer } from '../../../src/command/permissionServer.js';
-import { neonaicEventBus } from '../../../src/event/neonaicEventBus.js';
-import { NeonaicMessageEvent } from '../../../src/event/neonaicEventInterface.js';
-import { getLogger } from '../../../src/logger/Logger.js';
-import { NeonaicTextMsgFrag } from '../../../src/message/messageFragment.js';
-import { neonaicConfManager } from '../../../src/system/confManager.js';
-import { neonaicChore } from '../../../src/utils/chore.js';
-import { NeonaicNewable } from '../../../src/utils/NeonaicNewableClass.js';
+import { neonaicCommandServer } from '#/command/commandServer.js';
+import { neonaicEventBus } from '#/event/neonaicEventBus.js';
+import { NeonaicMessageEvent } from '#/event/neonaicEventInterface.js';
+import { getLogger } from '#/logger/Logger.js';
+import { neonaicConfManager } from '#/system/confManager.js';
 
 const OPERATIONS = Object.freeze({
   COMMAND: 'COMMAND',
@@ -24,7 +20,7 @@ const RATE = Object.freeze({
 const CLEANING_BUCKET_INTERVAL = 1/* 小时就清理一次桶 */ * 3600 * 1e3;
 
 /**
- * @this {import('../../../src/extension/extLoader.js').NeonaicExtItem}
+ * @this {import('#/extension/extLoader.js').NeonaicExtItem}
  * @param {{ manifest: Object, pwd: String, ext_item_id: String, ext_item_timestamp: Number }} [ctx] 拓展上下文
  */
 export function onEnable(ctx) {
@@ -32,7 +28,7 @@ export function onEnable(ctx) {
 }
 
 /**
- * @this {import('../../../src/extension/extLoader.js').NeonaicExtItem}
+ * @this {import('#/extension/extLoader.js').NeonaicExtItem}
  */
 export function onDisable() {
   neonaicEventBus.removeEventListener(NeonaicMessageEvent.EVENT_TYPE, handleMsg, { capture: true, once: false, passive: false });
