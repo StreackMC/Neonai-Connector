@@ -236,7 +236,7 @@ async function onGroupAtMessageIn(event, pp) {
 /**
  * 向对象发送消息
  * @param {PlatformQQBot} instance QQ机器人实例
- * @param {string} who 目标对象
+ * @param {string} who 目标对象，**尾随 @ 与否不影响执行，也不影响实际使用的实例**
  * @param {qqBotBackend.Sendable|String} msg 消息内容
  * @returns {Promise<import('qq-official-bot').SendResult|null>} 结果（发送失败时 throw）
  * @throws 无法识别参数 / 发送失败

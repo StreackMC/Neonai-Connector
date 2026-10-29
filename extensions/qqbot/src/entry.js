@@ -5,16 +5,16 @@
  * 运行时配置通过 PlatformManager.getProfile(this.profile) 获取。
  */
 
-import { neonaicPlatformManager, PlatformManager } from '../../../src/platform/platformManager.js';
-import { NeonaiPlatform } from '../../../src/platform/platformInterface.js';
 import qqBotBackend from 'qq-official-bot';
-const { Bot, ReceiverMode } = qqBotBackend;
-import MsgHandler, { sendMsg } from "./msgHandler.js";
-import { EVENTS, INTENTS } from "./enums.js";
-import { NeonaicError, NeonaicIllegalArgumentError, NeonaicIOError } from '../../../src/utils/NeonaicNewableError.js';
 import { getLogger } from '../../../src/logger/Logger.js';
-import { parseString } from '../../../src/utils/chore.js';
+import { NeonaiPlatform } from '../../../src/platform/platformInterface.js';
+import { neonaicPlatformManager, PlatformManager } from '../../../src/platform/platformManager.js';
 import { neonaicConfManager } from '../../../src/system/confManager.js';
+import { parseString } from '../../../src/utils/chore.js';
+import { NeonaicError, NeonaicIllegalArgumentError, NeonaicIOError } from '../../../src/utils/NeonaicNewableError.js';
+import { EVENTS, INTENTS } from "./enums.js";
+import MsgHandler, { sendMsg } from "./msgHandler.js";
+const { Bot, ReceiverMode } = qqBotBackend;
 
 export class PlatformQQBot extends NeonaiPlatform {
   static type = 'qqbot';
@@ -122,21 +122,38 @@ export class PlatformQQBot extends NeonaiPlatform {
     });
   }
 
+  /**
+   * 向指定用户发送消息
+   * @param {string} who 用户标识
+   * @param  {...import('../../../src/message/messageFragment.js').NeonaicTValidMessage} msg 要发送的消息
+   * @returns {Promise<string>} 发送结果
+   */
   async sendMsg(who, ...msg) {
-    // 发送消息
     const messageContent = msg.map(v => parseString(v, false)).join('');
+    const [user, platform = ""] = parseString(who).replace(/@.*$/, '').split('@');
+
+    // 语法糖，如果 platform 不是本实例的，且存在+有效，那么自动转发
+    if (
+      platform
+      && platform !== this.profile
+      && (PlatformManager?.instance?.getPlatform?.(platform) instanceof PlatformQQBot)
+    ) {
+      return PlatformManager.instance.getPlatform(platform).sendMsg(user, messageContent);
+    }
+
+    // 发送消息
     try {
-      const result = await sendMsg(this, who, messageContent);
-      getLogger().platP.debug(`[qqbot] 向`, who, `@`, this.profile, `发送消息`, msg, `：`, result);
-      this.logMsgOut('Command:', `to=${who} | msg=`, messageContent.replace(/\n/g, "\\n"));
+      const result = await sendMsg(this, user, messageContent);
+      getLogger().platP.debug(`[qqbot] 向`, user, `发送消息`, msg, `：`, result);
+      this.logMsgOut('Command:', `to=${user} | msg=`, messageContent.replace(/\n/g, "\\n"));
       // SendResult 可能为「消息审核中」状态
       if (result?.audit_status === 'pending') {
-        return `“${neonaicConfManager.getBotName()}”已向[${who}]发送消息，但消息正在审核中。`;
+        return `“${neonaicConfManager.getBotName()}”已向[${user}@${platform}]发送消息，但消息正在审核中。`;
       }
-      return `“${neonaicConfManager.getBotName()}”成功向[${who}]发送指定消息。`;
+      return `“${neonaicConfManager.getBotName()}”成功向[${user}@${platform}]发送指定消息。`;
     } catch (err) {
-      getLogger().platP.debug(`[qqbot] 向`, who, `@`, this.profile, `发送消息失败：`, err.message);
-      return `“${neonaicConfManager.getBotName()}”无法向[${who}]发送指定消息，因为“${err.message}”。`;
+      getLogger().platP.debug(`[qqbot] 向`, user, `发送消息失败：`, err.message);
+      return `“${neonaicConfManager.getBotName()}”无法向[${user}@${platform}]发送指定消息，因为“${err.message}”。`;
     }
   }
 }
