@@ -246,6 +246,8 @@ export async function sendMsg(instance, who, msg) {
   // 格式化参数
   who = parseString(who).trim().replace(/@.*$/, '');
   if (msg instanceof NeonaicMessage) {
+    msg = new NeonaicMessage(msg); // 复制一份，避免原对象被修改
+    if (who.startsWith('qUSR#')/* 私聊场景下 @ 无效 */) msg.fragments.filter(frag => frag.type !== 'at');
     msg = toQbSendable(msg);
   }
 
