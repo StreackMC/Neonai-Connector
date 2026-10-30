@@ -18,7 +18,7 @@ import stripAnsi from 'strip-ansi';
 
 /**
  * @typedef {Object} NeonaicTReplyPayload
- * @property {string} text 回复内容
+ * @property {NeonaicMessage} text 回复内容
  * @property {boolean} failed 如果为真，表示回复失败，此时另外一个字段就不是 null 了
  * @property {NeonaicTReplyStatus} status 回复状态
  * @typedef {'SUCCESS' | 'CANCELED_BY_EVENT' | 'PERMISSION_OF_AI_DENIED' | 'AI_DISABLED' | 'AI_FAILED' | 'CMD_FAILED' | 'VOID_CMD' | 'UNKNOWN_CMD' | 'PERMISSION_OF_CMD_DENIED' | 'UNABLE_TO_GET_CMD'} NeonaicTReplyStatus
@@ -29,7 +29,7 @@ const REPLY_FALLBACK = Object.freeze({
   /** 被事件中断 */
   CANCELED_BY_EVENT: (r) => r ?
     `（${r}）`
-    :`（${neonaicConfManager.getBotName()}静静地看着你，并未言语）`,
+    : `（${neonaicConfManager.getBotName()}静静地看着你，并未言语）`,
   /** 无权限使用 AI */
   PERMISSION_OF_AI_DENIED: (pardonTime) =>
     `（${neonaicConfManager.getBotName()}静静地看着别处，并未言语）`
@@ -97,7 +97,7 @@ async function resolveReply(msg, options) {
     if (!eventBus.dispatchEvent(event)) {
       getLogger().tool.debug('[msgIn] 消息被事件取消：', event.reason);
       return {
-        text: REPLY_FALLBACK.CANCELED_BY_EVENT(event.reason),
+        text: new NeonaicMessage(REPLY_FALLBACK.CANCELED_BY_EVENT(event.reason)),
         failed: true,
         status: 'CANCELED_BY_EVENT'
       };
@@ -112,13 +112,13 @@ async function resolveReply(msg, options) {
     if (parsed) {
       const [cmdName, cmdArgs] = parsed;
       if (/* 只有前缀、没有命令名 */!cmdName) return {
-        text: REPLY_FALLBACK.UNABLE_TO_GET_CMD(msgForCmd),
+        text: new NeonaicMessage(REPLY_FALLBACK.UNABLE_TO_GET_CMD(msgForCmd)),
         failed: true,
         status: 'UNABLE_TO_GET_CMD'
       };
 
       if (/* 命令不存在 */!neonaicCommandServer.hasCommand(cmdName)) return {
-        text: REPLY_FALLBACK.UNKNOWN_CMD(cmdName),
+        text: new NeonaicMessage(REPLY_FALLBACK.UNKNOWN_CMD(cmdName)),
         failed: true,
         status: 'UNKNOWN_CMD'
       };
@@ -130,7 +130,7 @@ async function resolveReply(msg, options) {
       if (neonaicPermissionServer.checkPermissionFromContext(ctx, cmdMeta.permissions, cmdMeta.permissionDefault) === false) {
         getLogger().cmd.debug(`[msgIn] 无法以“`, ctx.executor, `”执行命令“${cmdName}”: 权限不足`);
         return {
-          text: REPLY_FALLBACK.PERMISSION_OF_CMD_DENIED(cmdName),
+          text: new NeonaicMessage(REPLY_FALLBACK.PERMISSION_OF_CMD_DENIED(cmdName)),
           failed: true,
           status: 'PERMISSION_OF_CMD_DENIED'
         };
@@ -138,14 +138,14 @@ async function resolveReply(msg, options) {
       try {
         const result = await neonaicCommandServer.executeCommandSilent(cmdName, ctx, ...cmdArgs);
         return {
-          text: result != null ? stripAnsi(String(result)).trim() : REPLY_FALLBACK.VOID_CMD(cmdName),
+          text: new NeonaicMessage(result != null ? stripAnsi(String(result)).trim() : REPLY_FALLBACK.VOID_CMD(cmdName)),
           failed: false,
           status: 'SUCCESS'
         };
       } catch (err) {
         getLogger().cmd.warn(`[msgIn] 无法以“`, ctx.executor, `”执行命令“${cmdName}”: ${err.message}`);
         return {
-          text: REPLY_FALLBACK.CMD_FAILED(err, cmdName),
+          text: new NeonaicMessage(REPLY_FALLBACK.CMD_FAILED(err, cmdName)),
           failed: true,
           status: 'CMD_FAILED'
         };
@@ -155,26 +155,26 @@ async function resolveReply(msg, options) {
 
   // ---- AI 兜底 ----
   if (/* 禁用 AI 回复时 */!config.AI) return {
-    text: REPLY_FALLBACK.AI_DISABLED(),
+    text: new NeonaicMessage(REPLY_FALLBACK.AI_DISABLED()),
     failed: false,
     status: 'AI_DISABLED'
   };
   const aiBan = neonaicAI.isAIBanned(config.resolveCommandWith?.executor);
   if (/* 无权使用 AI */aiBan.banned) return {
-    text: REPLY_FALLBACK.PERMISSION_OF_AI_DENIED(aiBan.until),
+    text: new NeonaicMessage(REPLY_FALLBACK.PERMISSION_OF_AI_DENIED(aiBan.until)),
     failed: true,
     status: 'PERMISSION_OF_AI_DENIED'
   };
   try {
     return {
-      text: stripAnsi(await neonaicAI.askAI(message, { AIlist: config.AIlist, caller: config.resolveCommandWith?.executor })).trim(),
+      text: new NeonaicMessage(stripAnsi(await neonaicAI.askAI(message, { AIlist: config.AIlist, caller: config.resolveCommandWith?.executor })).trim()),
       failed: false,
       status: 'SUCCESS'
     };
   } catch (err) {
     getLogger().tool.error(`[msgIn] AI 回复失败: `, err);
     return {
-      text: REPLY_FALLBACK.AI_FAILED(),
+      text: new NeonaicMessage(REPLY_FALLBACK.AI_FAILED()),
       failed: true,
       status: 'AI_FAILED'
     };

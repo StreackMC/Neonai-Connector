@@ -16,6 +16,8 @@ import { pickAIList } from './aiRoute.js';
 import { PlatformQQBot } from './entry.js';
 import { convert_qqBotMsg_to_NeonaicMsg as toNeonaicMsg, convert_NeonaicMsg_to_qqBotMsg as toQbSendable } from './msgPayloadConvertor.js';
 
+// TODO : 由于 SDK 缺陷，在解决 #132 之前都不能交给解析器解析成 Sendable，需要强制以 Markdown 上传
+
 /**
  * 好友列表私聊
  * 
@@ -121,7 +123,7 @@ async function onGroupMessageIn(event, pp) {
     if (reply.text) {
       event.reply([
         segment.reply(event.message_id),
-        segment.markdown(reply.text),
+        segment.markdown(reply.text.toMarkdown()),
       ]).then(() => {
         pp.logMsgOut('GroupAt:', `where=${group} | to=${user} | reply=`, parseString(reply.text, false).replace(/\n/g, "\\n"));
       }).catch((e) => {
@@ -145,7 +147,7 @@ async function onGroupMessageIn(event, pp) {
         const quickCommandResult = stripAnsi(await neonaicCommandServer.executeCommandSilent(cmdName, ctx, ...cmdArgs));
         event.reply([
           segment.reply(event.message_id),
-          segment.markdown(parseString(quickCommandResult)),
+          segment.markdown(quickCommandResult instanceof NeonaicMessage ? quickCommandResult.toMarkdown() : parseString(quickCommandResult)),
         ]).then(() => {
           pp.logMsgOut('GroupAt:', `where=${group} | to=${user} | reply=`, parseString(quickCommandResult).replace(/\n/g, "\\n"));
         }).catch((e) => {
@@ -170,7 +172,7 @@ async function onGroupMessageIn(event, pp) {
   neonaicEventBus.dispatchEvent(new NeonaicMessageEvent(pp, [user, group], neonaicmsg, async (msg) => {
     event.reply([
       segment.reply(event.message_id),
-      segment.markdown(msg),
+      segment.markdown(new NeonaicMessage(msg).toMarkdown()),
     ]).then(() => {
       pp.logMsgOut('Group:', `where=${group} | to=${user} | reply=`, parseString(msg, false).replace(/\n/g, "\\n"));
     }).catch((e) => {
@@ -221,7 +223,7 @@ async function onGroupAtMessageIn(event, pp) {
   if (reply.text) {
     event.reply([
       segment.reply(event.message_id),
-      segment.markdown(reply.text),
+      segment.markdown(reply.text.toMarkdown()),
     ]).then(() => {
       pp.logMsgOut('GroupAt:', `where=${group} | to=${user} | reply=`, parseString(reply.text, false).replace(/\n/g, "\\n"));
     }).catch((e) => {
