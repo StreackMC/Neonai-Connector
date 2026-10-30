@@ -147,10 +147,12 @@ export class NeonaicMessage extends NeonaicNewable {
   /**
    * 把各片段直接拼成一段 markdown 文本
    *
-   * @apiNote 拼接**不是**无脑 `join("")`：块级片段（代码块/表格/列表/引用/分隔线/音视频）
-   *          必须独占行，因此与相邻内容之间会补一个空行。否则
+   * @apiNote 拼接**不是**无脑 `join("")`：块级片段（代码块/表格/列表/引用/标题/分隔线/
+   *          音视频/强制分段）必须独占行，因此与相邻内容之间会补一个空行。否则
    *          `文本 + 代码块` 会拼成 `说明```…`，渲染器会把整段当成一段普通文本。
    *          行内片段之间仍然零分隔拼接。
+   *          首尾的换行会被裁掉：开头会渲染成一个空段落，结尾是纯脏数据
+   *          （典型来源是强制分段片段被放在消息首尾）。
    * @param {Partial<Record<NeonaicTMessageFragmentTypes, ((value: NeonaicMessageFragment, index: number, type: NeonaicTMessageFragmentTypes) => string|null|undefined)>>} [override] 同 {@link NeonaicMessage#markdown}
    * @param {any} [thisArg] 可选的 this 值，默认为本实例
    * @returns {string}
@@ -172,7 +174,7 @@ export class NeonaicMessage extends NeonaicNewable {
       out += text;
       prevBlock = frag.isBlock;
     });
-    return out;
+    return out.replace(/^\n+/, "").replace(/\n+$/, "");
   }
 
   toString() { return parseString(this.mapFrag(f => f.toString())); }
@@ -319,10 +321,33 @@ export class NeonaicInlineCodeMsgFrag extends NeonaicTextMsgFrag {
   }
 }
 
-/** 表示一个换行片段 */
+/**
+ * 表示一个**强制分段**（段落分隔）。
+ *
+ * @apiNote 语义是「段落」而不是「换行」，因此：
+ *   - 按**块级**处理，`toMarkdown()` 在它两侧留出空行；
+ *   - **1 个与 2 个等价**（相邻的分隔符会合并，不会叠出更多空行）；
+ *   - 出现在消息**首尾**时会被裁掉（那里没有段落可分）。
+ *
+ * 段内换行（软换行）是**部分平台支持**的特性，需要时请写 `new NeonaicTextMsgFrag('\n')`：
+ * CommonMark 会把单个换行渲染成空格，只有开启 hard-break 的渲染器（GitHub、部分聊天端）
+ * 才显示为换行 —— 所以不要用它做排版，排版请用本片段分段。
+ */
 export class NeonaicBrMsgFrag extends NeonaicTextMsgFrag {
+  /** 强制分段，按块级处理 @returns {boolean} */
+  static BLOCK = true;
+
   /** @returns {NeonaicTMessageFragmentTypes} */
   get TYPE() { return 'br'; }
+
+  /**
+   * 一个空行。
+   * @apiNote 不能用父类的「文本 + 样式」实现：分段的本质就是**空行**本身，
+   *          写成 `\n\n` 才能让 `frag.markdown` 单独看也表达同一语义
+   *          （qqbot 这类直接把片段映射成媒体的下游不会走 `toMarkdown()`）。
+   * @returns {string}
+   */
+  get markdown() { return '\n\n'; }
 
   constructor() {
     super('\n', {});

@@ -87,7 +87,8 @@ export function convert_NeonaicMsg_to_qqBotMsg(msg, allowTempSave = false) {
         return qbSegment.markdown(frag.markdown);
       case 'br':
         // qq-official-bot #132 ，混用出现未定义行为，必须使用 Markdown
-        return qbSegment.markdown('\n');
+        // 用片段自身的输出（一个空行）：br 的语义是强制分段，QQ 侧也应是段落间距而非单次换行
+        return qbSegment.markdown(frag.markdown);
       case 'at': {
         const target = frag.target.replace(/@.*$/, '');
         if (target.startsWith('qGRP#')) throw new NeonaicIllegalStateError(`无法@一个群聊`);

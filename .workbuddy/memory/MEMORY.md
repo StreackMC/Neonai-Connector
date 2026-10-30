@@ -60,8 +60,12 @@
 - `NeonaicMessage` 持有片段链：`markdown(override)` 返回**数组**（可按 `TYPE` 替换或置 null），`toMarkdown()` 拼成字符串；`forEachFrag`/`mapFrag` 的回调第三个参数是 `TYPE`。构造函数接受 `string | fragment | fragment[] | string[] | NeonaicMessage`，留空创建空消息。⚠️ 构造函数末尾曾有一个**无条件 `throw`**，任何消息都构造失败。
 - 片段类型（18 种，除 `raw-fragment` 外都有实现）：`text`/`br`/`inline-code`/`code`/`link`/`emoji`/`table`/`at`/`heading`/`image`/`audio`/`video`/`ordered-list`/`unordered-list`/`checkbox`/`blockquote`/`divider`。共同基类 `NeonaicMessageFragment`（抽象，直接实例化抛错）。
   ⚠️ **typedef 与实现集合必须一致**：`NeonaicTMessageFragmentTypes` 是唯一清单，自检**直接解析该 typedef**（不是拿硬编码表自证）比对实现类，缺一个就报错并点名。曾漏过 `heading`，就是靠「硬编码表自证」蒙过去的。
-- **块级 vs 行内**：基类有 `static BLOCK`（默认 false）与 `get isBlock`。块级 = `heading`/`code`/`table`/`ordered-list`/`unordered-list`/`checkbox`/`blockquote`/`divider`/`audio`/`video`；行内 = `text`/`br`/`inline-code`/`link`/`emoji`/`image`/`at`。
-  ⚠️ `toMarkdown()` **不再是无脑 `join("")`**：块级片段与相邻内容之间会补一个空行（否则 `说明` + 代码块会拼成 `说明```…`，整段语法失效）；行内之间仍零分隔。新增块级片段**必须**标 `static BLOCK = true`，否则会与上文黏成一行。
+- **块级 vs 行内**：基类有 `static BLOCK`（默认 false）与 `get isBlock`。块级 = `heading`/`br`/`code`/`table`/`ordered-list`/`unordered-list`/`checkbox`/`blockquote`/`divider`/`audio`/`video`；行内 = `text`/`inline-code`/`link`/`emoji`/`image`/`at`。
+  ⚠️ `toMarkdown()` **不再是无脑 `join("")`**：块级片段与相邻内容之间会补一个空行（否则 `说明` + 代码块会拼成 `说明```…`，整段语法失效）；行内之间仍零分隔。新增块级片段**必须**标 `static BLOCK = true`，否则会与上文黏成一行。**首尾的换行一律裁掉**（开头会渲染成空段落，结尾是脏数据）。
+- **`br` = 强制分段（不是换行）**：`markdown` 是 `\n\n`（空行本身），标 `BLOCK` 让它两侧留空行。
+  - **1 个与 2 个等价**（相邻分隔符合并），放在首/尾会被裁掉（`[br, 'a', br]` → `a`）。
+  - 段内换行（软换行）是**部分平台支持**的特性：用 `new NeonaicTextMsgFrag('\n')` 手写。CommonMark 把单个 `\n` 渲染成空格，只有 hard-break 渲染器才显示为换行 ⇒ **不要用它排版**。
+  - 代价（预期）：列表项里放 `br` 会让该项分成两段，整个列表变**松散**（每项多包 `<p>`）；引用块里则是两段引用。
 - **嵌套约束是数据表**：模块内 `NESTING`（容器 → 允许的子片段 `TYPE[]`，`null` 表示不限制），由 `assertNestable(container, frag)` 在构造期校验，导出为 `neonaicMessageFragment.NESTING` / `.assertNestable`。
   - `link` 的显示文本是**行内上下文**：只允许 `text`/`inline-code`/`emoji`/`image`；**拒绝**块级内容、`br`、`at` 与嵌套 `link`。`alt`（title）**只能纯文本**。
   - `heading` 也是行内上下文，但**允许再嵌 `link`**（标题里放链接是合法的，链接 label 里不行）；拒绝块级内容与 `br`（换行会把标题截成两行）。层级只收 1–6，空内容输出裸 `#`（不留尾随空格），内容里的换行折叠成空格。
