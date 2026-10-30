@@ -1,5 +1,7 @@
+import { neonaicCommandInterface } from "#src/command/commandInterface.js";
 import { neonaicCommandServer } from "#src/command/commandServer.js";
 import { neonaicAI } from "#src/message/ai.js";
+import * as frag from "#src/message/messageFragment.js";
 import { parseString } from "#src/utils/chore.js";
 import { neonaicNetwork } from "#src/utils/io.js";
 import { neonaicMath, NeonaicMatrix } from '#src/utils/math.js';
@@ -8,8 +10,18 @@ import { NeonaicUriMeta } from "#src/utils/NeonaicUriMeta.js";
 import z from "zod";
 const [registerAITool, registerCommand] = [neonaicAI.registerAITool, neonaicCommandServer.registerCommand];
 
+const NS = 'neonaic';
+const CMD_PERM = {
+  /** 仅包含命令名的权限 */
+  only_name: (name) => ['neonaic.command.' + name],
+  /** 包含命令名的权限+管理员+超级管理员 */
+  op_only: (name) => [['neonaic.command.' + name, neonaicCommandInterface.COMMAND_ENUMS.PERM_ADMIN, neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN]],
+  /** 包含命令名的权限+超级管理员 */
+  superop_only: (name) => [['neonaic.command.' + name, neonaicCommandInterface.COMMAND_ENUMS.PERM_SUPERADMIN]],
+};
+
 const ai = () => {
-  registerAITool('neonaic', 'webfetch', {
+  registerAITool(NS, 'webfetch', {
     description: "从指定地址获取Web内容",
     inputSchema: z.object({
       address: z.string().describe("目标 URI，协议头缺失时视作http。"),
@@ -41,7 +53,7 @@ const ai = () => {
     },
   });
 
-  registerAITool('neonaic', 'time', {
+  registerAITool(NS, 'time', {
     description: "获取指定时区的时间信息",
     inputSchema: z.object({
       country: z.string().describe("目标时区的ISO国家代码，用于文本格式化；传空值为默认，可以假定与用户时区相同"),
@@ -53,7 +65,7 @@ const ai = () => {
     },
   });
 
-  registerAITool('neonaic', 'stringlength', {
+  registerAITool(NS, 'stringlength', {
     description: "获取输入文本的长度",
     inputSchema: z.object({
       text: z.string().describe("待判断文本"),
@@ -61,7 +73,7 @@ const ai = () => {
     execute: async ({ text }) => parseString(text).length,
   });
 
-  registerAITool('neonaic', 'calc', {
+  registerAITool(NS, 'calc', {
     description: '计算指定的算式。支持四则运算、幂、根号、取模、对数、阶乘、括号，以及常用科学常量与隐式乘法（如 2π、3(1+2)）',
     inputSchema: z.object({
       expression: z.string().describe(
@@ -96,7 +108,7 @@ const ai = () => {
     },
   });
 
-  registerAITool('neonaic', 'matrix', {
+  registerAITool(NS, 'matrix', {
     description: '评估指定的矩阵，返回矩阵的秩、行列式结果等信息',
     inputSchema: z.object({
       data: z.string().describe('以 CSV 格式表达的矩阵：同一行元素用英文逗号分隔，行之间用换行分隔'),
@@ -166,7 +178,42 @@ const ai = () => {
 };
 
 const cmd = () => {
-
+  const FONT_TEST = [
+    "中国智造，慧及全球",
+    "A quick fox jumps over a lazy dog",
+  ];
+  registerCommand(NS, 'markdown', () => {
+    return new frag.NeonaicMessage([
+      new frag.NeonaicHeadingMsgFrag("一级标题", 1),
+      new frag.NeonaicHeadingMsgFrag("二级标题", 2),
+      new frag.NeonaicHeadingMsgFrag("三级标题", 3),
+      new frag.NeonaicHeadingMsgFrag("四级标题", 4),
+      new frag.NeonaicHeadingMsgFrag("五级标题", 5),
+      new frag.NeonaicHeadingMsgFrag("六级标题", 6),
+      new frag.NeonaicTextMsgFrag("普通 " + FONT_TEST.join(''), {}),
+      new frag.NeonaicBrMsgFrag(),
+      new frag.NeonaicTextMsgFrag("粗体" + FONT_TEST.join(''), { bold: true }),
+      new frag.NeonaicBrMsgFrag(),
+      new frag.NeonaicTextMsgFrag("斜体" + FONT_TEST.join(''), { italic: true }),
+      new frag.NeonaicBrMsgFrag(),
+      new frag.NeonaicTextMsgFrag("删除线" + FONT_TEST.join(''), { strikethrough: true }),
+      new frag.NeonaicBrMsgFrag(),
+      new frag.NeonaicInlineCodeMsgFrag("行内代码 " + FONT_TEST.join('')),
+      new frag.NeonaicBrMsgFrag(),
+      new frag.NeonaicTextMsgFrag("非标下划线 文本" + FONT_TEST.join(''), { underline: true }),
+      new frag.NeonaicDividerMsgFrag(),
+      new frag.NeonaicLinkMsgFrag("https://github.com/StreackMC/Neonai-Connector", "链接"),
+      new frag.NeonaicOrderedListMsgFrag(["有序列表项 1", "Ordered List Item 2", ...FONT_TEST]),
+      new frag.NeonaicUnorderedListMsgFrag(["无序列表项 1", "Unordered List Item 2", ...FONT_TEST]),
+      new frag.NeonaicCheckboxMsgFrag([{ checked: false, content: "未选中复选框" }, { checked: true, content: "选中复选框" }]),
+      new frag.NeonaicCodeMsgFrag(`for (var i = 0; i < 3; i++) {\n  setTimeout(() => console.log(i), 0);\n}`, 'javascript'),
+      new frag.NeonaicBlockquoteMsgFrag("引用内容"),
+    ]);
+  }, {
+    permissions: CMD_PERM.op_only('markdown'),
+    alias: ['md'],
+    description: "返回一串 Markdown 消息，用于测试 Markdown 消息是否正常"
+  });
 };
 
 export const neonaicUtilsSupport = {
