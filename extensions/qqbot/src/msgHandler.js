@@ -45,7 +45,7 @@ async function onPrivateMessageIn(event, pp) {
   if (reply.text) {
     event.reply([
       segment.reply(event.message_id),
-      segment.text(reply.text),
+      segment.markdown(reply.text),
     ]).then(() => {
       pp.logMsgOut('Private:', `to=${user} | reply=`, parseString(reply.text, false).replace(/\n/g, "\\n"));
     }).catch((e) => {
@@ -121,7 +121,7 @@ async function onGroupMessageIn(event, pp) {
     if (reply.text) {
       event.reply([
         segment.reply(event.message_id),
-        segment.text(reply.text),
+        segment.markdown(reply.text),
       ]).then(() => {
         pp.logMsgOut('GroupAt:', `where=${group} | to=${user} | reply=`, parseString(reply.text, false).replace(/\n/g, "\\n"));
       }).catch((e) => {
@@ -145,7 +145,7 @@ async function onGroupMessageIn(event, pp) {
         const quickCommandResult = stripAnsi(await neonaicCommandServer.executeCommandSilent(cmdName, ctx, ...cmdArgs));
         event.reply([
           segment.reply(event.message_id),
-          segment.text(parseString(quickCommandResult)),
+          segment.markdown(parseString(quickCommandResult)),
         ]).then(() => {
           pp.logMsgOut('GroupAt:', `where=${group} | to=${user} | reply=`, parseString(quickCommandResult).replace(/\n/g, "\\n"));
         }).catch((e) => {
@@ -154,7 +154,7 @@ async function onGroupMessageIn(event, pp) {
       } catch (error_in_executing_cmd) {
         event.reply([
           segment.reply(event.message_id),
-          segment.text(neonaicMessageIn.REPLY_FALLBACK.CMD_FAILED(error_in_executing_cmd, cmdName)),
+          segment.markdown(neonaicMessageIn.REPLY_FALLBACK.CMD_FAILED(error_in_executing_cmd, cmdName)),
         ]).then(() => {
           pp.log('warn', 'Failed to reply group message:', `where=${group} | to=${user} | error=`, error_in_executing_cmd, ` | reply=<null>Executing Command</null>`);
         }).catch((error_in_sending_cmd_err) => {
@@ -170,7 +170,7 @@ async function onGroupMessageIn(event, pp) {
   neonaicEventBus.dispatchEvent(new NeonaicMessageEvent(pp, [user, group], neonaicmsg, async (msg) => {
     event.reply([
       segment.reply(event.message_id),
-      segment.text(msg),
+      segment.markdown(msg),
     ]).then(() => {
       pp.logMsgOut('Group:', `where=${group} | to=${user} | reply=`, parseString(msg, false).replace(/\n/g, "\\n"));
     }).catch((e) => {
@@ -221,7 +221,7 @@ async function onGroupAtMessageIn(event, pp) {
   if (reply.text) {
     event.reply([
       segment.reply(event.message_id),
-      segment.text(reply.text),
+      segment.markdown(reply.text),
     ]).then(() => {
       pp.logMsgOut('GroupAt:', `where=${group} | to=${user} | reply=`, parseString(reply.text, false).replace(/\n/g, "\\n"));
     }).catch((e) => {
