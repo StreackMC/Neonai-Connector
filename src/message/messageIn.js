@@ -138,7 +138,9 @@ async function resolveReply(msg, options) {
       try {
         const result = await neonaicCommandServer.executeCommandSilent(cmdName, ctx, ...cmdArgs);
         return {
-          text: new NeonaicMessage(result != null ? stripAnsi(String(result)).trim() : REPLY_FALLBACK.VOID_CMD(cmdName)),
+          text: new NeonaicMessage(result != null
+            ? result
+            : REPLY_FALLBACK.VOID_CMD(cmdName)),
           failed: false,
           status: 'SUCCESS'
         };

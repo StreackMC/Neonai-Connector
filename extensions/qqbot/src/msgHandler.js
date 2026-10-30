@@ -47,7 +47,7 @@ async function onPrivateMessageIn(event, pp) {
   if (reply.text) {
     event.reply([
       segment.reply(event.message_id),
-      segment.markdown(reply.text),
+      segment.markdown(reply.text.toMarkdown()),
     ]).then(() => {
       pp.logMsgOut('Private:', `to=${user} | reply=`, parseString(reply.text, false).replace(/\n/g, "\\n"));
     }).catch((e) => {

@@ -3,6 +3,7 @@ import { NeonaicTable } from "#src/utils/math.js";
 import { NeonaicNewable } from "#src/utils/NeonaicNewableClass.js";
 import { NeonaicIllegalArgumentError } from "#src/utils/NeonaicNewableError.js";
 import { NeonaicUriMeta } from "#src/utils/NeonaicUriMeta.js";
+import stripAnsi from "strip-ansi";
 
 /** base64 形式的 data URL，第一个捕获组是 MIME */
 const BASE64_DATA_URL_RE = /^data:([^;,]*);base64,/i;
@@ -59,16 +60,16 @@ export class NeonaicMessage extends NeonaicNewable {
         if (element instanceof NeonaicMessageFragment) {
           return element;
         } else if (typeof element === "string") {
-          return new NeonaicTextMsgFrag(element);
+          return new NeonaicTextMsgFrag(stripAnsi(element));
         }
-        throw new NeonaicIllegalArgumentError("Array elements must be NeonaicMessageFragment or string");
+        return new NeonaicTextMsgFrag(stripAnsi(parseString(element)));
       });
     } else if (msg instanceof NeonaicMessageFragment) {
       this.#frag = [msg];
     } else if (typeof msg === "string") {
-      this.#frag = [new NeonaicTextMsgFrag(msg)];
+      this.#frag = [new NeonaicTextMsgFrag(stripAnsi(msg))];
     } else {
-      this.#frag = [new NeonaicTextMsgFrag(String(msg))];
+      this.#frag = [new NeonaicTextMsgFrag(stripAnsi(parseString(msg)))];
     }
   }
 
