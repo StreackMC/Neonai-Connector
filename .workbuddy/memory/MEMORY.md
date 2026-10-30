@@ -58,13 +58,16 @@
 
 ## 消息片段协议（`src/message/messageFragment.js`）
 - `NeonaicMessage` 持有片段链：`markdown(override)` 返回**数组**（可按 `TYPE` 替换或置 null），`toMarkdown()` 拼成字符串；`forEachFrag`/`mapFrag` 的回调第三个参数是 `TYPE`。构造函数接受 `string | fragment | fragment[] | string[] | NeonaicMessage`，留空创建空消息。⚠️ 构造函数末尾曾有一个**无条件 `throw`**，任何消息都构造失败。
-- 片段类型（17 种，除 `raw-fragment` 外都有实现）：`text`/`br`/`inline-code`/`code`/`link`/`emoji`/`table`/`at`/`image`/`audio`/`video`/`ordered-list`/`unordered-list`/`checkbox`/`blockquote`/`divider`。共同基类 `NeonaicMessageFragment`（抽象，直接实例化抛错）。
-- **块级 vs 行内**：基类有 `static BLOCK`（默认 false）与 `get isBlock`。块级 = `code`/`table`/`ordered-list`/`unordered-list`/`checkbox`/`blockquote`/`divider`/`audio`/`video`；行内 = `text`/`br`/`inline-code`/`link`/`emoji`/`image`/`at`。
+- 片段类型（18 种，除 `raw-fragment` 外都有实现）：`text`/`br`/`inline-code`/`code`/`link`/`emoji`/`table`/`at`/`heading`/`image`/`audio`/`video`/`ordered-list`/`unordered-list`/`checkbox`/`blockquote`/`divider`。共同基类 `NeonaicMessageFragment`（抽象，直接实例化抛错）。
+  ⚠️ **typedef 与实现集合必须一致**：`NeonaicTMessageFragmentTypes` 是唯一清单，自检**直接解析该 typedef**（不是拿硬编码表自证）比对实现类，缺一个就报错并点名。曾漏过 `heading`，就是靠「硬编码表自证」蒙过去的。
+- **块级 vs 行内**：基类有 `static BLOCK`（默认 false）与 `get isBlock`。块级 = `heading`/`code`/`table`/`ordered-list`/`unordered-list`/`checkbox`/`blockquote`/`divider`/`audio`/`video`；行内 = `text`/`br`/`inline-code`/`link`/`emoji`/`image`/`at`。
   ⚠️ `toMarkdown()` **不再是无脑 `join("")`**：块级片段与相邻内容之间会补一个空行（否则 `说明` + 代码块会拼成 `说明```…`，整段语法失效）；行内之间仍零分隔。新增块级片段**必须**标 `static BLOCK = true`，否则会与上文黏成一行。
 - **嵌套约束是数据表**：模块内 `NESTING`（容器 → 允许的子片段 `TYPE[]`，`null` 表示不限制），由 `assertNestable(container, frag)` 在构造期校验，导出为 `neonaicMessageFragment.NESTING` / `.assertNestable`。
   - `link` 的显示文本是**行内上下文**：只允许 `text`/`inline-code`/`emoji`/`image`；**拒绝**块级内容、`br`、`at` 与嵌套 `link`。`alt`（title）**只能纯文本**。
+  - `heading` 也是行内上下文，但**允许再嵌 `link`**（标题里放链接是合法的，链接 label 里不行）；拒绝块级内容与 `br`（换行会把标题截成两行）。层级只收 1–6，空内容输出裸 `#`（不留尾随空格），内容里的换行折叠成空格。
   - `list-item`/`blockquote`/`checkbox` 不限制子类型（Markdown 允许块级内容），但仍拒绝 `raw-fragment`（子类忘覆写 `TYPE`）。
   - ⚠️ `assertPlainText()` 守「本该是纯文本」的位置（`text`/`code`/`at`/表格单元格）：不拦的话 `parseString(fragment)` 会走 `toString()`，静默得到 `"image:![…]"`，错误直到渲染才显现。
+  - 行内渲染共用 `renderInlineFragments()`：**只转义 `text`**，否则 `![alt](url)` 会被转义成字面量（等于图片进不了链接/标题）。
 - **列表片段用 `NeonaicMessageFragment[][]` 表达**（每项一个片段数组；单项也可传字符串/单片段），内部归一化成 `NeonaicMessage[]`。理由：渲染要按块级语义拼接，这套逻辑只存在于 `NeonaicMessage.toMarkdown()`，复用比重写便宜；`new NeonaicMessage(item)` 本身就接受片段数组，故对调用方仍是 `[][]` 形态，还顺带拿到防御性拷贝。`get items()` 返回 `NeonaicMessage[]`。
 - `checkbox` 做成「一组条目」而非单项：`[{ checked, content }, …]` → `- [x] …` / `- [ ] …`。若做成单项，相邻两个复选框会被 `toMarkdown` 的空行隔成松散列表（每项多包一层 `<p>`）。
 - `renderListItems()` 把续行（含嵌套列表、代码块）缩进到 marker 之后，**按该项自己的 marker 宽度**（`10. ` 比 `1. ` 宽一格）；空项保留 marker，不吞序号。

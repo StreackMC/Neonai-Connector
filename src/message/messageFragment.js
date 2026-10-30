@@ -25,10 +25,15 @@ const HEX_COLOR_RE = /^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
 const NESTING = Object.freeze({
   /**
    * 链接的显示文本（`[label](url)` 的 label）是**行内上下文**：
-   * 允许文本、行内代码、表情、图片；不允许块级内容（代码块/表格/列表/引用/分隔线/
-   * 音视频），也不允许嵌套链接（Markdown 不允许链接套链接）。
+   * 允许文本、行内代码、表情、图片；不允许块级内容（代码块/表格/列表/引用/标题/
+   * 分隔线/音视频），也不允许嵌套链接（Markdown 不允许链接套链接）。
    */
   'link': Object.freeze(['text', 'inline-code', 'emoji', 'image']),
+  /**
+   * 标题（`## text`）同样是**行内上下文**，但比链接多允许一种：链接本身。
+   * 不允许块级内容与 `br`（换行会把标题截断成两行）。
+   */
+  'heading': Object.freeze(['text', 'inline-code', 'emoji', 'image', 'link']),
   /** 列表项：可放任意内容（含嵌套列表、代码块、引用…） */
   'list-item': null,
   /** 引用块：同上 */
@@ -196,7 +201,7 @@ export class NeonaicMessageFragment extends NeonaicNewable {
   }
 }
 
-/** @typedef {'raw-fragment'|'text'|'br'|'image'|'video'|'audio'|'link'|'emoji'|'table'|'at'|'ordered-list'|'unordered-list'|'code'|'inline-code'|'blockquote'|'divider'|'checkbox'} NeonaicTMessageFragmentTypes Neonai Connector 内置的消息片段类型 */
+/** @typedef {'raw-fragment'|'text'|'br'|'image'|'video'|'audio'|'link'|'emoji'|'table'|'at'|'heading'|'ordered-list'|'unordered-list'|'code'|'inline-code'|'blockquote'|'divider'|'checkbox'} NeonaicTMessageFragmentTypes Neonai Connector 内置的消息片段类型 */
 
 /** 表示一个文本消息片段 */
 export class NeonaicTextMsgFrag extends NeonaicMessageFragment {
@@ -368,12 +373,7 @@ export class NeonaicLinkMsgFrag extends NeonaicMessageFragment {
     const title = alt ? ` "${escapeMarkdownTitle(alt)}"` : "";
     // 只有纯文本需要转义 [ ] \；行内代码/表情/图片自带语法，转义反而把它们变成字面量。
     // 空描述退回显示 URL 本身
-    const label = this.#payload.description
-      .map((frag) => {
-        const text = frag.markdown;
-        return frag.TYPE === 'text' ? escapeMarkdownAlt(text) : text;
-      })
-      .join("") || target;
+    const label = renderInlineFragments(this.#payload.description) || target;
     return `[${label}](${target}${title})`;
   }
 
@@ -517,6 +517,60 @@ export class NeonaicTableMsgFrag extends NeonaicMessageFragment {
         return parseString(value);
       }, 'cell'),
     };
+  }
+}
+
+/* ---------- 标题 ---------- */
+
+/**
+ * 标题片段（ATX 风格 `#` ～ `######`）。
+ *
+ * 内容只能是**行内**片段：文本、行内代码、表情、图片、链接。
+ * 块级内容（列表/代码块/表格…）与 `br` 都会被拒绝——它们会把标题行截断。
+ *
+ * @example
+ * new NeonaicHeadingMsgFrag('第一章', 2)              // → `## 第一章`
+ * new NeonaicHeadingMsgFrag([                        // → `### 见 [文档](https://e.com/doc)`
+ *   '见 ', new NeonaicLinkMsgFrag('https://e.com/doc', '文档'),
+ * ], 3)
+ */
+export class NeonaicHeadingMsgFrag extends NeonaicMessageFragment {
+  static BLOCK = true;
+
+  /** 允许的标题层级 @type {ReadonlyArray<number>} */
+  static LEVELS = Object.freeze([1, 2, 3, 4, 5, 6]);
+
+  #payload = { level: 1, content: [] };
+
+  /** @returns {NeonaicTMessageFragmentTypes} */
+  get TYPE() { return 'heading'; }
+  /** 标题层级 1–6 @returns {number} */
+  get level() { return this.#payload.level; }
+  /** 标题内容片段 @returns {NeonaicMessageFragment[]} */
+  get content() { return this.#payload.content.slice(0); }
+  toString() { return `${this.TYPE}:${this.markdown}`; }
+  get markdown() {
+    const hashes = '#'.repeat(this.#payload.level);
+    // 换行会把标题截成两行：折叠成空格（与行内代码的处理一致）
+    const text = renderInlineFragments(this.#payload.content).replace(/\r?\n/g, ' ');
+    // 空标题输出 `##`（CommonMark 允许 `#` 后直接换行），避免留下孤零零的尾随空格
+    return text ? `${hashes} ${text}` : hashes;
+  }
+
+  /**
+   * @param {NeonaicTValidMessage} content 标题内容；只能是行内片段
+   * @param {number} [level=1] 标题层级，1–6
+   * @throws {NeonaicIllegalArgumentError} 层级不合法，或内容里出现了不允许嵌套的片段
+   */
+  constructor(content, level = 1) {
+    super();
+    if (!NeonaicHeadingMsgFrag.LEVELS.includes(level)) {
+      throw new NeonaicIllegalArgumentError(
+        `heading level must be one of ${NeonaicHeadingMsgFrag.LEVELS.join(', ')}: ${parseString(level)}`,
+      );
+    }
+    const fragments = normalizeNestedFragments(content, 'heading');
+    this.#payload = { level, content: fragments };
   }
 }
 
@@ -948,6 +1002,23 @@ export class NeonaicVideoMsgFrag extends NeonaicMediaMsgFrag {
 }
 
 /* ---------- 工具函数 ---------- */
+
+/**
+ * 渲染一段**行内**内容的 markdown（链接 label、标题共用）。
+ *
+ * @apiNote 只对 `text` 片段转义 `[ ] \`：行内代码、表情、图片自带语法，
+ *          一律转义会把 `![alt](url)` 变成字面量（等于图片进不了链接/标题）。
+ * @param {NeonaicMessageFragment[]} fragments 已通过嵌套校验的行内片段
+ * @returns {string}
+ */
+function renderInlineFragments(fragments) {
+  return fragments
+    .map((frag) => {
+      const text = frag.markdown;
+      return frag.TYPE === 'text' ? escapeMarkdownAlt(text) : text;
+    })
+    .join("");
+}
 
 /**
  * 校验某个片段能否嵌进指定容器。

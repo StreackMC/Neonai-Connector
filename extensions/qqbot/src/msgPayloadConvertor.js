@@ -101,6 +101,7 @@ export function convert_NeonaicMsg_to_qqBotMsg(msg, allowTempSave = false) {
       case 'link'/* QQ 的 link 消息语义不同 */:
       case 'code':
       case 'inline-code':
+      case 'heading':
       case 'blockquote':
       case 'ordered-list':
       case 'unordered-list':
