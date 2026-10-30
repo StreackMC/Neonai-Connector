@@ -19,6 +19,8 @@
  */
 
 import { neonaicPermissionServer } from '#src/command/permissionServer.js';
+import { neonaicEventBus } from '#src/event/neonaicEventBus.js';
+import { NeonaicCommandEvent } from '#src/event/neonaicEventInterface.js';
 import { getLogger } from '#src/logger/Logger.js';
 import { neonaicConfManager } from '#src/system/confManager.js';
 import { parseString } from '#src/utils/chore.js';
@@ -253,12 +255,21 @@ function executeCommandSilent(cmdName, ctx = {}, ...args) {
 
   const meta = resolveCommand(cmdName);
 
+  // 构建执行上下文
+  const context = new NeonaicCommandContext(ctx);
+
+  // 分发事件
+  neonaicEventBus.dispatchEvent(new NeonaicCommandEvent({
+    command: meta,
+    context,
+    args,
+    status: 'postexecute',
+    result: undefined,
+  }));
+
   if (!meta) {
     throw new NeonaicIllegalArgumentError(buildError(cmdName, '未知命令'));
   }
-
-  // 构建执行上下文
-  const context = new NeonaicCommandContext(ctx);
 
   // 权限检查：CLI / 内部调用跳过
   if (!context.internalCall) {
@@ -269,8 +280,23 @@ function executeCommandSilent(cmdName, ctx = {}, ...args) {
   }
 
   try {
-    return meta.handler.call(context, ...args);
+    const result = meta.handler.call(context, ...args);
+    neonaicEventBus.dispatchEvent(new NeonaicCommandEvent({
+      command: meta,
+      context,
+      args,
+      status: 'success',
+      result,
+    }));
+    return result;
   } catch (err) {
+    neonaicEventBus.dispatchEvent(new NeonaicCommandEvent({
+      command: meta,
+      context,
+      args,
+      status: 'error',
+      result: err,
+    }));
     throw new NeonaicCommandError(buildError(cmdName, `执行失败: ${err.message}`), err);
   }
 }
@@ -329,7 +355,7 @@ export class NeonaicCommandContext extends NeonaicNewable {
       this: this.#this,
       executor: this.#executor.slice(0),
       timestamp: new Date(this.#timestamp),
-    }
+    };
   }
 }
 
@@ -412,7 +438,7 @@ async function sudoOrRunuser(inherit, who, cmd, ...args) {
   const ctx = this;
   const targetCmd = typeof cmd === 'string' ? cmd.trim().toLocaleLowerCase() : '';
   if (/* 不检查who是考虑到部分情形下可能有转到匿名上下文的可能 */!targetCmd) throw new NeonaicIllegalArgumentError("参数不完整，应为 [sudo|runuser] <who> <cmd> [...args]");
-  if (/* 嵌套保护 */['sudo','runuser','neonaic:sudo','neonaic:runuser'].includes(targetCmd)) {
+  if (/* 嵌套保护 */['sudo', 'runuser', 'neonaic:sudo', 'neonaic:runuser'].includes(targetCmd)) {
     throw new NeonaicIllegalArgumentError("要执行的命令不能是 sudo 或 runuser，且 force 命令应在之前。");
   }
   // 切换到目标用户执行命令

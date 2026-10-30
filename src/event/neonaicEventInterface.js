@@ -184,11 +184,11 @@ export class NeonaicMessageEvent extends NeonaicEvent {
 
 /**
  * @typedef {Object} NeonaicTCommandEventPayload
- * @property {string|null} [command] 命令名，非 String 一律未知命令
+ * @property {import("#src/command/commandServer.js").NeonaicTCommandMeta|null} command 命令元数据，null = 未知命令
  * @property {string[]|null} [args] 命令参数
  * @property {import('#src/command/commandServer.js').NeonaicCommandContext} context 命令上下文
  * @property {NeonaicTCommandEventStatus} status 命令执行状态
- * @property {*|Promise<*>|null} [result] 命令执行结果
+ * @property {*|Promise<*>|null} [result] 命令执行结果；如果执行出错，则为原始抛出内容
  * @typedef {'postexecute'|'success'|'error'} NeonaicTCommandEventStatus
  */
 

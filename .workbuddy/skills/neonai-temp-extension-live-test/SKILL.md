@@ -73,6 +73,8 @@ export async function onEnable() {
 export function onDisable() { if (timer) { clearTimeout(timer); timer = null; } }
 ```
 
+注：也可使用 EventBus 订阅各种消息类型并过滤得到内部过程结果，同时不干扰正常流程。
+
 ## 三个必踩的坑
 
 **① onEnable 早于平台启动。** `bootstrap()` 的顺序是「先 `loadAll(extensions)`，后 `loadEnabled()`」，而且 `loadEnabled()` **没有被 await**。所以 onEnable 执行时平台实例要么不存在、要么还在 `start()` 中途。
