@@ -213,23 +213,14 @@ export class NeonaicTextMsgFrag extends NeonaicMessageFragment {
   get TYPE() { return 'text'; }
   toString() { return `${this.TYPE}:${this.markdown}`; }
   get markdown() {
-    let text = this.#payload.text;
-    if (this.#payload.style.color) {
-      text = `<span style="color:${this.#payload.style.color}">${text}</span>`;
-    }
-    if (this.#payload.style.bold) {
-      text = `**${text}**`;
-    }
-    if (this.#payload.style.italic) {
-      text = `*${text}*`;
-    }
-    if (this.#payload.style.underline) {
-      text = `<u>${text}</u>`;
-    }
-    if (this.#payload.style.strikethrough) {
-      text = `~~${text}~~`;
-    }
-    return text;
+    // 强调定界符必须紧贴非空白字符，否则不会被解析：
+    //   `**  aaa**` / `**\naaa**` / `**aaa  **` → 星号原样显示
+    //   `* aaa*` → 更糟，会被当成无序列表项
+    // 所以把每段首尾的空白搬到定界符外面；强调又不能跨空行，于是按空行分段处理。
+    return this.#payload.text
+      .split(/(\n{2,})/)
+      .map((part) => (/^\n{2,}$/.test(part) ? part : styleText(part, this.#payload.style)))
+      .join("");
   }
   /** @returns {string|null} */
   get color() { return this.#payload.style.color; }
@@ -1027,6 +1018,31 @@ export class NeonaicVideoMsgFrag extends NeonaicMediaMsgFrag {
 }
 
 /* ---------- 工具函数 ---------- */
+
+/**
+ * 给一段文本套上样式标记。
+ *
+ * @apiNote 关键点是「定界符不能紧贴空白」：CommonMark 的强调（`**` / `*`）与 GFM 的
+ *          删除线（`~~`）都要求定界符**左侧紧跟非空白、右侧紧跟非空白**，否则整对标记
+ *          退化成字面量（`**  aaa**` 显示成星号），`* aaa*` 甚至会被解析成列表项。
+ *          因此这里把首尾空白先摘出来，套完标记再原样接回去。
+ *          纯空白没有可强调的内容，直接原样返回——否则会产出 `****` 这种噪声。
+ * @param {string} raw 原始文本（调用方已按空行切好段）
+ * @param {{color: string|null, bold: boolean, italic: boolean, underline: boolean, strikethrough: boolean}} style 样式
+ * @returns {string}
+ */
+function styleText(raw, style) {
+  // 三段恰好覆盖整串（拼接即是原文），所以没有样式时会原样返回
+  const [, lead, core, trail] = /^(\s*)([\s\S]*?)(\s*)$/.exec(raw);
+  if (!core) return raw;
+  let out = core;
+  if (style.color) out = `<span style="color:${style.color}">${out}</span>`;
+  if (style.bold) out = `**${out}**`;
+  if (style.italic) out = `*${out}*`;
+  if (style.underline) out = `<u>${out}</u>`;
+  if (style.strikethrough) out = `~~${out}~~`;
+  return lead + out + trail;
+}
 
 /**
  * 渲染一段**行内**内容的 markdown（链接 label、标题共用）。

@@ -62,6 +62,9 @@
   ⚠️ **typedef 与实现集合必须一致**：`NeonaicTMessageFragmentTypes` 是唯一清单，自检**直接解析该 typedef**（不是拿硬编码表自证）比对实现类，缺一个就报错并点名。曾漏过 `heading`，就是靠「硬编码表自证」蒙过去的。
 - **块级 vs 行内**：基类有 `static BLOCK`（默认 false）与 `get isBlock`。块级 = `heading`/`br`/`code`/`table`/`ordered-list`/`unordered-list`/`checkbox`/`blockquote`/`divider`/`audio`/`video`；行内 = `text`/`inline-code`/`link`/`emoji`/`image`/`at`。
   ⚠️ `toMarkdown()` **不再是无脑 `join("")`**：块级片段与相邻内容之间会补一个空行（否则 `说明` + 代码块会拼成 `说明```…`，整段语法失效）；行内之间仍零分隔。新增块级片段**必须**标 `static BLOCK = true`，否则会与上文黏成一行。**首尾的换行一律裁掉**（开头会渲染成空段落，结尾是脏数据）。
+- **文本样式与空白**（`styleText()`）：套样式前先把每段首尾空白摘出来，套完再接回去。
+  ⚠️ 强调定界符（`**`/`*`/`~~`）必须**紧贴非空白字符**，否则 `**  aaa**`、`**aaa  **` 会退化成字面量（星号原样显示），`* aaa*` 更糟——会被渲染成**列表项**。
+  纯空白/空串不套标记（否则产出 `****` 这种噪声）；强调也不能跨空行，所以按 `\n{2,}` 切段、每段各自闭合（`**a**\n\n**b**`）。实测用 markdown-it 验证过修复前后的差异。
 - **`br` = 强制分段（不是换行）**：`markdown` 是 `\n\n`（空行本身），标 `BLOCK` 让它两侧留空行。
   - **1 个与 2 个等价**（相邻分隔符合并），放在首/尾会被裁掉（`[br, 'a', br]` → `a`）。
   - 段内换行（软换行）是**部分平台支持**的特性：用 `new NeonaicTextMsgFrag('\n')` 手写。CommonMark 把单个 `\n` 渲染成空格，只有 hard-break 渲染器才显示为换行 ⇒ **不要用它排版**。
