@@ -12,6 +12,31 @@ const HEX_COLOR_RE = /^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
  * @typedef {NeonaicMessage|NeonaicMessageFragment|NeonaicMessageFragment[]|string|string[]} NeonaicTValidMessage 可被 {@link NeonaicMessage} 构造函数接受的消息类型，也即允许传递的消息负荷类型。
  */
 
+/**
+ * 「容器 → 允许嵌套的子片段类型」的 Markdown 嵌套约束。
+ *
+ * 值为 `null` 表示该容器**不限制**子片段类型（列表项、引用块在 Markdown 里确实可以
+ * 放任意块级/行内内容）；未在此表登记的容器名视为编程错误。
+ *
+ * @apiNote 这里守的是**语法**而不是**语义**：例如 `at` 在链接文本里语法上只是普通字符，
+ *          但渲染出来是一串无意义的 `@qUSR#…`，所以一并挡掉。
+ * @type {Readonly<Record<string, readonly NeonaicTMessageFragmentTypes[]|null>>}
+ */
+const NESTING = Object.freeze({
+  /**
+   * 链接的显示文本（`[label](url)` 的 label）是**行内上下文**：
+   * 允许文本、行内代码、表情、图片；不允许块级内容（代码块/表格/列表/引用/分隔线/
+   * 音视频），也不允许嵌套链接（Markdown 不允许链接套链接）。
+   */
+  'link': Object.freeze(['text', 'inline-code', 'emoji', 'image']),
+  /** 列表项：可放任意内容（含嵌套列表、代码块、引用…） */
+  'list-item': null,
+  /** 引用块：同上 */
+  'blockquote': null,
+  /** 复选框项：同上 */
+  'checkbox': null,
+});
+
 export class NeonaicMessage extends NeonaicNewable {
   /** @type {NeonaicMessageFragment[]} */
   #frag = [];
@@ -95,7 +120,7 @@ export class NeonaicMessage extends NeonaicNewable {
    * @template T
    * @param {Partial<Record<NeonaicTMessageFragmentTypes, ((value: NeonaicMessageFragment, index: number, type: NeonaicTMessageFragmentTypes) => T|null|undefined)>>} override 传入处理器覆写方法。键名是一个消息片段类型，键值为处理函数时会将返回值作为对应数组元素，键值为 null 时将对应元素置为 null，键值为其他值时将使用默认的 markdown 输出。
    * @param {any} [thisArg] 可选的 this 值，默认为本实例
-   * @returns {(T|string|null)[]|string[]} 返回一个新数组
+   * @returns {(T|string|null)[]} 返回一个新数组
    */
   markdown(override = null, thisArg = this) {
     // 语法糖先决判断
@@ -116,14 +141,33 @@ export class NeonaicMessage extends NeonaicNewable {
 
   /**
    * 把各片段直接拼成一段 markdown 文本
+   *
+   * @apiNote 拼接**不是**无脑 `join("")`：块级片段（代码块/表格/列表/引用/分隔线/音视频）
+   *          必须独占行，因此与相邻内容之间会补一个空行。否则
+   *          `文本 + 代码块` 会拼成 `说明```…`，渲染器会把整段当成一段普通文本。
+   *          行内片段之间仍然零分隔拼接。
    * @param {Partial<Record<NeonaicTMessageFragmentTypes, ((value: NeonaicMessageFragment, index: number, type: NeonaicTMessageFragmentTypes) => string|null|undefined)>>} [override] 同 {@link NeonaicMessage#markdown}
    * @param {any} [thisArg] 可选的 this 值，默认为本实例
    * @returns {string}
    */
   toMarkdown(override = null, thisArg = this) {
-    return this.markdown(override, thisArg)
-      .map((value) => (value === null || value === undefined ? "" : parseString(value)))
-      .join("");
+    const rendered = this.markdown(override, thisArg);
+    let out = "";
+    let prevBlock = false;
+    this.#frag.forEach((frag, index) => {
+      const text = rendered[index] === null || rendered[index] === undefined
+        ? ""
+        : parseString(rendered[index]);
+      // 空片段不参与分隔，否则会凭空多出空行
+      if (!text) return;
+      if (out && (frag.isBlock || prevBlock)) {
+        // 先把已有的行尾换行归一，再补成恰好一个空行
+        out = `${out.replace(/\n+$/, "")}\n\n`;
+      }
+      out += text;
+      prevBlock = frag.isBlock;
+    });
+    return out;
   }
 
   toString() { return parseString(this.mapFrag(f => f.toString())); }
@@ -131,7 +175,18 @@ export class NeonaicMessage extends NeonaicNewable {
 
 /** @apiNote 原始类型，需继承使用 */
 export class NeonaicMessageFragment extends NeonaicNewable {
+  /**
+   * 该片段在 Markdown 中是否为**块级**内容（独占行，与相邻内容之间需要空行）。
+   *
+   * @apiNote 这不是装饰性标记：`NeonaicMessage.toMarkdown()` 按片段顺序直接拼接，
+   *          块级片段若不加空行就会与上文黏成一行（`说明` + 代码块 → `说明```…`，
+   *          整段语法失效）。行内片段（文本/换行/图片/链接/表情/行内代码/@）必须保持 false。
+   */
+  static BLOCK = false;
+
   get TYPE() { return 'raw-fragment'; }
+  /** 是否为块级片段 @returns {boolean} */
+  get isBlock() { return this.constructor.BLOCK === true; }
   toString() { return `${this.TYPE}:${this.markdown}`; }
   get markdown() { return ""; }
 
@@ -141,7 +196,7 @@ export class NeonaicMessageFragment extends NeonaicNewable {
   }
 }
 
-/** @typedef {'raw-fragment'|'text'|'br'|'image'|'video'|'audio'|'link'|'emoji'|'table'|'at'} NeonaicTMessageFragmentTypes Neonai Connector 内置的消息片段类型 */
+/** @typedef {'raw-fragment'|'text'|'br'|'image'|'video'|'audio'|'link'|'emoji'|'table'|'at'|'ordered-list'|'unordered-list'|'code'|'inline-code'|'blockquote'|'divider'|'checkbox'} NeonaicTMessageFragmentTypes Neonai Connector 内置的消息片段类型 */
 
 /** 表示一个文本消息片段 */
 export class NeonaicTextMsgFrag extends NeonaicMessageFragment {
@@ -152,30 +207,6 @@ export class NeonaicTextMsgFrag extends NeonaicMessageFragment {
   toString() { return `${this.TYPE}:${this.markdown}`; }
   get markdown() {
     let text = this.#payload.text;
-    if (this.#payload.style.code) {
-      if (text.includes("\n")) {
-        // 多行
-        return `\`\`\`${this.#payload.style.codeType || ''}\n${text}\n\`\`\``;
-      } else {
-        // 单行，需要解析原文本
-        /* 先算出连续反引号的最大数量 */
-        let max = 0;
-        let cur = 0;
-        for (let i = 0; i < text.length; i++) {
-          if (text[i] === "`") {
-            cur++;
-            if (cur > max) max = cur;
-          } else {
-            cur = 0;
-          }
-        }
-        const backticks = "`".repeat(max + 1);
-        /* 接着判开头结尾是否有反引号 */
-        const space = text.startsWith("`") || text.endsWith("`") ? " " : "";
-        /* 最后构造 */
-        return backticks + space + text + space + backticks;
-      }
-    }
     if (this.#payload.style.color) {
       text = `<span style="color:${this.#payload.style.color}">${text}</span>`;
     }
@@ -203,10 +234,6 @@ export class NeonaicTextMsgFrag extends NeonaicMessageFragment {
   get underline() { return this.#payload.style.underline; }
   /** @returns {boolean} */
   get strikethrough() { return this.#payload.style.strikethrough; }
-  /** @returns {boolean} */
-  get code() { return this.#payload.style.code; }
-  /** @returns {string|null} */
-  get codeType() { return this.#payload.style.codeType; }
 
   /**
    * @param {any} payload 文本消息，将自动化为文本
@@ -216,11 +243,11 @@ export class NeonaicTextMsgFrag extends NeonaicMessageFragment {
    * @param {boolean} [style.italic=false] 是否斜体
    * @param {boolean} [style.underline=false] 是否下划线
    * @param {boolean} [style.strikethrough=false] 是否删除线
-   * @param {boolean} [style.code=false] 是否代码块，注意设为代码块后其余样式可被访问，但内置导出方法将忽略样式
-   * @param {string} [style.codeType=null] 代码块类型，用于指定代码块的语言，需要 code=true 才会生效
    */
   constructor(payload, style = {}) {
     super();
+    // 片段对象传进来会被 parseString 静默变成 "text:xxx" 这种字符串，必须拦下
+    assertPlainText(payload, 'text');
     this.#payload = {
       text: parseString(payload),
       style: {
@@ -229,10 +256,61 @@ export class NeonaicTextMsgFrag extends NeonaicMessageFragment {
         italic: !!style.italic,
         underline: !!style.underline,
         strikethrough: !!style.strikethrough,
-        code: !!style.code,
-        codeType: style.code && style.codeType && typeof style.codeType === "string" ? style.codeType : null,
       }
     };
+  }
+}
+
+/** 表示一段代码 */
+export class NeonaicCodeMsgFrag extends NeonaicMessageFragment {
+  /** 代码块是块级内容 @returns {boolean} */
+  static BLOCK = true;
+
+  /** @returns {NeonaicTMessageFragmentTypes} */
+  get TYPE() { return 'code'; }
+
+  #payload = {};
+
+  /** @returns {string} */
+  get markdown() { return `\`\`\`${this.#payload.codeType || ''}\n${this.#payload.text}\n\`\`\``; }
+  toString() { return `${this.TYPE}:${this.markdown}`; }
+
+  constructor(code, type = null) {
+    super();
+    assertPlainText(code, 'code');
+    this.#payload = {
+      text: parseString(code),
+      codeType: type && typeof type === "string" && !type.includes('`') ? type.trim() : null,
+    };
+  }
+}
+
+/** 表示一段行内代码 */
+export class NeonaicInlineCodeMsgFrag extends NeonaicTextMsgFrag {
+  /** @returns {NeonaicTMessageFragmentTypes} */
+  get TYPE() { return 'inline-code'; }
+
+  /**
+   * @param {string} code 行内代码块将移除全部的换行
+   */
+  constructor(code) {
+    const text = parseString(code).replace(/\r?\n/g, ' ');
+    /* 先算出连续反引号的最大数量 */
+    let max = 0;
+    let cur = 0;
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === "`") {
+        cur++;
+        if (cur > max) max = cur;
+      } else {
+        cur = 0;
+      }
+    }
+    const backticks = "`".repeat(max + 1);
+    /* 接着判开头结尾是否有反引号 */
+    const space = text.startsWith("`") || text.endsWith("`") ? " " : "";
+    /* 最后构造 */
+    super(backticks + space + text + space + backticks);
   }
 }
 
@@ -245,6 +323,7 @@ export class NeonaicBrMsgFrag extends NeonaicTextMsgFrag {
     super('\n', {});
   }
 }
+
 /** 表示一个 @ 片段 */
 export class NeonaicAtMsgFrag extends NeonaicMessageFragment {
   #payload;
@@ -257,11 +336,18 @@ export class NeonaicAtMsgFrag extends NeonaicMessageFragment {
 
   constructor(target) {
     super();
+    assertPlainText(target, 'at');
     this.#payload = { target: parseString(target) };
   }
 }
 
-/** 表示一个链接片段 */
+/**
+ * 表示一个链接片段。
+ *
+ * 显示文本是**行内上下文**：允许嵌套文本、行内代码、表情与图片
+ * （`[![alt](img)](url)` 是合法 Markdown），但**不允许**块级内容
+ * （代码块/表格/列表/引用/分隔线/音视频）与嵌套链接。
+ */
 export class NeonaicLinkMsgFrag extends NeonaicMessageFragment {
   #payload = {};
 
@@ -269,9 +355,9 @@ export class NeonaicLinkMsgFrag extends NeonaicMessageFragment {
   get TYPE() { return 'link'; }
   /** @returns {NeonaicUriMeta} */
   get uri() { return this.#payload.uri; }
-  /** @returns {NeonaicTextMsgFrag} */
-  get description() { return this.#payload.description; }
-  /** @returns {NeonaicTextMsgFrag} */
+  /** 显示文本片段（已通过嵌套校验） @returns {NeonaicMessageFragment[]} */
+  get description() { return this.#payload.description.slice(0); }
+  /** 鼠标指向时显示的描述文本，只能是纯文本 @returns {NeonaicTextMsgFrag} */
   get alt() { return this.#payload.alt; }
   toString() { return `${this.TYPE}:${this.markdown}`; }
   get markdown() {
@@ -280,16 +366,22 @@ export class NeonaicLinkMsgFrag extends NeonaicMessageFragment {
     const target = escapeMarkdownUrl(this.#payload.uri.toString());
     const alt = this.#payload.alt?.markdown ?? "";
     const title = alt ? ` "${escapeMarkdownTitle(alt)}"` : "";
-    // 描述文本里的 [ ] \ 会打断链接语法，必须转义；空描述退回显示 URL 本身
-    const label = escapeMarkdownAlt(this.#payload.description.markdown) || target;
+    // 只有纯文本需要转义 [ ] \；行内代码/表情/图片自带语法，转义反而把它们变成字面量。
+    // 空描述退回显示 URL 本身
+    const label = this.#payload.description
+      .map((frag) => {
+        const text = frag.markdown;
+        return frag.TYPE === 'text' ? escapeMarkdownAlt(text) : text;
+      })
+      .join("") || target;
     return `[${label}](${target}${title})`;
   }
 
   /**
    * @param {string|URL|NeonaicUriMeta} url 链接指向
-   * @param {String|NeonaicTextMsgFrag} desc 显示的文本
-   * @param {String|NeonaicTextMsgFrag} alt 鼠标指向显示的描述文本
-   * @throws {NeonaicIllegalArgumentError}
+   * @param {String|NeonaicMessageFragment|NeonaicMessageFragment[]} desc 显示的内容；可嵌套行内片段（文本/行内代码/表情/图片）
+   * @param {String|NeonaicTextMsgFrag} alt 鼠标指向显示的描述文本，只能是纯文本
+   * @throws {NeonaicIllegalArgumentError} URL 不合法，或显示文本/描述里出现了不允许嵌套的片段
   */
   constructor(url, desc, alt) {
     super();
@@ -304,8 +396,9 @@ export class NeonaicLinkMsgFrag extends NeonaicMessageFragment {
     // 会让 `[文本](url "undefined")` 这种畸形标题跑到输出里
     this.#payload = {
       uri,
-      description: desc instanceof NeonaicTextMsgFrag ? desc : new NeonaicTextMsgFrag(desc ?? ""),
-      alt: alt instanceof NeonaicTextMsgFrag ? alt : new NeonaicTextMsgFrag(alt ?? ""),
+      description: normalizeNestedFragments(desc, 'link'),
+      // title 属性的值只能是纯文本：传片段会被 parseString 成 "image:![…]"，必须拒绝
+      alt: requirePlainTextFrag(alt, 'link alt'),
     };
   }
 }
@@ -390,6 +483,9 @@ export class NeonaicEmojiMsgFrag extends NeonaicMessageFragment {
 
 /** 表示一个表格片段 */
 export class NeonaicTableMsgFrag extends NeonaicMessageFragment {
+  /** 表格是块级内容 @returns {boolean} */
+  static BLOCK = true;
+
   #payload = {};
 
   /** @returns {NeonaicTMessageFragmentTypes} */
@@ -414,9 +510,202 @@ export class NeonaicTableMsgFrag extends NeonaicMessageFragment {
   constructor(data, type, option = {}) {
     super();
     // 必须指定 direction='cell'：默认的 'row' 会把整行数组当作一个值，parseString 后变成 "['a','b']"
-    this.#payload = { table: new NeonaicTable(data, type, option).map((value) => parseString(value), 'cell') };
+    // 单元格在 Markdown 表格里只能是行内文本，塞片段会被 parseString 静默变成 "text:xxx"，必须拦下
+    this.#payload = {
+      table: new NeonaicTable(data, type, option).map((value) => {
+        assertPlainText(value, 'table cell');
+        return parseString(value);
+      }, 'cell'),
+    };
   }
 }
+
+/* ---------- 列表 / 引用 / 分隔线 ---------- */
+
+/**
+ * 有序列表片段。
+ *
+ * @apiNote 列表项用 `NeonaicMessageFragment[][]` 表达（每项一个片段数组），
+ *          内部会归一化成子消息：这样「一项多段落 / 嵌套列表 / 代码块」都能正确缩进，
+ *          而调用方又不必手工 `new NeonaicMessage(...)`。单项也可直接传字符串或单个片段。
+ */
+export class NeonaicOrderedListMsgFrag extends NeonaicMessageFragment {
+  static BLOCK = true;
+
+  /** @type {NeonaicMessage[]} */
+  #items = [];
+  /** @type {number} */
+  #start = 1;
+
+  /** @returns {NeonaicTMessageFragmentTypes} */
+  get TYPE() { return 'ordered-list'; }
+  /** 各列表项（每项是一条子消息） @returns {NeonaicMessage[]} */
+  get items() { return this.#items.slice(0); }
+  /** 起始序号 @returns {number} */
+  get start() { return this.#start; }
+  toString() { return `${this.TYPE}:${this.markdown}`; }
+
+  get markdown() {
+    return renderListItems(this.#items.map((message, index) => ({
+      marker: `${this.#start + index}. `,
+      message,
+    })));
+  }
+
+  /**
+   * @param {NeonaicTValidMessage[]} items 各列表项
+   * @param {object} [option] 选项
+   * @param {number} [option.start=1] 起始序号
+   * @throws {NeonaicIllegalArgumentError} items 不是数组/为空，或序号不合法
+   */
+  constructor(items, option = {}) {
+    super();
+    if (option === null || typeof option !== "object" || Array.isArray(option)) {
+      throw new NeonaicIllegalArgumentError("option must be an object");
+    }
+    const start = option.start ?? 1;
+    if (!Number.isInteger(start) || start < 0) {
+      throw new NeonaicIllegalArgumentError(`option.start must be a non-negative integer: ${parseString(start)}`);
+    }
+    this.#start = start;
+    this.#items = normalizeListItems(items, 'list-item', 'ordered-list');
+  }
+}
+
+/**
+ * 无序列表片段。列表项的表示方式同 {@link NeonaicOrderedListMsgFrag}。
+ */
+export class NeonaicUnorderedListMsgFrag extends NeonaicMessageFragment {
+  static BLOCK = true;
+
+  /** @type {NeonaicMessage[]} */
+  #items = [];
+
+  /** @returns {NeonaicTMessageFragmentTypes} */
+  get TYPE() { return 'unordered-list'; }
+  /** 各列表项（每项是一条子消息） @returns {NeonaicMessage[]} */
+  get items() { return this.#items.slice(0); }
+  toString() { return `${this.TYPE}:${this.markdown}`; }
+
+  get markdown() {
+    return renderListItems(this.#items.map((message) => ({ marker: '- ', message })));
+  }
+
+  /**
+   * @param {NeonaicTValidMessage[]} items 各列表项
+   * @throws {NeonaicIllegalArgumentError} items 不是数组或为空
+   */
+  constructor(items) {
+    super();
+    this.#items = normalizeListItems(items, 'list-item', 'unordered-list');
+  }
+}
+
+/**
+ * 复选框列表片段（任务列表）。
+ *
+ * @apiNote 之所以做成「一组条目」而不是单个条目：Markdown 里相邻两个复选框必须落在
+ *          同一个列表块内，若各自成块，`toMarkdown` 会在它们之间补空行，
+ *          列表就变成松散列表（每项外面包一层 `<p>`），视觉上多出空隙。
+ * @example
+ * new NeonaicCheckboxMsgFrag([
+ *   { checked: true, content: '已完成' },
+ *   { checked: false, content: ['待办：', new NeonaicLinkMsgFrag('https://example.com', '示例')] },
+ * ]);
+ */
+export class NeonaicCheckboxMsgFrag extends NeonaicMessageFragment {
+  static BLOCK = true;
+
+  /** @type {Array<{checked: boolean, message: NeonaicMessage}>} */
+  #items = [];
+
+  /** @returns {NeonaicTMessageFragmentTypes} */
+  get TYPE() { return 'checkbox'; }
+  /** 各条目的勾选状态与内容 @returns {Array<{checked: boolean, message: NeonaicMessage}>} */
+  get items() { return this.#items.map(({ checked, message }) => ({ checked, message })); }
+  toString() { return `${this.TYPE}:${this.markdown}`; }
+
+  get markdown() {
+    return renderListItems(this.#items.map(({ checked, message }) => ({
+      marker: checked ? '- [x] ' : '- [ ] ',
+      message,
+    })));
+  }
+
+  /**
+   * @param {Array<{checked: boolean, content: NeonaicTValidMessage}>|{checked: boolean, content: NeonaicTValidMessage}} items 条目；单个条目对象也可
+   * @throws {NeonaicIllegalArgumentError} 条目格式不合法
+   */
+  constructor(items) {
+    super();
+    const list = Array.isArray(items) ? items : [items];
+    if (!list.length) throw new NeonaicIllegalArgumentError("checkbox items must not be empty");
+    this.#items = list.map((item, index) => {
+      const label = `第 ${index + 1} 个复选框`;
+      if (item === null || typeof item !== "object" || Array.isArray(item)) {
+        throw new NeonaicIllegalArgumentError(`${label}必须是 { checked, content } 对象`);
+      }
+      if (typeof item.checked !== "boolean") {
+        throw new NeonaicIllegalArgumentError(`${label}的 checked 必须是布尔值`);
+      }
+      return {
+        checked: item.checked,
+        message: normalizeMessage(item.content, 'checkbox', `${label}的内容`),
+      };
+    });
+  }
+}
+
+/**
+ * 引用块片段。
+ *
+ * 块内可放任意内容（段落、列表、代码块，甚至嵌套引用）：
+ * 渲染时逐行加 `> ` 前缀，嵌套引用会自然变成 `> > …`。
+ */
+export class NeonaicBlockquoteMsgFrag extends NeonaicMessageFragment {
+  static BLOCK = true;
+
+  /** @type {NeonaicMessage} */
+  #message = null;
+
+  /** @returns {NeonaicTMessageFragmentTypes} */
+  get TYPE() { return 'blockquote'; }
+  /** 引用内容 @returns {NeonaicMessage} */
+  get content() { return this.#message; }
+  toString() { return `${this.TYPE}:${this.markdown}`; }
+
+  get markdown() {
+    const body = this.#message.toMarkdown();
+    // 空引用也要留一个 `>`，否则整段引用会凭空消失
+    if (!body) return '>';
+    return body.split('\n').map((line) => (line ? `> ${line}` : '>')).join('\n');
+  }
+
+  /**
+   * @param {NeonaicTValidMessage} content 引用内容
+   * @throws {NeonaicIllegalArgumentError} 内容不合法
+   */
+  constructor(content) {
+    super();
+    this.#message = normalizeMessage(content, 'blockquote');
+  }
+}
+
+/**
+ * 分隔线片段。
+ *
+ * @apiNote 用 `---`（而非 `***`）：在 `toMarkdown` 里它被当作块级片段处理，
+ *          前面一定会有空行，因此不会触发「上一行被当成 setext 标题」的歧义。
+ */
+export class NeonaicDividerMsgFrag extends NeonaicMessageFragment {
+  static BLOCK = true;
+
+  /** @returns {NeonaicTMessageFragmentTypes} */
+  get TYPE() { return 'divider'; }
+  toString() { return `${this.TYPE}:${this.markdown}`; }
+  get markdown() { return '---'; }
+}
+
 
 /**
  * 媒体消息片段的公共基类（抽象）。
@@ -622,6 +911,8 @@ export class NeonaicImageMsgFrag extends NeonaicMediaMsgFrag {
 export class NeonaicAudioMsgFrag extends NeonaicMediaMsgFrag {
   static KIND = "audio";
   static TAG = "audio";
+  /** `<audio>` 是块级 HTML，独占行 */
+  static BLOCK = true;
 
   /** @returns {NeonaicTMessageFragmentTypes} */
   get TYPE() { return 'audio'; }
@@ -640,6 +931,8 @@ export class NeonaicAudioMsgFrag extends NeonaicMediaMsgFrag {
 export class NeonaicVideoMsgFrag extends NeonaicMediaMsgFrag {
   static KIND = "video";
   static TAG = "video";
+  /** `<video>` 是块级 HTML，独占行；也因此**不能**嵌进链接文本 */
+  static BLOCK = true;
 
   /** @returns {NeonaicTMessageFragmentTypes} */
   get TYPE() { return 'video'; }
@@ -655,6 +948,166 @@ export class NeonaicVideoMsgFrag extends NeonaicMediaMsgFrag {
 }
 
 /* ---------- 工具函数 ---------- */
+
+/**
+ * 校验某个片段能否嵌进指定容器。
+ * @param {string} container {@link NESTING} 里的容器名
+ * @param {NeonaicMessageFragment} fragment 待校验的子片段
+ * @returns {void}
+ * @throws {NeonaicIllegalArgumentError} 容器未知，或该片段不允许出现在此位置
+ */
+function assertNestable(container, fragment) {
+  if (!(fragment instanceof NeonaicMessageFragment)) {
+    throw new NeonaicIllegalArgumentError(`“${container}”只能嵌套消息片段`);
+  }
+  if (!Object.hasOwn(NESTING, container)) {
+    throw new NeonaicIllegalArgumentError(`未知的嵌套容器：${container}`);
+  }
+  // 基类的 TYPE 是 raw-fragment；子类忘记覆写 TYPE 时，它在下游会被当成未知类型
+  if (fragment.TYPE === 'raw-fragment') {
+    throw new NeonaicIllegalArgumentError(
+      "不能嵌套未声明 TYPE 的片段（继承 NeonaicMessageFragment 时必须覆写 TYPE）",
+    );
+  }
+  const allowed = NESTING[container];
+  if (allowed === null) return; // 不限制
+  if (!allowed.includes(fragment.TYPE)) {
+    throw new NeonaicIllegalArgumentError(
+      `“${container}”不能嵌套“${fragment.TYPE}”片段：Markdown 在该位置只允许 ${allowed.join(' / ')}`,
+    );
+  }
+}
+
+/**
+ * 拦下「本该是纯文本、却传了片段」的入参。
+ *
+ * @apiNote 不拦的话 `parseString(fragment)` 会走 `toString()`，静默得到
+ *          `"image:![alt](url)"` 这种字符串，错误直到渲染时才显现。
+ * @param {*} value 待检查的值
+ * @param {string} label 出错时指代该位置的名字
+ * @returns {void}
+ * @throws {NeonaicIllegalArgumentError} 传入了消息或片段
+ */
+function assertPlainText(value, label) {
+  if (value instanceof NeonaicMessageFragment) {
+    throw new NeonaicIllegalArgumentError(`${label} 只能是纯文本，不能嵌套“${value.TYPE}”片段`);
+  }
+  if (value instanceof NeonaicMessage) {
+    throw new NeonaicIllegalArgumentError(`${label} 只能是纯文本，不能嵌入整条消息`);
+  }
+}
+
+/**
+ * 规范化「只能是纯文本片段」的位置（如链接 title）。
+ * @param {string|NeonaicTextMsgFrag|null|undefined} value 纯文本或纯文本片段
+ * @param {string} label 出错时指代该位置的名字
+ * @returns {NeonaicTextMsgFrag}
+ * @throws {NeonaicIllegalArgumentError} 类型不合法
+ */
+function requirePlainTextFrag(value, label) {
+  if (value === undefined || value === null) return new NeonaicTextMsgFrag("");
+  if (value instanceof NeonaicTextMsgFrag) {
+    // br / inline-code 也继承自 TextMsgFrag，但它们不是「纯文本」语义
+    if (value.TYPE !== 'text') {
+      throw new NeonaicIllegalArgumentError(`${label} 只能是纯文本片段，不能是“${value.TYPE}”`);
+    }
+    return value;
+  }
+  if (value instanceof NeonaicMessageFragment || value instanceof NeonaicMessage) {
+    throw new NeonaicIllegalArgumentError(`${label} 只能是纯文本，不能嵌套片段或消息`);
+  }
+  if (typeof value !== 'string') {
+    throw new NeonaicIllegalArgumentError(`${label} 必须是字符串或纯文本片段`);
+  }
+  return new NeonaicTextMsgFrag(value);
+}
+
+/**
+ * 把容器的内容规范化成片段数组，并按 {@link NESTING} 校验可嵌套性。
+ * @param {NeonaicMessageFragment|NeonaicMessageFragment[]|string|string[]|null|undefined} value 容器内容
+ * @param {string} container {@link NESTING} 里的容器名
+ * @returns {NeonaicMessageFragment[]} 至少含一个片段（空内容落成空文本）
+ * @throws {NeonaicIllegalArgumentError} 元素类型不合法，或不允许嵌套
+ */
+function normalizeNestedFragments(value, container) {
+  const list = value === undefined || value === null
+    ? []
+    : (Array.isArray(value) ? value : [value]);
+  const out = list.map((item) => {
+    if (item instanceof NeonaicMessageFragment) return item;
+    if (typeof item === 'string') return new NeonaicTextMsgFrag(item);
+    if (item instanceof NeonaicMessage) {
+      throw new NeonaicIllegalArgumentError(`“${container}”只能嵌套消息片段，不能嵌入整条消息`);
+    }
+    throw new NeonaicIllegalArgumentError(`“${container}”的每个元素必须是消息片段或字符串`);
+  });
+  for (const frag of out) assertNestable(container, frag);
+  return out.length ? out : [new NeonaicTextMsgFrag("")];
+}
+
+/**
+ * 把一项列表/引用内容规范化成一条子消息。
+ * @param {NeonaicTValidMessage} value 一项内容
+ * @param {string} container {@link NESTING} 里的容器名
+ * @param {string} [label="内容"] 出错时指代该项的名字
+ * @returns {NeonaicMessage}
+ * @throws {NeonaicIllegalArgumentError} 内容不合法，或不允许嵌套
+ */
+function normalizeMessage(value, container, label = "内容") {
+  let message;
+  try {
+    // 一律新建：既是防御性拷贝，也避免调用方后续 appendFragment 绕过嵌套校验
+    message = new NeonaicMessage(value);
+  } catch (error) {
+    throw new NeonaicIllegalArgumentError(
+      `${label}必须是消息、消息片段、片段数组或字符串：${error?.message ?? error}`,
+    );
+  }
+  for (const frag of message.fragments) assertNestable(container, frag);
+  return message;
+}
+
+/**
+ * 规范化列表项集合。
+ * @param {NeonaicTValidMessage[]} items 列表项
+ * @param {string} container {@link NESTING} 里的容器名
+ * @param {string} label 出错时指代该列表的名字
+ * @returns {NeonaicMessage[]}
+ * @throws {NeonaicIllegalArgumentError} items 不是数组或为空
+ */
+function normalizeListItems(items, container, label) {
+  if (!Array.isArray(items)) {
+    throw new NeonaicIllegalArgumentError(`${label} 的 items 必须是数组（每一项是一个片段数组）`);
+  }
+  if (!items.length) {
+    throw new NeonaicIllegalArgumentError(`${label} 至少需要一个列表项`);
+  }
+  return items.map((item, index) => normalizeMessage(item, container, `第 ${index + 1} 项`));
+}
+
+/**
+ * 渲染一组列表项（有序 / 无序 / 复选框共用）。
+ *
+ * @apiNote 续行必须缩进到 marker 之后，否则嵌套列表、代码块会被当成新块，
+ *          列表结构直接断掉。
+ * @param {Array<{marker: string, message: NeonaicMessage}>} entries 列表项与各自的 marker
+ * @returns {string}
+ */
+function renderListItems(entries) {
+  return entries.map(({ marker, message }) => {
+    const body = message.toMarkdown();
+    // 空项也要占一个 marker，否则「第 3 项是空的」会变成第 2 项
+    if (!body) return marker.trimEnd();
+    const lines = body.split('\n');
+    const pad = ' '.repeat(marker.length);
+    lines[0] = marker + lines[0];
+    for (let i = 1; i < lines.length; i++) {
+      // 空行保持为空（不写尾随空格），非空行缩进到 marker 之后
+      if (lines[i]) lines[i] = pad + lines[i];
+    }
+    return lines.join('\n');
+  }).join('\n');
+}
 
 /**
  * 把媒体来源归一化成可嵌入的 URI。
@@ -832,3 +1285,14 @@ function detectVideoMimeType(buf) {
   if (buf.length >= 4 && buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3) return "video/webm";
   return null;
 }
+
+/**
+ * 消息片段的 Markdown 嵌套约束与校验工具。
+ *
+ * @apiNote 只读快照；要新增允许的嵌套关系请改模块内的 {@link NESTING} 常量，
+ *          而不是改这里（这里只是暴露给外部做展示 / 预校验）。
+ */
+export const neonaicMessageFragment = Object.freeze({
+  NESTING,
+  assertNestable,
+});

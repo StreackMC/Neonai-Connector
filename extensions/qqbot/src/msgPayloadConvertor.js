@@ -46,6 +46,12 @@ export function convert_qqBotMsg_to_NeonaicMsg(event, pp, textOnly = false) {
         case 'link':// 链接
           result.appendFragment(new NeonaicLinkMsgFrag(msgMeta?.url ?? 'about:unknown', msgMeta?.text ?? msgMeta?.url ?? 'Untitled Link', msgMeta?.description ?? 'A link'));
           break;
+        case 'markdown':
+          // QQ 的 markdown 元素只有一个 content 字段，已经是 Markdown 文本。
+          // 这里不做结构还原（那需要一个完整的 Markdown 解析器），直接原样当文本承载，
+          // 以便 `toMarkdown()` 能逐字回放，而不是落到 default 被当成未知类型丢掉。
+          result.appendFragment(new NeonaicTextMsgFrag(msgMeta?.content ?? ''));
+          break;
 
         default:
           //TODO: 还有其他富文本消息类型没有转换
@@ -77,6 +83,7 @@ export function convert_NeonaicMsg_to_qqBotMsg(msg, allowTempSave = false) {
   return nmsg.mapFrag((frag, index, type) => {
     switch (type) {
       case 'text':
+        // qq-official-bot #132 ，混用出现未定义行为，必须使用 Markdown
         return qbSegment.markdown(frag.markdown);
       case 'br':
         // qq-official-bot #132 ，混用出现未定义行为，必须使用 Markdown
@@ -86,14 +93,19 @@ export function convert_NeonaicMsg_to_qqBotMsg(msg, allowTempSave = false) {
         if (target.startsWith('qGRP#')) throw new NeonaicIllegalStateError(`无法@一个群聊`);
         // return qbSegment.at(target.replace(/^qUSR#/, ''));
         // qq-official-bot #131 ，@单个成员有bug，需要强转 markdown 消息。
-        return qbSegment.markdown(`<qqbot-at-user id="${target.replace(/^qUSR#/, '') }" />`);
+        return qbSegment.markdown(`<qqbot-at-user id="${target.replace(/^qUSR#/, '')}" />`);
       }
-      case 'link':
-        // 因为 qqbot 的 link 片段语义不同，所以使用 Markdown 实现
-        return qbSegment.markdown(frag.markdown);
-      case 'emoji':
-        // TODO: 以后再写，现在先穿透到 table 并回退 Markdown
+      case 'emoji':// TODO: 以后再写，现在先穿透到 table 并回退 Markdown
+      // 以下片段 QQ 官方消息没有对应元素，统一用 Markdown 承载。
       case 'table':
+      case 'link'/* QQ 的 link 消息语义不同 */:
+      case 'code':
+      case 'inline-code':
+      case 'blockquote':
+      case 'ordered-list':
+      case 'unordered-list':
+      case 'checkbox':
+      case 'divider':
         return qbSegment.markdown(frag.markdown);
       case 'image':
         return frag.image.isBase64

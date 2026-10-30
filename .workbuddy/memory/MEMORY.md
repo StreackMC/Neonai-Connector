@@ -58,7 +58,16 @@
 
 ## 消息片段协议（`src/message/messageFragment.js`）
 - `NeonaicMessage` 持有片段链：`markdown(override)` 返回**数组**（可按 `TYPE` 替换或置 null），`toMarkdown()` 拼成字符串；`forEachFrag`/`mapFrag` 的回调第三个参数是 `TYPE`。构造函数接受 `string | fragment | fragment[] | string[] | NeonaicMessage`，留空创建空消息。⚠️ 构造函数末尾曾有一个**无条件 `throw`**，任何消息都构造失败。
-- 片段类型：`text`/`br`/`link`/`emoji`/`table`/`image`/`audio`/`video`，共同基类 `NeonaicMessageFragment`（抽象，直接实例化抛错）。
+- 片段类型（17 种，除 `raw-fragment` 外都有实现）：`text`/`br`/`inline-code`/`code`/`link`/`emoji`/`table`/`at`/`image`/`audio`/`video`/`ordered-list`/`unordered-list`/`checkbox`/`blockquote`/`divider`。共同基类 `NeonaicMessageFragment`（抽象，直接实例化抛错）。
+- **块级 vs 行内**：基类有 `static BLOCK`（默认 false）与 `get isBlock`。块级 = `code`/`table`/`ordered-list`/`unordered-list`/`checkbox`/`blockquote`/`divider`/`audio`/`video`；行内 = `text`/`br`/`inline-code`/`link`/`emoji`/`image`/`at`。
+  ⚠️ `toMarkdown()` **不再是无脑 `join("")`**：块级片段与相邻内容之间会补一个空行（否则 `说明` + 代码块会拼成 `说明```…`，整段语法失效）；行内之间仍零分隔。新增块级片段**必须**标 `static BLOCK = true`，否则会与上文黏成一行。
+- **嵌套约束是数据表**：模块内 `NESTING`（容器 → 允许的子片段 `TYPE[]`，`null` 表示不限制），由 `assertNestable(container, frag)` 在构造期校验，导出为 `neonaicMessageFragment.NESTING` / `.assertNestable`。
+  - `link` 的显示文本是**行内上下文**：只允许 `text`/`inline-code`/`emoji`/`image`；**拒绝**块级内容、`br`、`at` 与嵌套 `link`。`alt`（title）**只能纯文本**。
+  - `list-item`/`blockquote`/`checkbox` 不限制子类型（Markdown 允许块级内容），但仍拒绝 `raw-fragment`（子类忘覆写 `TYPE`）。
+  - ⚠️ `assertPlainText()` 守「本该是纯文本」的位置（`text`/`code`/`at`/表格单元格）：不拦的话 `parseString(fragment)` 会走 `toString()`，静默得到 `"image:![…]"`，错误直到渲染才显现。
+- **列表片段用 `NeonaicMessageFragment[][]` 表达**（每项一个片段数组；单项也可传字符串/单片段），内部归一化成 `NeonaicMessage[]`。理由：渲染要按块级语义拼接，这套逻辑只存在于 `NeonaicMessage.toMarkdown()`，复用比重写便宜；`new NeonaicMessage(item)` 本身就接受片段数组，故对调用方仍是 `[][]` 形态，还顺带拿到防御性拷贝。`get items()` 返回 `NeonaicMessage[]`。
+- `checkbox` 做成「一组条目」而非单项：`[{ checked, content }, …]` → `- [x] …` / `- [ ] …`。若做成单项，相邻两个复选框会被 `toMarkdown` 的空行隔成松散列表（每项多包一层 `<p>`）。
+- `renderListItems()` 把续行（含嵌套列表、代码块）缩进到 marker 之后，**按该项自己的 marker 宽度**（`10. ` 比 `1. ` 宽一格）；空项保留 marker，不吞序号。
 - ⚠️ **ESM 私有字段不能跨类访问**：在基类声明 `#payload`、子类写 `this.#payload` 会在**解析期**报 `Private field '#payload' must be declared in an enclosing class`（不是运行期）。每个类必须自己声明 `#payload`。
 - 媒体统一继承 `NeonaicMediaMsgFrag`（抽象；子类用静态 `KIND`/`TAG` 声明身份）：负责 `Buffer|Blob|URL|Request|NeonaicUriMeta|string` 归一化（Buffer → data URL；Blob 在浏览器走 object URL，需 `dispose()`）、MIME 推断（magic number + 扩展名兜底）、HTML 标签生成（`src`/`title`/`aria-label`/`controls`/`loop`/`muted`/`autoplay`/`preload`，`poster` 仅 video）。图片只覆写 `markdown` 为 `![alt](url "title")`。
 - ⚠️ `NeonaicTable.map(cb)` 默认 `direction='row'`，回调收到的是**整行数组**；逐格处理必须传 `'cell'`（`NeonaicTableMsgFrag` 曾因此把每行 stringify 成 `"['a','b']"`）。
@@ -112,11 +121,8 @@
 ### qqbot 的 `NeonaicTValidMessage` 转换层（`msgPayloadConvertor.js`，WIP）
 - 两个方向：入站 `convert_qqBotMsg_to_NeonaicMsg(event, pp, textOnly)`、出站 `convert_NeonaicMsg_to_qqBotMsg(msg, allowTempSave)`；
   `msgHandler.sendMsg(instance, who, msg)` 会先 `toQbSendable` 再按 `qUSR#`/`qGRP#` 分派；`PlatformQQBot.sendMsg(who, ...msg)` 负责组装 NeonaicMessage。
-- ⚠️ **`#/` 子路径别名有版本差异**（顶级别名是实验性功能）：**Node 26 接受** `"#/*": "./src/*"` + `#/a.js`；
-  **Node 22 拒绝**，报 `ERR_INVALID_MODULE_SPECIFIER`（是 specifier 层面的校验，与 package.json 是否被探测到无关）。
-  为让 `engines: >=18` 的项目在两边都能跑，**2026-10-29 已全量改用 `#src/`**（两边实测都可用）：53 个源文件的
-  `'#/…'`/`"#/…"` 换成 `#src/…`，`package.json` 的 imports 与 `jsconfig.json` 的 paths 同步。
-  批量替换只能匹配引号紧邻的形式 —— 正则 `/^qUSR#/` 里也含 `#/`。
+- ⚠️ **`#/` 子路径别名有版本差异**：Node 26 接受 `"#/*"`，**Node 22 报 `ERR_INVALID_MODULE_SPECIFIER`**。
+  为兼容 `engines: >=18`，2026-10-29 已全量改用 `#src/`（imports 与 jsconfig.paths 同步）；批量替换只能匹配引号紧邻的形式（正则 `/^qUSR#/` 里也含 `#/`）。
 - 2026-10-29 修完的缺陷（由 `scripts/qqbot-msg-convertor.test.mjs` + 临时拓展线上复验）：
   `frag.userId` → `frag.target`（At 片段只有 target，原来任意 @ 都抛 TypeError）；
   `msgPayloadConvertor.js` 漏 import `fromQQElement`（表情恒丢弃）与 `NeonaicIllegalArgumentError`；
@@ -126,6 +132,12 @@
   `PlatformQQBot.sendMsg` 的 `who.replace(/@.*$/,'').split('@')` 让 botId 恒空（跨 bot 拦截失效）+ `messageContent.replace(...)`（消息已发出却回「无法发送」）；
   以及 **`sendMsg(who, ...msg)` 把单个 `NeonaicMessage` 包成数组**（构造函数只收片段/字符串数组）⇒ `NeonaicTValidMessage` 的单消息形态反而不可用。
 - 线上实测（临时拓展 + 真内核）：纯文本、@、markdown 链接、图片（URL/base64）都能发出；`SendResult.brief` 可用来对照内容。
+- 2026-10-30：出站 switch 补齐全部 17 种 `TYPE` —— 其中 `code`/`inline-code` **原本漏了**，会落到 `default` 抛「未知的消息类型」；
+  新增的 `blockquote`/`ordered-list`/`unordered-list`/`checkbox`/`divider` 一律 `qbSegment.markdown(frag.markdown)`（QQ 无对应元素）。
+  入站新增 `case 'markdown'`：QQ 的 markdown 元素只有 `content`，已是 Markdown 文本，**不做结构还原**（那要写完整 Markdown 解析器），
+  原样当 `NeonaicTextMsgFrag` 承载，保证 `toMarkdown()` 能逐字回放而不是被当未知类型丢掉。
+- ⚠️ 导入 `extensions/qqbot/src/msgPayloadConvertor.js` 前**必须先 `new PlatformManager(...)`**：该模块链上的 `entry.js` 在加载时就
+  `registerPlatform`，否则直接抛「PlatformManager 尚未初始化」。
 - **做需要内核能力的测试时不要 mock**：写临时拓展，授权后用 `node main.js` 拉起真内核，跑完删掉。见项目技能
   `.workbuddy/skills/neonai-temp-extension-live-test/SKILL.md`（含 onEnable 早于平台启动、异常被吞、兜底收尾等坑）。
 - 测试脚本 `scripts/qqbot-msg-convertor.test.mjs`：默认离线（桩 bot / 合成事件，零网络）；`--live --send` 真发、
