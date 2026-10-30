@@ -144,10 +144,12 @@ async function onGroupMessageIn(event, pp) {
       && /* 有这个权限 */neonaicPermissionServer.checkPermissionFromContext(ctx, cmd.permissions, cmd.permissionDefault)
     ) {
       try {
-        const quickCommandResult = stripAnsi(await neonaicCommandServer.executeCommandSilent(cmdName, ctx, ...cmdArgs));
+        const quickCommandResult = await neonaicCommandServer.executeCommandSilent(cmdName, ctx, ...cmdArgs);
         event.reply([
           segment.reply(event.message_id),
-          segment.markdown(quickCommandResult instanceof NeonaicMessage ? quickCommandResult.toMarkdown() : parseString(quickCommandResult)),
+          segment.markdown(new NeonaicMessage(quickCommandResult != null
+            ? quickCommandResult
+            : REPLY_FALLBACK.VOID_CMD(cmdName)).toMarkdown()),
         ]).then(() => {
           pp.logMsgOut('GroupAt:', `where=${group} | to=${user} | reply=`, parseString(quickCommandResult).replace(/\n/g, "\\n"));
         }).catch((e) => {
