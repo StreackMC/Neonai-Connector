@@ -47,8 +47,7 @@ export class NeonaicMessage extends NeonaicNewable {
   #frag = [];
 
   /**
-   * @param {NeonaicTValidMessage} [msg] 消息内容；留空时创建空消息
-   * @throws {NeonaicIllegalArgumentError} 参数不合法
+   * @param {NeonaicTValidMessage} [msg] 消息内容；留空时创建空消息；**传入非法类型将强转 String**
    */
   constructor(msg) {
     super();
@@ -69,7 +68,7 @@ export class NeonaicMessage extends NeonaicNewable {
     } else if (typeof msg === "string") {
       this.#frag = [new NeonaicTextMsgFrag(msg)];
     } else {
-      throw new NeonaicIllegalArgumentError("msg should be NeonaicMessage, NeonaicMessageFragment, array of NeonaicMessageFragment, or string");
+      this.#frag = [new NeonaicTextMsgFrag(String(msg))];
     }
   }
 
