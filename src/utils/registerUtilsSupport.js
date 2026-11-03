@@ -3,6 +3,7 @@ import { neonaicCommandServer } from "#src/command/commandServer.js";
 import { neonaicPermissionServer } from "#src/command/permissionServer.js";
 import { neonaicAI } from "#src/message/ai.js";
 import * as frag from "#src/message/messageFragment.js";
+import { neonaicConfManager } from "#src/system/confManager.js";
 import { parseString } from "#src/utils/chore.js";
 import { neonaicNetwork } from "#src/utils/io.js";
 import { neonaicMath, NeonaicMatrix } from '#src/utils/math.js';
@@ -219,6 +220,20 @@ const cmd = () => {
     permissions: CMD_PERM.op_only('markdown'),
     alias: ['md'],
     description: "返回一串 Markdown 消息，用于测试 Markdown 消息是否正常"
+  });
+
+  registerCommand(NS, 'zanwo', () => {
+    return `“${neonaicConfManager.getBotName()}”经历了*那次事情*以后就不会这么干啦……真的很抱歉说是……`;
+  }, {
+    description: "…… @deprecated",
+    permissionDefault: true
+  });
+
+  registerCommand(NS, 'muteme', () => {
+    return `“${neonaicConfManager.getBotName()}”现在并没有「世界之外的力量」来逗你……`;
+  }, {
+    description: "…… @deprecated",
+    permissionDefault: true
   });
 };
 
