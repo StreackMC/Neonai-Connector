@@ -362,8 +362,9 @@ async function aiRequest(rt, payload, limiter) {
     text = await withTimeout(
       neonaicAI.askAI(composeAiRequest({ prompt, context, trigger, visibility }), {
         AIlist,
-        // 调用方是外部身份：封禁检查按 $joyous 判定（未显式封禁即允许）
-        caller: [BRIDGE_EXECUTOR],
+        // 调用方是外部身份：封禁检查按 $joyous 判定（未显式封禁即允许）。
+        // 外部桥接不是私密场景，privateExecutor 必须显式为 false。
+        context: { executor: [BRIDGE_EXECUTOR], privateExecutor: false },
         // MC 玩家的可读名是免费的（由 Joyous 提供），直接交给内核的说话者机制
         speaker: speakerOf(actor),
         preprocessWilling: false,

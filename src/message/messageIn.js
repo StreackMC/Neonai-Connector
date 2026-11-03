@@ -169,7 +169,7 @@ async function resolveReply(msg, options) {
   };
   try {
     return {
-      text: new NeonaicMessage(stripAnsi(await neonaicAI.askAI(message, { AIlist: config.AIlist, caller: config.resolveCommandWith?.executor })).trim()),
+      text: new NeonaicMessage(stripAnsi(await neonaicAI.askAI(message, { AIlist: config.AIlist, context: config.resolveCommandWith })).trim()),
       failed: false,
       status: 'SUCCESS'
     };

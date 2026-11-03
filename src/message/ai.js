@@ -671,33 +671,76 @@ function resolveSpeaker(speaker, caller) {
   return neonaicUserDirectory.describe(caller);
 }
 
+/** `caller` 弃用提示只记一次：它可能被每轮对话触发，重复刷屏没有意义 */
+let _callerDeprecationWarned = false;
+
+/** 提示 `askAI` 的 `caller` 选项已弃用（每个进程只提示一次） */
+function warnCallerDeprecatedOnce() {
+  if (_callerDeprecationWarned) return;
+  _callerDeprecationWarned = true;
+  getLogger().tool.warn(
+    '[ai] askAI 的 options.caller 已弃用，请改用 options.context'
+    + '（NeonaicCommandContext 或其普通对象形式）；兼容垫片会把 privateExecutor 视为 false。',
+  );
+}
+
+/**
+ * 把 {@link askAI} 的 `context` / 兼容用的 `caller` 归一化为命令上下文。
+ *
+ * - 普通对象会被 `new NeonaicCommandContext(...)` 包一层（平台侧通常只提供 `{ executor, privateExecutor }`）；
+ * - 一律返回**副本**，工具改动不会污染调用方；
+ * - 强制 `internalCall = false`：`checkPermissionFromContext` 对 internalCall 直接放行，AI 层不能继承；
+ * - 清空 `this`：工具是按全局语义注册的，平台对象不应经此泄漏，也避免指代不明。
+ *
+ * @param {NeonaicCommandContext|{executor?: string|string[], privateExecutor?: boolean}} [input]
+ * @returns {NeonaicCommandContext}
+ */
+function toCommandContext(input) {
+  let ctx;
+  if (input instanceof NeonaicCommandContext) {
+    ctx = input.clone();
+  } else {
+    const source = input ?? {};
+    // 显式补 []：构造函数会把缺省的 executor 记成 $unknown，而「没传 caller」应当是空链
+    ctx = new NeonaicCommandContext({ ...source, executor: source.executor ?? [] });
+  }
+  ctx.internalCall = false;
+  ctx.this = undefined;
+  return ctx;
+}
+
 /**
  * @param {string|NeonaicMessage|NeonaicMessageFragment|NeonaicMessageFragment[]|string[]} userMessage 用户传入消息或输入提示词
  * @param {object} options 选项
  * @param {string|string[]} [options.AIlist] 允许的 AI Profile 列表：`"*"` 全部、`"!name"` 排除（排除优先）
+ * @param {NeonaicCommandContext|{executor?: string|string[], privateExecutor?: boolean}} [options.context] 本轮命令上下文；与 `caller` 互斥
  * @param {string|string[]|null|undefined} [options.caller] 调用者标识（执行者链），用于封禁检查与身份解析
+ * @deprecated `options.caller` 已弃用，请改用 `options.context`；仅在未提供 `context` 时作为兼容垫片，`privateExecutor` 固定为 false
  * @param {string|object|null} [options.speaker] 向模型描述「当前对话者是谁」的方式，见 {@link resolveSpeaker}
  * @param {boolean} [options.preprocessWilling] 是否接受优化提示词，是否生效取决于用户配置
  * @param {NeonaicTAIToolDef[]|NeonaicTAIToolDef} [options.overrideAITool] 要叠加的 AI 工具，将临时覆写已有 AI 工具
  * @param {String} [options.overridePrompt] 存在此字符串将覆写 AI Profile 的提示词
  * @returns {Promise<string>|string} AI 回复文本
  * @throws {NeonaicIllegalStateError} 无权访问
- * @throws {NeonaicIllegalArgumentError} 无可用 Profile / 所有 Profile 请求失败
+ * @throws {NeonaicIllegalArgumentError} 参数互斥 / 无可用 Profile / 所有 Profile 请求失败
  */
 async function askAI(userMessage, options) {
+  const rawOptions = options ?? {};
+  if (rawOptions.caller != null && rawOptions.context != null) {
+    throw new NeonaicIllegalArgumentError('options.caller 与 options.context 互斥，只能提供其中一个');
+  }
+  if (rawOptions.caller != null) warnCallerDeprecatedOnce();
+
   // 初始化配置
   const conf = neonaicChore.joinObject({
     AIlist: ['*'],
-    caller: [],
     speaker: undefined,
     preprocessWilling: false,
     overrideAITool: [],
     overridePrompt: undefined,
-  }, options);
-  const ctx = new NeonaicCommandContext({
-    executor: conf.caller,
-    privateExecutor: true,
-  });
+  }, rawOptions);
+  // context 优先；只给 caller 时用兼容垫片（privateExecutor 缺省 false）
+  const ctx = toCommandContext(rawOptions.context ?? { executor: rawOptions.caller ?? [] });
   if (neonaicAI.isAIBanned(ctx.executor).banned) throw new NeonaicIllegalStateError('对“智能回复”的访问被拒绝');
 
   // 对 AIlist 做标准化处理：字符串 → 数组，去除空值，trim
@@ -726,7 +769,7 @@ async function askAI(userMessage, options) {
   //   3. 职责清晰 —— 身份是「可查询的事实」，而不是每轮都必须塞给模型的上下文。
   // 代价：模型不问就不知道。若某些场景希望「不用说也知道」，调用方改传 `speaker: '…'`
   // 并自行拼进消息，或后续再加一个显式的注入开关。
-  const speakerText = resolveSpeaker(conf.speaker, conf.caller);
+  const speakerText = resolveSpeaker(conf.speaker, ctx.executor);
   if (speakerText) {
     conf.overrideAITool.push({
       namespace: 'neonaic',
@@ -771,7 +814,7 @@ async function askAI(userMessage, options) {
     try {
       optimizedText = await neonaicAI.askAI(renderTextOnly(message), {
         AIlist: neonaicConfManager.getConfig(neonaicConfManager.CONFIG_PATHS.main).getList('ai.model2Optimize', true),
-        caller: conf.caller,
+        context: ctx,
         // 提示词优化不是对话轮次，明确不投递身份（否则会白挂一个 speaker 工具）
         speaker: null,
         preprocessWilling: false, // 避免无限递归
@@ -996,13 +1039,13 @@ async function aiProfile(ctx, ...args) {
       if (!profileName || !msg) return '用法: ai profile test <profile> <msg>';
       if (profileName.trim() == '*') {
         // 执行全量测试
-        return await askAI(msg, { AIlist: ['*'], caller: ctx.caller, preprocessWilling: false });
+        return await askAI(msg, { AIlist: ['*'], context: ctx, preprocessWilling: false });
       }
       // 非全量测试
       const target = findProvider(profileName);
       if (!target) return `未找到 AI Profile: ${profileName}`;
       try {
-        return await callProvider(target, msg, [], null, ctx);
+        return await callProvider(target, msg, [], null, toCommandContext(ctx));
       } catch (err) {
         return `测试失败: ${err?.message || (err?.statusCode ?? parseString(err))}`;
       }
