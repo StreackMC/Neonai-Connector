@@ -19,7 +19,7 @@ import JSON5 from 'json5';
 import z from 'zod';
 
 import { neonaicCommandInterface } from '#src/command/commandInterface.js';
-import { neonaicCommandServer } from '#src/command/commandServer.js';
+import { NeonaicCommandContext, neonaicCommandServer } from '#src/command/commandServer.js';
 import { neonaicPermissionServer } from '#src/command/permissionServer.js';
 import { getLogger } from '#src/logger/Logger.js';
 import { NeonaicMediaMsgFrag, NeonaicMessage, NeonaicMessageFragment } from '#src/message/messageFragment.js';
@@ -55,18 +55,30 @@ function loadSystemPrompt(promptFilename) {
 // ---- AI 工具注册 ----
 
 /**
+ * AI 工具执行时拿到的上下文。
+ *
+ * `neonaic` 由 {@link buildToolSet} 在**每次调用时**注入（同一轮的所有工具共享同一个实例），
+ * 因此全局注册的拓展工具也能拿到本轮的命令上下文，不需要在注册时捕获。
+ * @typedef {object} NeonaicTAIToolExecutionOptions
+ * @property {NeonaicCommandContext} neonaic 本轮的命令上下文；已清空 `this`，并强制 `internalCall=false`
+ * @property {string} userInput 本轮发送给模型的用户文本（多模态时只含文本部分）
+ * @property {string} toolCallId 本次工具调用的 ID
+ * @property {Array<object>} messages 触发本次调用的消息列表（不含 system）
+ */
+
+/**
  * 已注册的 AI 工具。
- * @typedef {object} AIToolDef
+ * @typedef {object} NeonaicTAIToolDef
  * @property {string} namespace 命名空间（'' 表示全局）
  * @property {string} name 工具名
  * @property {string} description 工具描述
  * @property {*} inputSchema 输入 schema（zod schema 或 JSON schema）
- * @property {Function} execute 执行函数
+ * @property {(input: Object, options: NeonaicTAIToolExecutionOptions) => unknown|Promise<unknown>} execute 执行函数
  */
 
-/** 全部工具（按注册顺序，去重） @type {AIToolDef[]} */
+/** 全部工具（按注册顺序，去重） @type {NeonaicTAIToolDef[]} */
 const _allTools = [];
-/** fqn（namespace:name / namespace:alias）→ 工具定义 @type {Map<string, AIToolDef>} */
+/** fqn（namespace:name / namespace:alias）→ 工具定义 @type {Map<string, NeonaicTAIToolDef>} */
 const _toolFqn = new Map();
 
 /**
@@ -76,8 +88,8 @@ const _toolFqn = new Map();
  * @param {object} definition 工具定义
  * @param {string} [definition.description] 工具描述（会发送给模型）
  * @param {*} definition.inputSchema 输入 schema（zod schema）
- * @param {Function} definition.execute 执行函数，接收模型生成的输入
- * @returns {[string|null, AIToolDef|null]} [fqn, def] 定义成功的工具全名称与定义；如果定义失败则为 null
+ * @param {(input: Object, options: NeonaicTAIToolExecutionOptions) => unknown|Promise<unknown>} definition.execute 执行函数，接收模型生成的输入与本轮上下文
+ * @returns {[string|null, NeonaicTAIToolDef|null]} [fqn, def] 定义成功的工具全名称与定义；如果定义失败则为 null
  */
 function defineAITool(namespace, name, definition) {
   if (!namespace || !name || !definition || typeof definition?.execute !== 'function') {
@@ -247,22 +259,51 @@ function resolveToolList(toolsConfig) {
 
 /**
  * 将工具定义转换为 Vercel AI 的 tools 对象。
- * @param {(AIToolDef|null)[]} toolList 可用工具的 fqn 列表
+ *
+ * `execute` 在这里**按调用包装**：把本轮的命令上下文与用户文本作为 `options.neonaic` /
+ * `options.userInput` 交给工具。这样全局注册的拓展工具（定义在注册时就固定了）也能拿到本轮上下文，
+ * 不需要依赖 SDK 的 `contextSchema` / `toolsContext` —— 那条路会按 schema 重建对象，
+ * 类实例会被剥成普通对象，getter 与方法全部丢失。
+ *
+ * @param {(NeonaicTAIToolDef|null|undefined)[]} toolList 工具定义列表
+ * @param {NeonaicCommandContext} ctx 本轮命令上下文
+ * @param {string} userInput 本轮用户文本
+ * @returns {Record<string, object>} 模型可见名 → 工具
  */
-function buildToolSet(toolList) {
+function buildToolSet(toolList, ctx, userInput) {
   const tools = {};
   for (const def of toolList) {
     if (!def) continue;
     const fqn = `${def.namespace}:${def.name}`;
-    // OpenAI 工具名仅允许 [a-zA-Z0-9_-]，将 fqn 的 ':' 替换为 '_' 作为模型可见名
+    // OpenAI 工具名仅允许 [a-zA-Z0-9_-]，将 fqn 的 ':' 替换为 '-' 作为模型可见名
     const modelName = fqn.replace(/:/g, '-');
     tools[modelName] = tool({
       description: def.description || undefined,
-      inputSchema: def.inputSchema,
-      execute: def.execute,
+      // 少数临时工具没有声明 schema，补一个空对象，避免 SDK 序列化时拿到 undefined
+      inputSchema: def.inputSchema ?? z.object({}),
+      execute: (input, options) => def.execute(input, {
+        ...options,
+        neonaic: ctx,
+        userInput,
+      }),
     });
   }
   return tools;
+}
+
+/**
+ * 从本轮发送给模型的内容里取出纯文本。
+ * 多模态消息的 content 是片段数组，工具只关心其中的文本部分。
+ * @param {string|Array<{type?: string, text?: string}>} content
+ * @returns {string}
+ */
+function plainTextOf(content) {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  return content
+    .filter((part) => part?.type === 'text' && typeof part.text === 'string')
+    .map((part) => part.text)
+    .join('\n');
 }
 
 // ---- 多模态 ----
@@ -459,12 +500,13 @@ function buildUserContent(message, provider, optimizedText = null) {
  * 调用单个 AI Profile 获取回复。
  * @param {object} provider oai 配置项
  * @param {string|Array<object>} userMessage 纯文本，或 AI SDK 消息内容片段数组
- * @param {(AIToolDef|null|undefined)[]} [overrideAITool] 要叠加的 AI 工具，将临时覆写已有 AI 工具
+ * @param {(NeonaicTAIToolDef|null|undefined)[]} [overrideAITool] 要叠加的 AI 工具，将临时覆写已有 AI 工具
  * @param {String|null} overridePrompt 要覆写提示词吗
+ * @param {NeonaicCommandContext} ctx 
  * @returns {Promise<string>}
  * @internalApi
  */
-async function callProvider(provider, userMessage, overrideAITool = [], overridePrompt = null) {
+async function callProvider(provider, userMessage, overrideAITool = [], overridePrompt = null, ctx = new NeonaicCommandContext()) {
   const systemPrompt = (typeof overridePrompt === 'string' && overridePrompt)
     ? overridePrompt
     : loadSystemPrompt(provider.prompt);
@@ -508,9 +550,13 @@ async function callProvider(provider, userMessage, overrideAITool = [], override
   // 原写法是在 `provider.tools` 解析结果非空时才把 overrideAITool 一起送出，
   // 于是「Profile 没有启用任何工具」时，临时叠加的工具会被**静默丢弃**
   // （例如只有 tools: [] 的 Profile 上，身份工具会凭空消失）。
-  const baseTools = buildToolSet(toolList);
-  const overrideTools = buildToolSet(Array.isArray(overrideAITool) ? overrideAITool : []);
-  const tools = neonaicChore.joinObject(baseTools, overrideTools);
+  //
+  // ⚠️ 用一次 buildToolSet 构建，不要对两个「工具表」再套 joinObject：
+  // 那会把 `{tools, toolsContext}` 当成两层结构做浅合并，后者会把前者的整个 `tools` 键覆盖掉。
+  const userInput = plainTextOf(userMessage);
+  const extraTools = Array.isArray(overrideAITool) ? overrideAITool.filter(Boolean) : [];
+  // 临时工具排在后面：同名时后写入的覆盖前者，即临时工具优先
+  const tools = buildToolSet([...toolList, ...extraTools], ctx, userInput);
   const toolNames = Object.keys(tools);
 
   const messages = [
@@ -524,7 +570,7 @@ async function callProvider(provider, userMessage, overrideAITool = [], override
   // 下限钳制为 1，避免配置为 0/负数导致 stepCountIs 失效。
   const rawMax = Number(provider.maxToolcall);
   const maxToolcall = Math.max(1, Number.isFinite(rawMax) ? rawMax : 5);
-  const extraCount = Object.keys(overrideTools).length;
+  const extraCount = extraTools.length;
   const mediaCount = Array.isArray(userMessage) ? userMessage.filter((p) => p?.type === 'file').length : 0;
   getLogger().tool.info(
     `${SESSION_ID} → ${provider.name}: ${provider.address}#${provider.model} (${endpoint}${provider.stream ? ', stream' : ''}, ${toolNames.length} tools${extraCount ? ` 含临时 ${extraCount}` : ''}, maxToolcall=${maxToolcall}${mediaCount ? `, ${mediaCount} media` : ''})`,
@@ -534,6 +580,8 @@ async function callProvider(provider, userMessage, overrideAITool = [], override
     model,
     system: systemPrompt,
     messages,
+    // ⚠️ 必须包成 `{ tools }`：`tools` 是「模型名 → 工具」的表，
+    // 直接展开会把每个工具名变成顶层参数（请求体里会出现 `probe-ctx: {...}`），SDK 认不出。
     ...(toolNames.length ? { tools } : {}),
     // Responses API 默认拒绝「非图片、非 PDF」的内联文件（音频/视频 data 片段会被 SDK 拦下）。
     // Profile 声明了这些模态时打开透传，让它们以 input_file/file_data 发出去。
@@ -630,7 +678,7 @@ function resolveSpeaker(speaker, caller) {
  * @param {string|string[]|null|undefined} [options.caller] 调用者标识（执行者链），用于封禁检查与身份解析
  * @param {string|object|null} [options.speaker] 向模型描述「当前对话者是谁」的方式，见 {@link resolveSpeaker}
  * @param {boolean} [options.preprocessWilling] 是否接受优化提示词，是否生效取决于用户配置
- * @param {AIToolDef[]|AIToolDef} [options.overrideAITool] 要叠加的 AI 工具，将临时覆写已有 AI 工具
+ * @param {NeonaicTAIToolDef[]|NeonaicTAIToolDef} [options.overrideAITool] 要叠加的 AI 工具，将临时覆写已有 AI 工具
  * @param {String} [options.overridePrompt] 存在此字符串将覆写 AI Profile 的提示词
  * @returns {Promise<string>|string} AI 回复文本
  * @throws {NeonaicIllegalStateError} 无权访问
@@ -646,7 +694,11 @@ async function askAI(userMessage, options) {
     overrideAITool: [],
     overridePrompt: undefined,
   }, options);
-  if (neonaicAI.isAIBanned(conf.caller).banned) throw new NeonaicIllegalStateError('对“智能回复”的访问被拒绝');
+  const ctx = new NeonaicCommandContext({
+    executor: conf.caller,
+    privateExecutor: true,
+  });
+  if (neonaicAI.isAIBanned(ctx.executor).banned) throw new NeonaicIllegalStateError('对“智能回复”的访问被拒绝');
 
   // 对 AIlist 做标准化处理：字符串 → 数组，去除空值，trim
   if (!Array.isArray(conf.AIlist)) conf.AIlist = [conf.AIlist];
@@ -654,7 +706,7 @@ async function askAI(userMessage, options) {
 
   // 对覆写 tool 处理
   if (!Array.isArray(conf.overrideAITool)) conf.overrideAITool = [conf.overrideAITool];
-  conf.overrideAITool = conf.overrideAITool.map((/** @type {AIToolDef|null} */v) => {
+  conf.overrideAITool = conf.overrideAITool.map((/** @type {NeonaicTAIToolDef|null} */v) => {
     return (v?.namespace && v?.name && typeof v?.execute === 'function')
       ? {
         namespace: parseString(v.namespace),
@@ -739,6 +791,7 @@ async function askAI(userMessage, options) {
         buildUserContent(message, provider, optimizedText),
         conf.overrideAITool,
         conf.overridePrompt,
+        ctx
       );
     } catch (err) {
       const reason = err?.message || (err?.statusCode ?? parseString(err));
@@ -757,7 +810,7 @@ async function askAI(userMessage, options) {
 /**
  * 查找工具定义。
  * @param {string} ref 工具引用：fqn（ns:name）或 name（模糊匹配）
- * @returns {AIToolDef[]}
+ * @returns {NeonaicTAIToolDef[]}
  */
 function findTool(ref) {
   if (!ref) return null;
@@ -949,7 +1002,7 @@ async function aiProfile(ctx, ...args) {
       const target = findProvider(profileName);
       if (!target) return `未找到 AI Profile: ${profileName}`;
       try {
-        return await callProvider(target, msg, []);
+        return await callProvider(target, msg, [], null, ctx);
       } catch (err) {
         return `测试失败: ${err?.message || (err?.statusCode ?? parseString(err))}`;
       }
