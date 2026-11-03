@@ -154,6 +154,27 @@
   `--live --send --only=<子串>` 只跑部分用例、`--live --listen=N` 只观测。沙箱标识：用户 `qUSR#DE5D74452748FAFEF5063175198C950C@8528533035224324959`、
   群 `qGRP#588A721FF0F068E24B68628F087AFB31@8528533035224324959`（`@` 后是机器人 id）。
 
+## aicode 沙箱拓展（`extensions/aicode/`）
+
+- **架构**：父进程池（`sandboxmgr.js`）+ 子进程（`eval.js`）+ 共享 IPC 常量（`ipc.js`）+ 配置（`config.js`）。
+  `run(code, ctx)` 取空闲进程，没有空位且达 `pool.maxChildren` 时**直接返回 busy**（不排队）；空闲 `idleMinutes` 自退；
+  父进程每 `feedIntervalMs` 喂食，子进程 `feedTimeoutMs` 断粮自杀。
+- **每任务重建**：`eval.js` 每次新建 `vm` 上下文 + `runSandboxed`（内部 `module.newContext()` 新 QuickJS 运行时），
+  所以全局变量/原型污染不跨任务；实测 `globalThis.__leak` 在下一任务为 `undefined`。
+- ⚠️ **`memoryLimit` 的单位是字节**（不是 KB）；而且**大数组会绕过 QuickJS 记账**（8MB 限制下仍能把 RSS 冲到 1.5GB）。
+  因此子进程内另起 **RSS 监控 Worker**，超 `maxRssMB` 直接 SIGKILL；父进程把「非自己发起的 SIGKILL」判定为 poison。
+  Worker 必须在任何阻塞任务**之前**启动（主线程一被 wasm 阻塞，worker 的握手/输出都来不及），
+  且 `--permission` 下必须加 `--allow-worker`，否则 worker 起不来。
+- ⚠️ **`maxStackSize` 超过 256KB 会触发 quickjs-ng 断言 abort**（`JS_FreeRuntime` 的 `list_empty`）；
+  该 abort 必须按 fatal/poison 处理（子进程回收），否则共享的 wasm 模块可能已被污染。
+- **IPC 只能用 `child.send()` / `process.on('message')`**；`channel.emit()` 只在本进程触发，不跨进程。
+- **`fork` 会继承 `NEONAIC` 环境变量**（`main.js` 设的哨兵），子进程见到就自杀；spawn 时必须 `delete env.NEONAIC`。
+- `--permission --allow-fs-read=<ROOT>` 在 **node_modules 是软链**（测试沙箱/pnpm）时按 realpath 拒绝，
+  所以额外授权 `realpath(node_modules)` 与拓展目录；文件入口下权限模型可正常启动。
+- 权限校验**不要**用 `checkPermissionFromContext`（它对 `internalCall` 直接放行），用 `checkPermission(ctx.executor, …)`。
+- 内核补了 `neonaicAI.unregisterAITool(ns, name)`：拓展 `onDisable` 必须注销工具，否则停用后仍可被模型调用并重新拉起进程。
+- 结果体积封顶 512K 字符、日志 200 条/16K 字符；`vm` 层关掉 `codeGeneration.strings/wasm`。
+
 ## 配置 / gitignore / 硬约束
 - `config/main.json` — 名称/次名、`prefix`、`maxLogFileSize`、`detailedLog`、`ai.*`；`config/prompts/<profile>.md` 提示词（**gitignore**）。**`config/saves` 整目录 gitignore**，但 `ext.json`/`permissions.json` 因**规则加入前已被跟踪**而仍在版本控制；**新增文件（`identities.json`、`joyous-identities.json`）不会入库**。根目录 `secret.json` 是真凭据（gitignore），`config/secret.json` 是模板（入库）。拓展自带 `extensions/<name>/config.json` ⚠️ **已入库**且用户会填自己的部署参数（开启通道、真实频道、端口）——自检**不要依赖它的内容**，要自带配置。
 - **内核不得出现任何拓展名**（解耦硬判据）：看一处改动**会不会留下「本体只在某拓展存在时才有意义」的东西**。拓展专属的合成执行者身份（`$joyous`）必须定义在拓展内，**不得写进内核 `COMMAND_ENUMS`**；`$` 前缀是内核保留的合成身份命名空间（内核只占 `$console`/`$unknown`），权限按执行者字符串存授权。反例：`NeonaicProtocolError` 这类**通用错误词汇**进内核不算耦合。
