@@ -1,3 +1,5 @@
+import { Buffer } from 'node:buffer';
+
 import z from 'zod';
 
 import { neonaicAI } from '#src/message/ai.js';
@@ -27,13 +29,22 @@ export async function onEnable(_extCtx) {
 
   aicodePool.configure(config);
 
+  // 注册时定值：`onDisable` 会把模块级 `config` 置空，schema 里的回调别再读它
+  const maxCodeBytes = config.limits.maxCodeBytes;
+
   const registered = neonaicAI.registerAITool(TOOL_NAMESPACE, TOOL_NAME, {
     description: '在隔离沙箱中执行一段 JavaScript（独立子进程 + QuickJS）。'
       + '用 return 返回结果，console.log 的输出会被收集到 logs。'
       + '禁止访问 fs 与 fetch，单次执行受时间/内存/栈限制；系统繁忙时返回 ok:false 且 code 为 busy。'
       + '代码按 async 函数体执行，不能使用 export。',
     inputSchema: z.object({
-      code: z.string().max(config.limits.maxCodeBytes).describe('要执行的 JavaScript 代码；用 return 返回结果'),
+      // `.max()` 数的是**字符**，而 `maxCodeBytes` 与沙箱侧的检查都是**字节**：
+      // 中文 3 字节/字，用 .max() 会让「zod 放行、沙箱再拒」的多余解析成为常态。
+      code: z.string()
+        .refine((text) => Buffer.byteLength(text, 'utf8') <= maxCodeBytes, {
+          message: `代码不能超过 ${maxCodeBytes} 字节（UTF-8；一个中文字符算 3 字节）`,
+        })
+        .describe('要执行的 JavaScript 代码；用 return 返回结果'),
     }),
     execute: async (input, options) => {
       const cfg = config;

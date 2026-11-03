@@ -1,8 +1,9 @@
 /**
  * 父进程 ↔ 子进程的 IPC 消息类型。
  *
- * 只走 `child.send()` / `process.send()` —— `channel.emit()` 只在本进程内触发，
- * 不会跨进程（曾经踩过：父发 `channel.emit('code')`，子进程永远收不到）。
+ * 通道本身**不是** Node 的 `child.send()` / `process.send()`：那是两条私用管道
+ * （子读 fd 3 / 写 fd 4）+ 自研分帧，原因见 `framing.js` 开头。
+ * 这里只定义分帧之内的消息类型。
  */
 export const IPC = Object.freeze({
   /** 子进程就绪（父进程据此结束 spawn 等待） */
@@ -20,3 +21,13 @@ export const IPC = Object.freeze({
   /** 父 → 子：优雅停机 */
   SHUTDOWN: 'shutdown',
 });
+
+/**
+ * RSS 监控线程自杀前写到 stderr 的标记。
+ *
+ * 父进程只能看到 `signal=SIGKILL`，无法区分「我们的监控线程」和「外部 kill / 系统 OOM killer」，
+ * 所以让子进程在杀自己之前先留一行日志；父进程从 `worker.tail` 里认这个标记。
+ * 认不出来就按「外部 SIGKILL」处理，不再一律当成资源超限。
+ */
+export const RSS_KILL_MARKER = '[aicode:rss-limit]';
+

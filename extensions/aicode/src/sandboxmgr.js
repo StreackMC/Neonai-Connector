@@ -7,7 +7,7 @@ import { realpathSync } from 'node:fs';
 import { neonaicLifeCycleManager } from '#src/system/lifeCycleManager.js';
 import { getLogger } from '#src/logger/Logger.js';
 
-import { IPC } from './ipc.js';
+import { IPC, RSS_KILL_MARKER } from './ipc.js';
 import { aicodeFraming } from './framing.js';
 import { aicodeSanitize } from './sanitize.js';
 
@@ -307,10 +307,18 @@ function releaseWorker(worker) {
  * @returns {Promise<Worker>}
  */
 async function spawnWorker() {
-  const env = { ...process.env };
-  // 内核会设置 NEONAIC；子进程带着它会立刻自杀（那是防「内核内直接 import」的哨兵）
-  delete env.NEONAIC;
-  env.AICODE_CONFIG = JSON.stringify({ pool: config.pool, limits: config.limits });
+  // 显式构造最小环境，**不展开 `process.env`**：
+  //   - `NODE_OPTIONS` 绝不能被继承。父进程环境里只要有一条 `--require ./x.js`，
+  //     子进程就会在 Node 主线程执行它 —— 那是 QuickJS 之外，整套沙箱直接被绕过；
+  //     （同理不继承 `NODE_PATH`、`NODE_EXTRA_CA_CERTS` 之类会改变加载行为的键。）
+  //   - 各种凭证（`AWS_*` / `GITHUB_TOKEN` / `OPENAI_API_KEY` …）没有理由出现在子进程里；
+  //     Node 权限模型并不限制读环境变量，QuickJS 一旦被攻陷这些就是白给的。
+  //   - 内核设置的 `NEONAIC` 自然也不会带上（子进程见到它会立刻自杀）。
+  const env = { AICODE_CONFIG: JSON.stringify({ pool: config.pool, limits: config.limits }) };
+  for (const key of ['PATH', 'HOME', 'TMPDIR', 'LANG', 'LC_ALL', 'TZ']) {
+    const value = process.env[key];
+    if (typeof value === 'string' && value) env[key] = value;
+  }
 
   /** @type {string[]} */
   const execArgv = [];
@@ -635,13 +643,19 @@ function onExit(worker, code, signal) {
     worker.task = null;
     worker.busy = false;
     clearTimeout(task.timer);
-    // 不是父进程发起的 SIGKILL ⇒ 子进程的自杀式回收（RSS 监控 / OOM killer）
-    const selfKilled = signal === 'SIGKILL' && !worker.killedByParent;
+    // 父进程只能看到 signal。默认自杀式回收（RSS 监控 / 系统 OOM killer）也发 SIGKILL，
+    // 所以让子进程在杀自己之前先写一行标记；认得出标记才算「资源超限」，
+    // 认不出就是外部 kill —— 别把管理员的一刀说成内存超限。
+    const rssLimited = signal === 'SIGKILL' && !worker.killedByParent
+      && worker.tail.includes(RSS_KILL_MARKER);
+    const killedExternally = signal === 'SIGKILL' && !worker.killedByParent && !rssLimited;
     task.reject(new SandboxWorkerError(
-      selfKilled
+      rssLimited
         ? '沙箱进程因内存超限被监控线程回收'
-        : `沙箱进程意外退出（code=${code}, signal=${signal}）`,
-      selfKilled ? 'sandbox_poisoned' : 'sandbox_exit',
+        : killedExternally
+          ? '沙箱进程收到外部 SIGKILL 而终止（父进程未发起）'
+          : `沙箱进程意外退出（code=${code}, signal=${signal}）`,
+      rssLimited ? 'sandbox_poisoned' : 'sandbox_exit',
     ));
   }
 

@@ -26,12 +26,16 @@
   | `child_process` | 拒绝 |
   | `process.binding` | 拒绝 |
   | 网络（`net`/`dns`/`fetch`） | **不限制** |
-  | 环境变量 | 继承父进程（spawn 时剔除了 `NEONAIC`） |
+  | 环境变量 | 只剩 `PATH`/`HOME`/`TMPDIR`/`LANG`/`LC_ALL`/`TZ`（见下） |
   | 发信号（`process.kill(ppid)`） | 不限制 |
 
   也就是说：真被攻陷时，攻击者拿不到「写盘」和「起子进程」，
   但读得到项目里的密钥、连得上内网、能杀掉内核。
   要堵这三条，只能靠外部手段（独立低权限用户、容器网络策略、把密钥移出项目根）。
+
+  **环境变量是显式白名单，不继承 `process.env`**：早先是 `{ ...process.env }` 再删掉 `NEONAIC`，
+  于是一条 `NODE_OPTIONS=--require ./x.js` 就能让子进程在 **Node 主线程**（QuickJS 之外）
+  执行任意代码，整套沙箱形同虚设；凭证（`AWS_*` / `GITHUB_TOKEN` …）也会白送进子进程。
 
 ## 进程池：削峰缓冲
 
@@ -69,7 +73,7 @@ budget(i) = idleMaxMinutes - (待机进程数 - 1 - i) * step      // i = 0 是�
 | `limits.taskTimeoutMs` | 父进程硬超时；到点 SIGKILL 并换新进程（必须大于软超时） |
 | `limits.memoryLimitMB` | QuickJS 堆上限（字节制）。注意：大数组可能绕过它的记账 |
 | `limits.maxStackSizeKB` | QuickJS 栈上限；超过 256KB 会触发 quickjs-ng 断言崩溃，已封顶 |
-| `limits.maxRssMB` | 进程 RSS 上限：子进程内有监控线程（主线程被 wasm 阻塞也能跑），超限直接 SIGKILL；任务结束后父进程再补一次检查 |
+| `limits.maxRssMB` | 进程 RSS 上限：子进程内有监控线程（主线程被 wasm 阻塞也能跑），超限先往 stderr 写一行 `[aicode:rss-limit]` 再 SIGKILL；任务结束后父进程再补一次检查 |
 | `conversation.maxConcurrent` | 同一对话（`ctx.executor[0]`）同时只允许一个任务，抑制 LLM 重复调用 |
 
 **交付即占用**：`acquire()` 在返回进程之前就把它标成 busy。否则两个并发任务会在同一个微任务间隙里
@@ -77,6 +81,12 @@ budget(i) = idleMaxMinutes - (待机进程数 - 1 - i) * step      // i = 0 是�
 
 **poison**：OOM、栈溢出导致 wasm abort、RSS 超限时，子进程会先发 `poison` 再退出；
 父进程立即把它摘出池并 reject 本次任务。不重试，也不复用可疑进程。
+
+判定「是不是资源超限」**只看耗时和子进程自己发的帧，不看错误文本**。错误名与消息都来自 guest，
+早先用 `/out of memory|aborted|assertion failed/i` 去匹配，`throw new Error("assertion failed")`
+就能把自己伪装成资源超限、白嫖一次进程回收，还把普通错误报成系统故障。
+现在用户级失败一律不当 poison，唯一的例外是「跑了接近 `limits.executionTimeoutMs` 才失败」——
+那是 QuickJS 的 interrupt 打断过 wasm，可以按超时回收（guest 想伪造就得先付掉同样的 CPU 时间）。
 
 ## 父子进程协议（自己实现的帧校验）
 
@@ -91,7 +101,7 @@ budget(i) = idleMaxMinutes - (待机进程数 - 1 - i) * step      // i = 0 是�
 
 ## 结果剥离
 
-用户代码在 QuickJS 里**只能回一个字符串**：宿主侧用 `JSON.stringify` 把返回值编码成一帧
+用户代码在 QuickJS 里**只能回字符串**：宿主侧用 `JSON.stringify` 把返回值编码成一帧
 （`aicode:<status>\n<payload>`），宿主再 `JSON.parse` 回来并重建一遍结构。
 
 这么做有两个原因：
@@ -103,9 +113,19 @@ budget(i) = idleMaxMinutes - (待机进程数 - 1 - i) * step      // i = 0 是�
    最终在 `JS_FreeRuntime` 触发 `list_empty(&rt->gc_obj_list)` 断言、abort 掉整个进程。
    （也就是说：修复前 `return { a: 1 }` 会让子进程直接崩。）
 
+**`console.*` 走同一条规则。** 早先只把 `hostLog` 直接交给库，于是 `console.log({})` 的实参
+同样要经过 `handleToNative`；对象/数组侥幸没炸，但 `console.log(function foo(){})`
+（把一个 guest 函数交给宿主回调 → 宿主闭包）会让子进程 abort，
+一行代码就换掉一个进程。现在 harness 在 guest 内重写了 `globalThis.console`：
+所有宿主注入的方法都被包一层，先把实参格式化成**字符串**再回调宿主。
+
 `JSON.parse` 之后还要过一层 `sanitize.js`：深度 ≤ 8、节点 ≤ 4000、数组 ≤ 500、键 ≤ 200、
-单串 ≤ 128K，并丢弃 `__proto__` / `constructor` / `prototype` 键；超过 512K 字符时换成
+单串 ≤ 128K，并丢弃 `__proto__` / `constructor` / `prototype` 键；超过 256K **字节**时换成
 `{ truncated, size, preview }`（而不是截断出一段残缺 JSON）。子进程与父进程**各做一次**。
+
+体积上限一律按 **UTF-8 字节**：帧传输按字节限长，而 `JSON.stringify` 不转义中文
+（一个汉字 3 字节）。早先按字符数判断，20 万个汉字的中文结果就能撑爆 1MB 的帧，
+被父进程判成协议异常并强杀 —— 正常返回大量中文也会踩到。
 
 ## 权限
 
@@ -130,9 +150,28 @@ console.log('sorted', xs);
 return xs.join(',');
 ```
 
-- 不能使用 `export`（会与包装冲突），单段代码受 `limits.maxCodeBytes` 限制。
+- 不能使用 `export`，单段代码受 `limits.maxCodeBytes` **字节**（UTF-8）限制；
+  zod schema 同样按字节校验，不会出现「校验放行、沙箱再拒」。
 - 返回值必须是 **JSON 可序列化**的：`BigInt`、循环引用会返回 `UnserializableResult` 错误
   （在沙箱内就被拦下，不会带崩进程）。
+
+### 代码是**编译**的，不是拼进源码的
+
+harness 用 `JSON.stringify(code)` 把代码变成字符串字面量，再交给 `AsyncFunction` 编译：
+
+```js
+const __code = "用户代码（已转义）";
+const fn = new (Object.getPrototypeOf(async function () {}).constructor)(__code);
+const value = await fn();
+```
+
+早先是 `await (async () => {` + code + `})()` 直接拼接，写一句
+`})(); throw new Error("assertion failed"); (async () => {` 就能提前闭合内层函数、
+把代码挪到外层 `try`，甚至摸到 harness 里的 `__emit` / `__encode`。
+
+副作用：`AsyncFunction` 的函数体是**宽松模式**且在全局作用域编译，
+所以用户代码看不到 harness 的任何绑定（这正是我们要的），但 `this` 从 `undefined`
+变成了 `globalThis`，`"use strict"` 也不再默认生效。顶层 `await` 仍然可用。
 
 ## 配置
 

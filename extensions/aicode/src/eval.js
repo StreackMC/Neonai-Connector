@@ -2,7 +2,7 @@ import vm from 'node:vm';
 import fs from 'node:fs';
 import { Worker } from 'node:worker_threads';
 
-import { IPC } from './ipc.js';
+import { IPC, RSS_KILL_MARKER } from './ipc.js';
 import { aicodeFraming } from './framing.js';
 import { aicodeSanitize } from './sanitize.js';
 
@@ -83,10 +83,20 @@ if (MAX_RSS_BYTES > 0) {
   try {
     const watchdog = new Worker(`
       const limit = ${Math.round(MAX_RSS_BYTES)};
+      const marker = ${JSON.stringify(RSS_KILL_MARKER)};
       const timer = setInterval(() => {
         if (process.memoryUsage().rss <= limit) return;
         clearInterval(timer);
-        process.kill(process.pid, 'SIGKILL');
+        // 先留一行标记再自杀：父进程只能看到 signal=SIGKILL，靠这行区分
+        // 「我们的看门狗」和「外部 kill / 系统 OOM killer」。
+        // 优先同步写 fd 2（管道不会丢），拿不到写权限时退回流式写 + 等一拍。
+        let synced = false;
+        try { require('node:fs').writeSync(2, marker + "\\n"); synced = true; } catch (error) { /* 权限模型可能拦掉写 */ }
+        if (!synced) {
+          try { process.stderr.write(marker + "\\n"); } catch (error) { /* 忽略 */ }
+        }
+        // 已经超限，不宜久等：同步写成功就立刻杀，否则给管道一拍时间
+        setTimeout(() => process.kill(process.pid, 'SIGKILL'), synced ? 0 : 200);
       }, 250);
     `, { eval: true });
     watchdog.unref();
@@ -172,32 +182,57 @@ function formatLogArg(value) {
 
 /**
  * 判断这次失败是否意味着「运行时可能已被污染」，需要回收整个子进程。
- * 语法错误、类型错误之类的普通失败不在此列。
+ *
+ * **只看耗时，不看错误名与消息**。早先是拿 `/out of memory|memory limit|interrupted|aborted|
+ * assertion failed/i` 去匹配 `error.message`，而那段文本完全由 guest 决定：
+ * `throw new Error("assertion failed")` 就能把自己伪装成资源超限，
+ * 白嫖一次进程回收（一个普通错误被报成系统故障，还能免费让沙箱冷启动一次）。
+ *
+ * 唯一真正需要回收的用户级情形是**软超时**：QuickJS 的 interrupt 打断 wasm 之后，
+ * 这个 runtime 不该再被信任。而「跑了接近 executionTimeoutMs 才失败」是 guest 伪造不了的
+ * （它可以 sleep 到那个时长再抛错，但那样它已经付掉了同样的 CPU 成本，没有放大）。
+ *
  * @param {{ ok: boolean, error?: { name?: string, message?: string } }} result
+ * @param {number} durationMs 本次任务耗时
  * @returns {string|null} poison 原因；null 表示可以继续复用本进程
  */
-function poisonReasonOf(result) {
+function poisonReasonOf(result, durationMs) {
   if (result?.ok) return null;
-  const name = String(result?.error?.name ?? '');
-  const message = String(result?.error?.message ?? '');
-  if (name === 'ExecutionTimeout') return `执行超时（${EXECUTION_TIMEOUT_MS}ms）`;
-  if (/out of memory|memory limit|interrupted|aborted|assertion failed/i.test(message)) {
-    return `${name || 'Error'}: ${message.slice(0, 160)}`;
-  }
+  // 留 10% 余量：库里的计时器与这里的 performance.now() 不保证同一时刻读数
+  if (durationMs >= EXECUTION_TIMEOUT_MS * 0.9) return `执行超时（${EXECUTION_TIMEOUT_MS}ms）`;
   return null;
 }
 
 /**
  * 生成交给 QuickJS 的模块源码。
  *
- * 用户代码插在内部 async IIFE 里（因此可以直接 `return`、可以用顶层 await），
- * 外层负责把返回值编码成**一个字符串**，永远不把对象交回宿主。
+ * 两条硬约束：
+ *
+ * 1. **绝不把用户源码拼进 harness**。早先是 `await (async () => {` + code + `})()`，
+ *    用户写 `})(); throw new Error("assertion failed"); (async () => {` 就能提前闭合内层函数，
+ *    把 `throw` 落到外层 try 里，甚至拿到 harness 内的 `__emit`/`__encode`。
+ *    现在用户代码以 `JSON.stringify` 后的**字符串字面量**注入，再用 `AsyncFunction` 编译执行：
+ *    它是数据而不是源码，闭合语法也无从谈起。
+ *
+ * 2. **从 guest 回宿主的值只能是字符串**。返回值和 `console.*` 的参数都在 guest 内先转成字符串；
+ *    宿主侧的回调只会收到原始值，`handleToNative` 的非原始值路径（会漏句柄 → `JS_FreeRuntime` 断言 abort）
+ *    因此完全不会被走到。
+ *
+ * 代价：`AsyncFunction` 的函数体是**宽松模式**且在全局作用域编译，
+ * 因此用户代码看不到 harness 里的任何绑定（这正是我们要的），
+ * 而 `this` 从 `undefined` 变成了 `globalThis`。顶层 `await` 仍然可用。
  *
  * @param {string} code 用户代码
  * @returns {string}
  */
 function buildHarnessSource(code) {
   const limit = aicodeSanitize.MAX_RESULT_CHARS;
+  // JSON 字符串字面量默认不转义 U+2028/U+2029；它们在旧引擎的字符串字面量里是非法换行，
+  // 顺手转掉，免得「源码里带一个行分隔符」变成语法错误。
+  const literal = JSON.stringify(code)
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+
   return [
     'export default (async () => {',
     `  const __limit = ${limit};`,
@@ -214,10 +249,49 @@ function buildHarnessSource(code) {
     '    }',
     '    return __emit(status, json);',
     '  };',
+    // ---- console 加固 ----
+    '  const __native = globalThis.console || {};',
+    '  const __fmt = (v) => {',
+    '    try {',
+    '      if (typeof v === "string") return v;',
+    '      if (v instanceof Error) return String(v.name) + ": " + String(v.message);',
+    '      if (typeof v === "function") return "[Function" + (v.name ? " " + String(v.name) : "") + "]";',
+    '      if (typeof v === "symbol") return String(v);',
+    '      if (typeof v === "bigint") return String(v) + "n";',
+    '      const json = JSON.stringify(v);',
+    '      return json === undefined ? String(v) : json;',
+    '    } catch (error) { return "[Unserializable]"; }',
+    '  };',
+    '  const __bind = (fn) => (...a) => {',
+    '    try {',
+    '      if (typeof fn !== "function") return;',
+    '      fn.call(__native, a.map(__fmt).join(" "));',
+    '    } catch (error) { /* 日志失败不能影响用户代码 */ }',
+    '  };',
+    '  const __patched = {};',
+    // 把**所有**宿主注入的方法都包一层，不只是那五个：漏掉谁，谁就是一条
+    // 「非原始值穿过 handleToNative」的旁路（例如 console.table 也要吃数组）
     '  try {',
-    '    const __value = await (async () => {',
-    code,
-    '    })();',
+    '    for (const k of Object.keys(__native)) {',
+    '      const v = __native[k];',
+    '      __patched[k] = typeof v === "function" ? __bind(v) : v;',
+    '    }',
+    '  } catch (error) { /* 忽略 */ }',
+    '  for (const k of ["log", "info", "warn", "error", "debug"]) {',
+    '    if (typeof __patched[k] !== "function") __patched[k] = __bind(__native[k]);',
+    '  }',
+    '  try { globalThis.console = __patched; } catch (error) { /* 只读实现：退回库自带的 console */ }',
+    // ---- 用户代码：编译而非拼接 ----
+    `  const __code = ${literal};`,
+    '  let __fn;',
+    '  try {',
+    '    const __AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;',
+    '    __fn = new __AsyncFunction(__code);',
+    '  } catch (error) {',
+    '    return __encode("err", { name: "SyntaxError", message: String((error && error.message) || error) });',
+    '  }',
+    '  try {',
+    '    const __value = await __fn();',
     '    return __encode("ok", __value);',
     '  } catch (error) {',
     '    return __encode("err", {',
@@ -379,7 +453,7 @@ async function handleTask(message) {
     ? (/aborted|assertion failed/i.test(fatalText)
       ? '运行时因资源限制中止（quickjs 断言失败）'
       : `沙箱运行时异常中止：${fatalText.slice(0, 120)}`)
-    : poisonReasonOf(result);
+    : poisonReasonOf(result, durationMs);
   if (poison) {
     sendAndExit({ type: IPC.POISON, id, reason: poison, durationMs }, 70);
     return;
