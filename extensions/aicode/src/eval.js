@@ -1,7 +1,10 @@
 import vm from 'node:vm';
+import fs from 'node:fs';
 import { Worker } from 'node:worker_threads';
 
 import { IPC } from './ipc.js';
+import { aicodeFraming } from './framing.js';
+import { aicodeSanitize } from './sanitize.js';
 
 /**
  * 沙箱子进程。
@@ -12,14 +15,27 @@ import { IPC } from './ipc.js';
  *     （它内部 `module.newContext()`，即全新的 QuickJS 运行时），任务结束即 dispose。
  *     因此上一段代码的全局变量、原型污染、未释放的句柄都不会进入下一段代码。
  *   - QuickJS 侧关闭 fs/fetch，并设置执行超时、内存上限、栈上限。
- *   - 一旦发现资源超限（OOM/超时/中断）或 RSS 超限，先通知父进程 `poison`，再自杀：
+ *   - 一旦发现资源超限（OOM/超时/中断）、RSS 超限或协议异常，先通知父进程 `poison`，再自杀：
  *     宁可换一个新进程，也不让可能已被污染的作用域继续服务下一段代码。
  *   - 父进程必须持续喂食；超过 feedTimeoutMs 没喂食就自杀（父进程消失时不留孤儿）。
- *   - 连续 idleMs 没有任务就自行退出，由父进程按需再拉起。
+ *   - 连续 idleMs 没有任务就自行退出（这是**上限**；正常情况下父进程会按待机阶梯更早回收）。
  */
 
-if (!process.channel) {
-  console.error('[FATAL] 无法与 Neonai Connector 内核建立通信通道');
+/**
+ * 与父进程的通道：**不是** Node 的 IPC 通道，而是父进程 spawn 时开的两根管道。
+ *
+ * 子进程读 fd 3、写 fd 4，帧格式见 `framing.js`。之所以不用 `process.send`：
+ * 那条通道的解析在 Node 内部，子进程写一条非法 JSON 会让宿主的
+ * `channel.onread` 抛未捕获异常，直接把内核打死（详见 framing.js 的说明）。
+ */
+const READ_FD = 3;
+const WRITE_FD = 4;
+
+try {
+  fs.fstatSync(READ_FD);
+  fs.fstatSync(WRITE_FD);
+} catch {
+  console.error('[FATAL] 缺少与 Neonai Connector 内核通信的管道（fd 3/4）');
   process.exit(1);
 }
 // 内核会把 NEONAIC 写进自己的环境；父进程 spawn 时会剔除，这里只防「被内核直接 import」。
@@ -41,13 +57,23 @@ const POOL = CONFIG.pool ?? {};
 const LIMITS = CONFIG.limits ?? {};
 
 const FEED_TIMEOUT_MS = Number(POOL.feedTimeoutMs) || 60000;
-const IDLE_MS = Number(POOL.idleMs) || 300000;
+/** 自身待机上限：父进程按阶梯会更早回收，这里只是「父进程不在/阶梯失效」时的兜底 */
+const IDLE_MAX_MS = Number(POOL.idleMaxMs) || Number(POOL.idleMs) || 300000;
 const EXECUTION_TIMEOUT_MS = Number(LIMITS.executionTimeoutMs) || 10000;
 const MEMORY_LIMIT_BYTES = Number(LIMITS.memoryLimitBytes) || 64 * 1024 * 1024;
 const MAX_STACK_SIZE_BYTES = Number(LIMITS.maxStackSizeBytes) || 256 * 1024;
 const MAX_RSS_BYTES = Number(LIMITS.maxRssBytes) || 256 * 1024 * 1024;
-/** 单次结果的上限：避免超大字符串/对象把 IPC 与父进程内存打满 */
-const MAX_RESULT_CHARS = 512 * 1024;
+
+/**
+ * 结果帧前缀。guest 只能回一个**字符串**，所以我们在 guest 内部就把值 `JSON.stringify` 掉，
+ * 由这个前缀 + 状态行告诉宿主该怎么解释它。
+ *
+ * 为什么不让 guest 直接把对象交回来：库的 `handleToNative` 会用 guest 提供的键名
+ * 反向构造宿主对象，并且实测在序列化任何非原始值时都会漏句柄，
+ * 导致 runtime 释放时 `JS_FreeRuntime` 断言 abort 掉整个进程（见 sanitize.js 的说明）。
+ * 只回字符串等于把这条路径彻底关掉。
+ */
+const FRAME_PREFIX = 'aicode:';
 
 // RSS 监控线程：主线程被 wasm 阻塞时依然能跑。
 // 大数组等分配可能绕过 QuickJS 的记账，所以必须有进程级兜底；超限直接 SIGKILL，
@@ -85,17 +111,22 @@ let lastTaskAt = Date.now();
 let busy = false;
 
 /**
- * 发送一条 IPC 消息；失败时静默（父进程可能已经死了）。
+ * 发送一帧；失败时静默（父进程可能已经死了）。
+ *
+ * 用同步写：消息都很小（结果帧最多 512K），管道对面父进程一直在读；
+ * 部分写要自己循环，`fs.writeSync` 不保证一次写完。
+ *
  * @param {object} message
  * @param {(error?: Error|null) => void} [callback]
  */
 function send(message, callback) {
-  if (!process.connected) {
-    callback?.(new Error('IPC channel closed'));
-    return;
-  }
   try {
-    process.send(message, (error) => callback?.(error ?? null));
+    const frame = aicodeFraming.encodeFrame(message);
+    let offset = 0;
+    while (offset < frame.length) {
+      offset += fs.writeSync(WRITE_FD, frame, offset, frame.length - offset);
+    }
+    callback?.(null);
   } catch (error) {
     callback?.(error);
   }
@@ -157,6 +188,107 @@ function poisonReasonOf(result) {
 }
 
 /**
+ * 生成交给 QuickJS 的模块源码。
+ *
+ * 用户代码插在内部 async IIFE 里（因此可以直接 `return`、可以用顶层 await），
+ * 外层负责把返回值编码成**一个字符串**，永远不把对象交回宿主。
+ *
+ * @param {string} code 用户代码
+ * @returns {string}
+ */
+function buildHarnessSource(code) {
+  const limit = aicodeSanitize.MAX_RESULT_CHARS;
+  return [
+    'export default (async () => {',
+    `  const __limit = ${limit};`,
+    '  const __emit = (status, text) => "aicode:" + status + "\\n" + text;',
+    '  const __encode = (status, value) => {',
+    '    let json;',
+    '    try { json = JSON.stringify(value); }',
+    '    catch (error) {',
+    '      return __emit("uns", JSON.stringify({ message: String((error && error.message) || error) }));',
+    '    }',
+    '    if (json === undefined) return __emit("void", "");',
+    '    if (json.length > __limit) {',
+    '      return __emit("big", JSON.stringify({ truncated: true, size: json.length, preview: json.slice(0, __limit) }));',
+    '    }',
+    '    return __emit(status, json);',
+    '  };',
+    '  try {',
+    '    const __value = await (async () => {',
+    code,
+    '    })();',
+    '    return __encode("ok", __value);',
+    '  } catch (error) {',
+    '    return __encode("err", {',
+    '      name: String((error && error.name) || "Error"),',
+    '      message: String((error && error.message) || error),',
+    '      stack: typeof (error && error.stack) === "string" ? error.stack.slice(0, 2000) : undefined,',
+    '    });',
+    '  }',
+    '})();',
+  ].join('\n');
+}
+
+/**
+ * 解析 guest 回传的结果帧。
+ *
+ * 帧是 `aicode:<status>\n<payload>`：状态行固定、payload 是 `JSON.stringify` 的产物，
+ * 所以用户代码无法伪造状态（它的返回值本身会被再 stringify 一次，转义掉换行）。
+ * 任何不符合格式的东西都视为协议异常（`throw`），由调用方回收子进程。
+ *
+ * @param {unknown} raw
+ * @returns {{ ok: boolean, data?: unknown, error?: { name: string, message: string } }}
+ */
+function decodeResultFrame(raw) {
+  if (typeof raw !== 'string' || !raw.startsWith(FRAME_PREFIX)) {
+    throw new Error(`沙箱返回了非预期格式的结果（${typeof raw}）`);
+  }
+  const rest = raw.slice(FRAME_PREFIX.length);
+  const newline = rest.indexOf('\n');
+  const status = newline < 0 ? rest : rest.slice(0, newline);
+  const payload = newline < 0 ? '' : rest.slice(newline + 1);
+  const parsePayload = (name) => {
+    try {
+      return JSON.parse(payload);
+    } catch (error) {
+      throw new Error(`沙箱结果帧解析失败（${name}）：${error?.message ?? error}`);
+    }
+  };
+
+  switch (status) {
+    case 'void':
+      return { ok: true, data: null };
+    case 'ok':
+      return { ok: true, data: aicodeSanitize.sanitizeResult(parsePayload('ok')) };
+    case 'big':
+      return { ok: true, data: aicodeSanitize.sanitizeResult(parsePayload('big')) };
+    case 'uns': {
+      const detail = parsePayload('uns');
+      return {
+        ok: false,
+        error: {
+          name: 'UnserializableResult',
+          message: `返回值无法序列化为 JSON：${String(detail?.message ?? '未知原因')}`,
+        },
+      };
+    }
+    case 'err': {
+      const detail = parsePayload('err');
+      return {
+        ok: false,
+        error: {
+          name: String(detail?.name ?? 'Error').slice(0, 64),
+          message: String(detail?.message ?? '').slice(0, 2000),
+        },
+      };
+    }
+    default:
+      throw new Error(`沙箱结果帧状态未知：${status.slice(0, 32)}`);
+  }
+}
+
+/**
  * 执行一段用户代码。
  *
  * 用户代码只会在 QuickJS 里跑；这里的 `vm` 上下文只承载「调用 QuickJS 的胶水」，
@@ -181,17 +313,15 @@ async function runTask(code, logs) {
     executionTimeout: EXECUTION_TIMEOUT_MS,
     memoryLimit: MEMORY_LIMIT_BYTES,
     maxStackSize: MAX_STACK_SIZE_BYTES,
+    // 不给 guest 任何宿主环境变量：库默认会填 `{ NODE_DEBUG: 'true' }`，显式清空更稳
+    env: {},
     // 不把沙箱 console 转发到宿主：既防日志伪造，也把输出作为结果的一部分带回
     console: { log: pushLog, info: pushLog, warn: pushLog, error: pushLog, debug: pushLog },
   };
 
-  // 用 async IIFE 包一层：用户代码可以直接 `return`，也可以使用顶层 await。
-  // 注意：因此用户代码里不能再写 `export`（会与包装冲突）。
-  const wrapped = `export default (async () => {\n${code}\n})();\n`;
-
   const context = vm.createContext({
     __runSandboxed: runSandboxed,
-    __code: wrapped,
+    __code: buildHarnessSource(code),
     __options: options,
   }, {
     name: 'aicode-task',
@@ -200,7 +330,20 @@ async function runTask(code, logs) {
   });
 
   const harness = '(async () => __runSandboxed(async ({ evalCode }) => evalCode(__code, "/src/task.js"), __options))()';
-  return await vm.runInContext(harness, context, { filename: 'aicode-harness.js' });
+  // `runSandboxed` 回的是它自己的信封 `{ ok, data | error }`，其中 `data` 才是我们那帧字符串。
+  // 信封由库在宿主侧构造，不经过 `handleToNative`，所以这里拿到它是安全的。
+  const envelope = await vm.runInContext(harness, context, { filename: 'aicode-harness.js' });
+  if (!envelope || envelope.ok !== true) {
+    const error = envelope?.error;
+    return {
+      ok: false,
+      error: {
+        name: String(error?.name ?? 'Error').slice(0, 64),
+        message: String(error?.message ?? error ?? '沙箱执行失败').slice(0, 2000),
+      },
+    };
+  }
+  return decodeResultFrame(envelope.data);
 }
 
 /**
@@ -216,7 +359,7 @@ async function handleTask(message) {
   const logs = [];
 
   let result;
-  /** 运行时级异常（wasm abort / OOM 抛错等）：整条进程不可信，必须回收 */
+  /** 运行时级异常（wasm abort / 帧格式不符等）：整条进程不可信，必须回收 */
   let fatal = false;
   try {
     result = await runTask(String(message?.code ?? ''), logs);
@@ -230,7 +373,7 @@ async function handleTask(message) {
 
   const durationMs = Math.round(performance.now() - started);
 
-  // 资源超限：不返回结果，直接通知父进程并自杀（父进程会 reject 本次任务）
+  // 资源超限 / 协议异常：不返回结果，直接通知父进程并自杀（父进程会 reject 本次任务）
   const fatalText = String(result.error?.message ?? '未知原因');
   const poison = fatal
     ? (/aborted|assertion failed/i.test(fatalText)
@@ -253,19 +396,8 @@ async function handleTask(message) {
     return;
   }
 
-  // 结果体积封顶：超出就截断成字符串（工具最终也是序列化成 JSON 给模型）
-  let data = result?.data;
-  if (data !== undefined) {
-    let json;
-    try {
-      json = JSON.stringify(data);
-    } catch {
-      json = String(data);
-    }
-    if (typeof json === 'string' && json.length > MAX_RESULT_CHARS) {
-      data = `${json.slice(0, MAX_RESULT_CHARS)}…[truncated]`;
-    }
-  }
+  // 体积封顶兜底（帧在 guest 内已封过一次，这里防的是「帧被绕过」的情形）
+  const data = result?.ok ? aicodeSanitize.shrinkResult(result.data) : undefined;
   const error = result?.error
     ? { name: result.error.name, message: String(result.error.message ?? '').slice(0, 2000) }
     : null;
@@ -284,8 +416,11 @@ async function handleTask(message) {
   });
 }
 
-process.on('message', (message) => {
-  if (!message || typeof message !== 'object') return;
+/**
+ * 处理父进程下发的一条消息（解码器已校验过它是个对象）。
+ * @param {object} message
+ */
+function onMessage(message) {
   switch (message.type) {
     case IPC.FEED:
       lastFeedAt = Date.now();
@@ -311,10 +446,19 @@ process.on('message', (message) => {
     default:
       return;
   }
+}
+
+const channel = aicodeFraming.createFrameDecoder(onMessage, (reason) => {
+  // 父进程不可能给我们发坏帧；收到就说明通道被第三方动了，留下只会更糟
+  console.error(`[aicode] 收到非法帧：${reason}`);
+  process.exit(1);
 });
 
-// 父进程断开 = 再也不会有人喂食；立刻退出，避免孤儿进程
-process.on('disconnect', () => process.exit(1));
+const reader = fs.createReadStream(null, { fd: READ_FD, autoClose: false });
+reader.on('data', (chunk) => channel.push(chunk));
+reader.on('error', () => process.exit(1));
+// 父进程关闭写端 = 再也不会有人喂食；立刻退出，避免孤儿进程
+reader.on('end', () => process.exit(1));
 
 // 断粮看门狗
 const feedTimer = setInterval(() => {
@@ -327,10 +471,10 @@ const feedTimer = setInterval(() => {
 // 空闲看门狗：只统计「没有任务」，喂食不重置它
 const idleTimer = setInterval(() => {
   if (busy) return;
-  if (Date.now() - lastTaskAt <= IDLE_MS) return;
+  if (Date.now() - lastTaskAt <= IDLE_MAX_MS) return;
   clearInterval(feedTimer);
   clearInterval(idleTimer);
   sendAndExit({ type: IPC.BYE, reason: 'idle timeout' }, 0);
-}, Math.max(1000, Math.min(5000, Math.floor(IDLE_MS / 4))));
+}, Math.max(1000, Math.min(5000, Math.floor(IDLE_MAX_MS / 4))));
 
 send({ type: IPC.READY });

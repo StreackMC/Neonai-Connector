@@ -73,8 +73,8 @@ export async function onEnable(_extCtx) {
   }
   getLogger().tool.info(
     `[aicode] 已启用：最多 ${config.pool.maxChildren} 个子进程，`
-    + `空闲 ${config.pool.idleMinutes} 分钟回收，单任务 ${config.limits.executionTimeoutMs}ms/`
-    + `${config.limits.memoryLimitMB}MB`
+    + `待机 ${config.pool.idleMaxMinutes} 分钟封顶（递减系数 ${config.pool.idleDecay}），`
+    + `单任务 ${config.limits.executionTimeoutMs}ms/${config.limits.memoryLimitMB}MB`
     + (config.permission ? `；调用需权限 ${config.permission}` : '；未启用权限校验'),
   );
 }

@@ -9,8 +9,9 @@ const CONFIG_PATH = 'extensions/aicode/config.json';
  */
 const DEFAULTS = Object.freeze({
   pool: Object.freeze({
-    maxChildren: 2,
-    idleMinutes: 5,
+    maxChildren: 10,
+    idleMaxMinutes: 5,
+    idleDecay: 0.5,
     feedIntervalMs: 20000,
     feedTimeoutMs: 60000,
     spawnTimeoutMs: 10000,
@@ -35,9 +36,9 @@ const DEFAULTS = Object.freeze({
  * 读取并归一化拓展配置。
  *
  * @returns {{
- *   pool: { maxChildren: number, idleMinutes: number, idleMs: number, feedIntervalMs: number,
- *           feedTimeoutMs: number, spawnTimeoutMs: number, nodePermissionModel: boolean,
- *           maxOldSpaceMB: number },
+ *   pool: { maxChildren: number, idleMaxMinutes: number, idleMaxMs: number, idleDecay: number,
+ *           feedIntervalMs: number, feedTimeoutMs: number, spawnTimeoutMs: number,
+ *           nodePermissionModel: boolean, maxOldSpaceMB: number },
  *   limits: { taskTimeoutMs: number, executionTimeoutMs: number, memoryLimitMB: number,
  *             memoryLimitBytes: number, maxStackSizeKB: number, maxStackSizeBytes: number,
  *             maxRssMB: number, maxRssBytes: number, maxCodeBytes: number },
@@ -69,16 +70,35 @@ function load() {
     return value;
   };
 
+  /**
+   * 读最大待机时长；兼容旧键 `pool.idleMinutes`（当时它同时充当「唯一一个待机时长」）。
+   * @returns {number}
+   */
+  const idleMaxMinutesOf = () => {
+    const hasNew = conf.isExist('pool.idleMaxMinutes');
+    const hasOld = conf.isExist('pool.idleMinutes');
+    if (hasNew && hasOld) {
+      issues.push('pool.idleMinutes 已弃用（与 pool.idleMaxMinutes 同时存在时以新键为准）');
+    } else if (!hasNew && hasOld) {
+      issues.push('pool.idleMinutes 已改名为 pool.idleMaxMinutes，本次按旧键读取');
+    }
+    const key = hasNew || !hasOld ? 'pool.idleMaxMinutes' : 'pool.idleMinutes';
+    return positive(key, DEFAULTS.pool.idleMaxMinutes, { min: 0.01, max: 1440 });
+  };
+
   const pool = {
     maxChildren: positive('pool.maxChildren', DEFAULTS.pool.maxChildren, { min: 1, max: 32, integer: true }),
-    idleMinutes: positive('pool.idleMinutes', DEFAULTS.pool.idleMinutes, { min: 0.01, max: 1440 }),
+    // 最大待机时长：待机阶梯里**最后**一个进程的存活时长（也是子进程自己的兜底上限）
+    idleMaxMinutes: idleMaxMinutesOf(),
+    // 递减系数：0 = 所有待机进程同时到期（旧行为），1 = 最快削峰（最早的进程只留 idleMax/k）
+    idleDecay: positive('pool.idleDecay', DEFAULTS.pool.idleDecay, { min: 0, max: 1 }),
     feedIntervalMs: positive('pool.feedIntervalMs', DEFAULTS.pool.feedIntervalMs, { min: 1000, max: 300000, integer: true }),
     feedTimeoutMs: positive('pool.feedTimeoutMs', DEFAULTS.pool.feedTimeoutMs, { min: 2000, max: 600000, integer: true }),
     spawnTimeoutMs: positive('pool.spawnTimeoutMs', DEFAULTS.pool.spawnTimeoutMs, { min: 1000, max: 120000, integer: true }),
     nodePermissionModel: conf.getBoolean('pool.nodePermissionModel', DEFAULTS.pool.nodePermissionModel),
     maxOldSpaceMB: positive('pool.maxOldSpaceMB', DEFAULTS.pool.maxOldSpaceMB, { min: 16, max: 4096, integer: true }),
   };
-  pool.idleMs = Math.round(pool.idleMinutes * 60000);
+  pool.idleMaxMs = Math.round(pool.idleMaxMinutes * 60000);
 
   const limits = {
     taskTimeoutMs: positive('limits.taskTimeoutMs', DEFAULTS.limits.taskTimeoutMs, { min: 500, max: 300000, integer: true }),

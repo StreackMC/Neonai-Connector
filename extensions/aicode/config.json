@@ -1,9 +1,13 @@
 {
-  // 子进程池。超出 maxChildren 的并发任务直接返回“系统忙”，不排队。
+  // 子进程池（削峰缓冲）。突发请求最多并发 maxChildren 个进程；没有空位时直接返回“系统忙”，不排队。
   "pool": {
-    "maxChildren": 2,
-    // 一个子进程连续多少分钟没有任务就自行退出（父进程下次需要时再拉起）。
-    "idleMinutes": 5,
+    "maxChildren": 10,
+    // 最大待机时长：待机阶梯里**最后**一个进程的存活时长。
+    "idleMaxMinutes": 5,
+    // 递减系数（0~1）。待机预算按等差数列排开：step = idleMaxMinutes * idleDecay / 待机进程数，
+    // 于是待机进程越多，最久没用的那个越早被回收；最后一个是满额 idleMaxMinutes。
+    // 0 = 所有待机进程同时到期；1 = 削峰最凶（最早的只留 idleMax/待机进程数）。
+    "idleDecay": 0.5,
     // 父进程喂食间隔；子进程超过 feedTimeoutMs 没收到喂食就自杀（防止父进程消失后留孤儿）。
     "feedIntervalMs": 20000,
     "feedTimeoutMs": 60000,
