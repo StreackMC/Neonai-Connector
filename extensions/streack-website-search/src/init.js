@@ -93,7 +93,7 @@ export function onEnable(ctx) {
       keyword: z.string().describe('搜索关键词'),
     }),
     outputSchema: z.string().describe('搜索结果'),
-    execute: async ({ keyword }) => runSearch(text(keyword, Number.MAX_SAFE_INTEGER)),
+    execute: async ({ keyword }, ctx) => runSearch(text(keyword, Number.MAX_SAFE_INTEGER)),
   });
   if (!registered) {
     getLogger().ext.warn(`[streack-website-search] AI 工具“streack:search”注册失败，已存在同名工具`);

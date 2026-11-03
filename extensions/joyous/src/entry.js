@@ -200,7 +200,7 @@ neonaicAI.registerAITool('joyous', 'worldMeta', {
   inputSchema: z.object({
     address: z.string().optional().describe('数据来源，需要是 Joyous StatusAPI 格式；缺省时使用配置中的默认地址。'),
   }),
-  execute: async ({ address }) => {
+  execute: async ({ address }, ctx) => {
     const rt = runtime;
     if (!rt) return disabledNotice();
     return rt.statusReader.describeWorld(address);
@@ -213,7 +213,7 @@ neonaicAI.registerAITool('joyous', 'serverStatus', {
   inputSchema: z.object({
     address: z.string().optional().describe('数据来源地址，需符合 Joyous StatusAPI 格式；缺省时使用配置中的默认地址。'),
   }),
-  execute: async ({ address }) => {
+  execute: async ({ address }, ctx) => {
     const rt = runtime;
     if (!rt) return disabledNotice();
     return rt.statusReader.describeServer(address);

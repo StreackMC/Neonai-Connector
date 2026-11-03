@@ -27,7 +27,7 @@ const ai = () => {
       address: z.string().describe("目标 URI，协议头缺失时视作http。"),
       timeout: z.int().describe("可接受的超时时间，不得超过5000ms，默认5000ms。"),
     }),
-    execute: async ({ address, timeout }) => {
+    execute: async ({ address, timeout }, ctx) => {
       try {
         // 请求
         const result = await neonaicNetwork.fetch(
@@ -59,7 +59,7 @@ const ai = () => {
       country: z.string().describe("目标时区的ISO国家代码，用于文本格式化；传空值为默认，可以假定与用户时区相同"),
       tz: z.string().describe("目标时区的偏移量，如\"+8\"和\"-4\"；传空值为默认，可以假定与用户时区相同；无偏移需传\"UTC\""),
     }),
-    execute: async ({ country, tz }) => {
+    execute: async ({ country, tz }, ctx) => {
       const d = new Date();
       return d.toLocaleString([parseString(country), "zh-CN"], { timeZone: (tz || "+8") });
     },
@@ -70,7 +70,7 @@ const ai = () => {
     inputSchema: z.object({
       text: z.string().describe("待判断文本"),
     }),
-    execute: async ({ text }) => parseString(text).length,
+    execute: async ({ text }, ctx) => parseString(text).length,
   });
 
   registerAITool(NS, 'calc', {
@@ -89,7 +89,7 @@ const ai = () => {
         + '不传则用浮点（约 15 位有效数字）。precision 过小、无法表示极小的常量时会报错并提示所需位数'
       ),
     }).describe('要计算的算式'),
-    execute: ({ expression, precision }) => {
+    execute: ({ expression, precision }, ctx) => {
       try {
         const result = neonaicMath.calc(expression, {
           mod: true,
@@ -124,7 +124,7 @@ const ai = () => {
       singular: z.boolean().optional().describe('是否奇异（仅方阵有；奇异矩阵没有逆）'),
       info: z.string().optional().describe('评估失败时的提示信息'),
     }).describe('矩阵评估结果'),
-    execute: ({ data, cols, rows }) => {
+    execute: ({ data, cols, rows }, ctx) => {
       try {
         // 行分隔符容忍换行与分号（表格软件常导出分号作行分隔）
         const text = parseString(data).replace(/[;；]/g, '\n');

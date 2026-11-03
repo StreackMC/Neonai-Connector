@@ -52,7 +52,7 @@ export function registerMathSupportForAI() {
       poker: z.array(z.number().int().min(1).max(Number.MAX_SAFE_INTEGER)).length(4).describe('四张牌的点数，必须是正整数'),
       target: z.number().int().min(1).max(100).optional().default(24).describe('目标点数，默认 24'),
     }).describe('四张牌的点数和目标点数'),
-    execute: ({ poker, target }) => {
+    execute: ({ poker, target }, ctx) => {
       return neonaicMath.solve24(poker, target);
     },
   });
