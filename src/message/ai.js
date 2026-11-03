@@ -59,8 +59,8 @@ function loadSystemPrompt(promptFilename) {
  *
  * `neonaic` 由 {@link buildToolSet} 在**每次调用时**注入（同一轮的所有工具共享同一个实例），
  * 因此全局注册的拓展工具也能拿到本轮的命令上下文，不需要在注册时捕获。
- * @typedef {object} NeonaicTAIToolExecutionOptions
- * @property {NeonaicCommandContext} neonaic 本轮的命令上下文；已清空 `this`，并强制 `internalCall=false`
+ * @typedef {object} NeonaicTAIToolExecutionContext
+ * @property {NeonaicCommandContext} neonaic 本轮的命令上下文
  * @property {string} userInput 本轮发送给模型的用户文本（多模态时只含文本部分）
  * @property {string} toolCallId 本次工具调用的 ID
  * @property {Array<object>} messages 触发本次调用的消息列表（不含 system）
@@ -73,7 +73,7 @@ function loadSystemPrompt(promptFilename) {
  * @property {string} name 工具名
  * @property {string} description 工具描述
  * @property {*} inputSchema 输入 schema（zod schema 或 JSON schema）
- * @property {(input: Object, options: NeonaicTAIToolExecutionOptions) => unknown|Promise<unknown>} execute 执行函数
+ * @property {(input: Object, options: NeonaicTAIToolExecutionContext) => unknown|Promise<unknown>} execute 执行函数
  */
 
 /** 全部工具（按注册顺序，去重） @type {NeonaicTAIToolDef[]} */
@@ -88,7 +88,7 @@ const _toolFqn = new Map();
  * @param {object} definition 工具定义
  * @param {string} [definition.description] 工具描述（会发送给模型）
  * @param {*} definition.inputSchema 输入 schema（zod schema）
- * @param {(input: Object, options: NeonaicTAIToolExecutionOptions) => unknown|Promise<unknown>} definition.execute 执行函数，接收模型生成的输入与本轮上下文
+ * @param {(input: Object, options: NeonaicTAIToolExecutionContext) => unknown|Promise<unknown>} definition.execute 执行函数，接收模型生成的输入与本轮上下文
  * @returns {[string|null, NeonaicTAIToolDef|null]} [fqn, def] 定义成功的工具全名称与定义；如果定义失败则为 null
  */
 function defineAITool(namespace, name, definition) {
@@ -114,8 +114,8 @@ function defineAITool(namespace, name, definition) {
  * @param {string} name 工具名
  * @param {object} definition 工具定义
  * @param {string} [definition.description] 工具描述（会发送给模型）
- * @param {*} definition.inputSchema 输入 schema（zod schema）
- * @param {Function} definition.execute 执行函数，接收模型生成的输入
+ * @param {unknown} definition.inputSchema 输入 schema（zod schema）
+ * @param {(input: Object, options: NeonaicTAIToolExecutionContext) => unknown|Promise<unknown>} definition.execute 执行函数，接收模型生成的输入
  * @returns {boolean} true 注册成功；false 冲突（已存在同名工具）
  * @throws {NeonaicIllegalArgumentError} 无效的 AI 工具参数
  */
