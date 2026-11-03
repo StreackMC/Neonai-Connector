@@ -6,8 +6,10 @@ import { NeonaicUnsupportedOperationError } from "#src/utils/NeonaicNewableError
  */
 export class NeonaicNewable {
   #INSTANCE_ID = getuid(); #TIMESTAMP = new Date();
+  /** 实例标识符 */
   get INSTANCE_ID() { return this.#INSTANCE_ID; };
-  get TIMESTAMP() { return this.#TIMESTAMP; };
+  /** 实例时间戳的拷贝 */
+  get TIMESTAMP() { return new Date(this.#TIMESTAMP.getTime()); };
 
   constructor() {
     if (new.target === NeonaicNewable) throw new NeonaicUnsupportedOperationError("NeonaicNewable is a raw class, which is not allowed to be create directly");

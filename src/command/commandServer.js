@@ -303,10 +303,10 @@ function executeCommandSilent(cmdName, ctx = {}, ...args) {
 
 /** 命令上下文 */
 export class NeonaicCommandContext extends NeonaicNewable {
-  #privateExecutor = false; #internalCall = false; #this = undefined; #executor = []; #timestamp = new Date();
+  #privateExecutor = false; #internalCall = false; #this = undefined; #executor = [];
 
   /** 命令开始执行时的时间，每切换一次上下文自动变更，返回拷贝 @type {Date} */
-  get timestamp() { return new Date(this.#timestamp.getTime()); };
+  get timestamp() { return super.TIMESTAMP; };
 
   /** 命令执行是否处于私密场景（如私聊），非私密场景如群聊中其他成员可见 @type {boolean} */
   get privateExecutor() { return this.#privateExecutor; };
@@ -354,7 +354,7 @@ export class NeonaicCommandContext extends NeonaicNewable {
       internalCall: this.#internalCall,
       this: this.#this,
       executor: this.#executor.slice(0),
-      timestamp: new Date(this.#timestamp),
+      timestamp: this.timestamp,
     };
   }
 }
