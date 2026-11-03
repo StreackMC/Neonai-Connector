@@ -47,7 +47,7 @@ const R      = '\x1b[0m';
 /** 拓展默认根目录：<项目根>/extensions */
 const EXT_ROOT = resolve(neonaicLifeCycleManager.ROOT_PATH, 'extensions');
 /** 拓展启用状态的持久化载体（默认 AUTOSAVE，赋值即写盘） */
-const EXT_SAVE = new NeonaicConfig('#src/extension/config/saves/ext.json');
+const EXT_SAVE = new NeonaicConfig(resolve(neonaicLifeCycleManager.ROOT_PATH, '/config/saves/ext.json'));
 /** 已识别拓展：id → NeonaicExtItem @type {Map<String, NeonaicExtItem>} */
 const EXT_MAP = new Map();
 
