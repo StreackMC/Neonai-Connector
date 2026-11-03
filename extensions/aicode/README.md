@@ -147,7 +147,7 @@ budget(i) = idleMaxMinutes - (待机进程数 - 1 - i) * step      // i = 0 是�
 const fs = await import('node:fs'); // 会被拒绝：File access is disabled
 const xs = [3, 1, 2].sort((a, b) => a - b);
 console.log('sorted', xs);
-return xs.join(',');
+return xs.join(','); 
 ```
 
 - 不能使用 `export`，单段代码受 `limits.maxCodeBytes` **字节**（UTF-8）限制；
