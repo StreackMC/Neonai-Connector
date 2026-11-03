@@ -1,11 +1,12 @@
 import { neonaicCommandInterface } from "#src/command/commandInterface.js";
 import { neonaicCommandServer } from "#src/command/commandServer.js";
+import { neonaicPermissionServer } from "#src/command/permissionServer.js";
 import { neonaicAI } from "#src/message/ai.js";
 import * as frag from "#src/message/messageFragment.js";
 import { parseString } from "#src/utils/chore.js";
 import { neonaicNetwork } from "#src/utils/io.js";
 import { neonaicMath, NeonaicMatrix } from '#src/utils/math.js';
-import { NeonaicNetworkError } from "#src/utils/NeonaicNewableError.js";
+import { NeonaicIllegalStateError, NeonaicNetworkError } from "#src/utils/NeonaicNewableError.js";
 import { NeonaicUriMeta } from "#src/utils/NeonaicUriMeta.js";
 import z from "zod";
 const [registerAITool, registerCommand] = [neonaicAI.registerAITool, neonaicCommandServer.registerCommand];
@@ -29,6 +30,11 @@ const ai = () => {
     }),
     execute: async ({ address, timeout }, ctx) => {
       try {
+        // 封禁
+        if (neonaicPermissionServer.checkPermissionFromContext(ctx.neonaic, 'neonaic.toolcall.webfetch', true) === false) {
+          throw new NeonaicIllegalStateError("与你对话的用户没有权限使用此工具", ctx.neonaic.executor);
+        }
+
         // 请求
         const result = await neonaicNetwork.fetch(
           await NeonaicUriMeta.resolve(address, {}),
