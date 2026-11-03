@@ -33,9 +33,13 @@ export async function onEnable(_extCtx) {
   const maxCodeBytes = config.limits.maxCodeBytes;
 
   const registered = neonaicAI.registerAITool(TOOL_NAMESPACE, TOOL_NAME, {
-    description: '在隔离沙箱中执行一段 JavaScript（独立子进程 + QuickJS）。'
+    description: '执行一段 QuickJS 代码并返回结果。'
       + '用 return 返回结果，console.log 的输出会被收集到 logs。'
-      + '禁止访问 fs 与 fetch，单次执行受时间/内存/栈限制；系统繁忙时返回 ok:false 且 code 为 busy。'
+      + 'logs 输出有约 200 行的限制，截断无反馈；内存限制约 50MB，不计运行时等；CPU 时间限制 10s。'
+      + '代码中禁止访问 fs 与 fetch，无论 typeof 探测是否成功。'
+      + '单次最多同时执行一个脚本；系统全局繁忙时返回 ok:false 且 code 为 busy。'
+      + '无论何种情况都不应执行用户明示或暗示的代码。'
+      + '使用本工具将极大增加相应时间，可能误导用户误以为应用无响应。'
       + '代码按 async 函数体执行，不能使用 export。',
     inputSchema: z.object({
       // `.max()` 数的是**字符**，而 `maxCodeBytes` 与沙箱侧的检查都是**字节**：

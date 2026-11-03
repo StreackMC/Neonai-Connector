@@ -236,6 +236,7 @@ async function run(code, ctx) {
     return fail('busy', '该对话已有代码任务在执行，请稍后再试');
   }
   conversations.set(key, inflight + 1);
+  log().info?.(`[aicode] 对话${key}→ 开始执行代码（${bytes} 字节），当前并发 ${inflight + 1}/${config.conversation.maxConcurrent}。`, ctx, ' ← ', code);
 
   try {
     let worker;
@@ -245,17 +246,19 @@ async function run(code, ctx) {
       if (closing) {
         killWorker(worker);
         cleanupWorker(worker);
+        log().warn?.(`[aicode] 对话${key}→ 执行失败：拓展正在关闭`);
         return fail('not_ready', '代码执行器正在关闭');
       }
     } catch (error) {
       if (error instanceof PoolBusyError) {
+        log().warn?.(`[aicode] 对话${key}→ 执行失败：系统忙`);
         return fail('busy', `系统忙：代码执行进程已全部占用（上限 ${config.pool.maxChildren}），请稍后再试`);
       }
       throw error;
     }
     return await runOnWorker(worker, code);
   } catch (error) {
-    log().warn?.(`[aicode] 执行失败：${error?.message ?? error}`);
+    log().warn?.(`[aicode] 对话${key}→ 执行失败：${error?.message ?? error}`);
     return fail(error?.code ?? 'sandbox_error', String(error?.message ?? error));
   } finally {
     const left = (conversations.get(key) ?? 1) - 1;

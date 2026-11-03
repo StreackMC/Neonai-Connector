@@ -543,6 +543,11 @@ function cmd(type, user, permission, status, lasting) {
       until = Date.now() + ms;
     }
 
+    // this 语法糖
+    if (['$this', '$self', '$me'].includes(user)) {
+      user = ctx.executor.at(0);
+    }
+
     if (isGlobal) {
       if (until) {
         setGlobalTempPermission(permission, bool, until);
