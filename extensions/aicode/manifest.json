@@ -1,0 +1,21 @@
+{
+  "meta": {
+    "version": [
+      1,
+      "0.5.0"
+    ],
+    "id": "aicode"
+  },
+  "particulars": {
+    "name": "AICode",
+    "author": [
+      "kdxiaoyi"
+    ],
+    "description": "Enable AI to execute code in QuickJS and a controlled env.",
+    "url": "https://github.com/StreackMC/Neonai-Connector/tree/main/extensions/aicode",
+    "license": "AGPL-3.0 modified"
+  },
+  "entry": "./src/entry.js",
+  "depends": {},
+  "softdepends": {}
+}

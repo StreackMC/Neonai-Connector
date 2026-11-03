@@ -13,6 +13,7 @@
  */
 
 try {
+  process.env.NEONAIC = 'Neonai!!';
   const entry = await import('./src/system/entry.js');
   await entry.neonaicEntry.bootstrap();
 } catch (err) {

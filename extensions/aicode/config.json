@@ -1,0 +1,37 @@
+{
+  // 子进程池。超出 maxChildren 的并发任务直接返回“系统忙”，不排队。
+  "pool": {
+    "maxChildren": 2,
+    // 一个子进程连续多少分钟没有任务就自行退出（父进程下次需要时再拉起）。
+    "idleMinutes": 5,
+    // 父进程喂食间隔；子进程超过 feedTimeoutMs 没收到喂食就自杀（防止父进程消失后留孤儿）。
+    "feedIntervalMs": 20000,
+    "feedTimeoutMs": 60000,
+    // 拉起子进程并等待 ready 的上限。
+    "spawnTimeoutMs": 10000,
+    // 是否给子进程加 Node 权限模型（--permission/--allow-fs-read）。Node 不支持时可关掉。
+    "nodePermissionModel": true,
+    // 子进程 V8 堆上限（QuickJS 的 wasm 内存由 limits.memoryLimitMB 单独限制）。
+    "maxOldSpaceMB": 128
+  },
+  "limits": {
+    // 父进程硬超时：到点直接 SIGKILL 并回收进程（必须大于下面的软超时）。
+    "taskTimeoutMs": 12000,
+    // QuickJS 软超时：到点中断脚本并返回 ExecutionTimeout。
+    "executionTimeoutMs": 10000,
+    // QuickJS wasm 堆上限（MB，按字节传给库）。大数组可能绕过该记账，另有 maxRssMB 兜底。
+    "memoryLimitMB": 64,
+    // QuickJS 最大栈（字节制；超过 256KB 会触发 quickjs-ng 断言崩溃）。
+    "maxStackSizeKB": 256,
+    // 子进程 RSS 上限；任务结束后超过就 poison（通知父进程后自杀）。
+    "maxRssMB": 256,
+    // 单段代码的字节上限。
+    "maxCodeBytes": 65536
+  },
+  "conversation": {
+    // 同一个对话（ctx.executor[0]）同时只允许一个任务，LLM 偶发重复调用会直接收到 busy。
+    "maxConcurrent": 1
+  },
+  // 调用该工具需要的权限；留空则不校验（不建议）。
+  "permission": "aicode.execute"
+}

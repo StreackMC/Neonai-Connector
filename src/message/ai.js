@@ -131,6 +131,29 @@ function registerAITool(namespace, name, definition) {
   return true;
 }
 
+/**
+ * 注销一个 AI 工具。
+ *
+ * 供拓展在 `onDisable` 里回收自己注册的工具：只 abort 任务而不注销工具，
+ * 会让「已停用」的工具继续可被模型调用（还能重新拉起子进程）。
+ *
+ * @param {string} namespace 命名空间
+ * @param {string} name 工具名
+ * @returns {boolean} true 表示确实移除了一个工具；false 表示未找到
+ */
+function unregisterAITool(namespace, name) {
+  const fqn = `${parseString(namespace).replace(/[^a-zA-Z0-9_]/g, '_')}:${parseString(name).replace(/[^a-zA-Z0-9_]/g, '_')}`;
+  const def = _toolFqn.get(fqn);
+  if (!def) return false;
+  // 同一定义可能挂在多个键下（fqn / 历史别名），按值一并清掉
+  for (const [key, value] of _toolFqn) {
+    if (value === def) _toolFqn.delete(key);
+  }
+  const index = _allTools.indexOf(def);
+  if (index >= 0) _allTools.splice(index, 1);
+  return true;
+}
+
 /** 获取所有已注册的 AI 工具（按注册顺序） */
 function getAITools() { return _allTools; }
 
@@ -1091,6 +1114,7 @@ function aiPardon(ctx, user) {
 export const neonaicAI = {
   defineAITool,
   registerAITool,
+  unregisterAITool,
   getAITools,
   resolveToolList,
   isAIBanned,
