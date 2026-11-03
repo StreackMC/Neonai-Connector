@@ -11,6 +11,27 @@
 4. **每任务重建**：每次任务都新建一个 `vm` 上下文 + 一个新 QuickJS runtime；
    上一段代码的全局变量、原型污染、未释放句柄都不会进入下一段。
 
+### guest 侧的桥接面：删掉，而不是留桩
+
+`@sebastianwessel/quickjs` 在 `allowFs: false` 时**仍然**会往 `globalThis` 上挂一个 `__fs`，
+72 个方法（`open` / `readFileSync` / `writeFileSync` / `symlinkSync` / `chmodSync` …）一个不少，
+只是方法体换成抛 `File access is disabled` 的桩；`fs` / `node:fs` / `fs/promises` 三个模块的源码
+也只是 `__fs.xxx(...)` 的包装，所以**能 import 成功**、只是调不动。
+
+这套「留桩」的风险是：桩实现哪天回归（或者 options 被改成 `allowFs: true`），
+宿主文件系统就整整齐齐地摆在 guest 面前了。所以 harness 在跑用户代码**之前**直接
+`delete globalThis.__fs`：
+
+- 全局上不再有那个句柄对象；`fs` / `node:fs` / `fs/promises` 的函数调用变成
+  `ReferenceError: __fs is not defined`（不是「被拒绝」，而是根本没有东西可调）；
+- 顺带也防住 `allowFs` 被误开——句柄在用户代码执行前就没了；
+- 万一删不掉（属性被改成不可配置），harness **拒绝执行**并返回 `SandboxIntegrityError`，
+  而不是带着一条活的 fs 桥往下跑。
+
+剩下的桥接面：`__parseURL`（纯函数，只把字符串解析成 URL 各部分）和 `fetch`
+（禁用时是抛 `Not supported` 的闭包，没有 adapter）。这两个都不持有能力，
+真正危险的是 `__fs` 这种「句柄对象」，所以只摘它。
+
 ### 明确**不**承诺的两件事
 
 - **QuickJS → 宿主的那一层不是安全边界**。用户代码拿不到任何宿主对象（它只能看见 `evalCode` 传进去的字符串），
@@ -144,7 +165,7 @@ budget(i) = idleMaxMinutes - (待机进程数 - 1 - i) * step      // i = 0 是�
 代码按 async 函数体执行，**用 `return` 返回结果**；`console.log` 会被收集到 `logs`：
 
 ```js
-const fs = await import('node:fs'); // 会被拒绝：File access is disabled
+const fs = await import('node:fs'); // 模块能加载，但调用会 ReferenceError: __fs is not defined
 const xs = [3, 1, 2].sort((a, b) => a - b);
 console.log('sorted', xs);
 return xs.join(','); 

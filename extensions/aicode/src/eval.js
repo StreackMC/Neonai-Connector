@@ -249,6 +249,25 @@ function buildHarnessSource(code) {
     '    }',
     '    return __emit(status, json);',
     '  };',
+    // ---- 摘掉宿主注入的文件系统桥 ----
+    // 库在 `allowFs: false` 时**仍然**会往 globalThis 上放一个挂满 72 个方法的 `__fs`
+    // （方法体是抛 "File access is disabled" 的桩），`fs` / `node:fs` / `fs/promises`
+    // 三个模块的源码也只是 `__fs.xxx(...)` 的包装，因此照样 import 得动。
+    //
+    // 用抛错桩兜底是在赌「桩不会出错」：桩实现一旦回归（或者 options 被改成 allowFs:true），
+    // 宿主文件系统就直接摆在 guest 面前。这里直接**删掉这个全局**——连句柄都不留，
+    // 模块里的包装函数调用时只会 ReferenceError。
+    '  try { delete globalThis.__fs; } catch (error) { /* 忽略 */ }',
+    '  if (typeof globalThis.__fs !== "undefined") {',
+    '    try { globalThis.__fs = undefined; } catch (error) { /* 忽略 */ }',
+    '  }',
+    // 删不掉就不执行用户代码：宁可整个任务失败，也不带着一条活的 fs 桥跑
+    '  if (typeof globalThis.__fs !== "undefined") {',
+    '    return __emit("err", JSON.stringify({',
+    '      name: "SandboxIntegrityError",',
+    '      message: "无法移除文件系统桥 globalThis.__fs，已拒绝执行",',
+    '    }));',
+    '  }',
     // ---- console 加固 ----
     '  const __native = globalThis.console || {};',
     '  const __fmt = (v) => {',
