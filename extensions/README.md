@@ -19,6 +19,7 @@
 * [qqbot](./qqbot) 提供与 [QQ 官方机器人](https://q.qq.com/qqbot/#/home)协作的能力
 * [wordle](./wordle) 为用户提供 Wordle 小游戏
 * [twenty-four-points](./twenty-four-points) 为用户提供 24 点小游戏，可用 `/24 solve 1 2 3 4` 求出全部解法
+* [hacker-console](./hacker-console) **仅用于安全测试**：本地起一个网页控制台，把编辑器里的代码直接送进 aicode 沙箱并回显 stdout / stderr（默认 `http://127.0.0.1:4780/`，用完请卸载）
 
 ## 开发相关
 

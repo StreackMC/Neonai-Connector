@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HackerConsole</title>
+<style>
+  :root {
+    --bg: #080b0a;
+    --panel: #0d1210;
+    --panel-2: #101815;
+    --line: #1c2a24;
+    --text: #c8d6ce;
+    --dim: #5f7168;
+    --green: #3fb950;
+    --green-soft: rgba(63, 185, 80, 0.14);
+    --red: #f85149;
+    --red-soft: rgba(248, 81, 73, 0.12);
+    --amber: #d29922;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { height: 100%; }
+
+  body {
+    margin: 0;
+    background:
+      radial-gradient(900px 500px at 12% -10%, rgba(63, 185, 80, 0.07), transparent 70%),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
+    flex: none;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    font-size: 12px;
+    text-transform: uppercase;
+  }
+
+  .brand .led {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--dim);
+    box-shadow: 0 0 0 3px rgba(95, 113, 104, 0.12);
+  }
+  .brand .led.on { background: var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
+  .brand .led.bad { background: var(--red); box-shadow: 0 0 0 3px var(--red-soft); }
+
+  .tag {
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    color: var(--amber);
+    border: 1px solid rgba(210, 153, 34, 0.4);
+    border-radius: 3px;
+    padding: 2px 6px;
+  }
+
+  .meta {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    color: var(--dim);
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .meta b { color: var(--text); font-weight: 500; }
+
+  main {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 16px 16px;
+  }
+
+  .pane {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .pane-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel-2);
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--dim);
+    flex: none;
+  }
+  .pane-head .hint { letter-spacing: 0.02em; text-transform: none; font-size: 10.5px; }
+
+  #editor-pane { flex: 1 1 55%; min-height: 150px; }
+
+  .editor {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    background: var(--panel);
+  }
+
+  #gutter {
+    flex: none;
+    margin: 0;
+    padding: 14px 8px 14px 10px;
+    min-width: 3.4em;
+    text-align: right;
+    color: #3b4b43;
+    background: var(--panel-2);
+    border-right: 1px solid var(--line);
+    overflow: hidden;
+    user-select: none;
+    font: inherit;
+    line-height: 21px;
+    white-space: pre;
+  }
+
+  #code {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+    padding: 14px 14px 14px 12px;
+    border: 0;
+    outline: 0;
+    resize: none;
+    background: transparent;
+    color: var(--text);
+    caret-color: var(--green);
+    font: inherit;
+    line-height: 21px;
+    tab-size: 2;
+    white-space: pre;
+    overflow: auto;
+  }
+  #code::selection { background: rgba(63, 185, 80, 0.25); }
+
+  .toolbar {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  select, button {
+    font: inherit;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: var(--panel-2);
+    color: var(--text);
+    padding: 7px 12px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, color 0.15s;
+  }
+  select { max-width: 340px; color: var(--dim); }
+  select:focus-visible, button:focus-visible { outline: 1px solid var(--green); outline-offset: 1px; }
+  button:hover { border-color: #2c463c; }
+
+  #run {
+    margin-left: auto;
+    background: var(--green-soft);
+    border-color: rgba(63, 185, 80, 0.45);
+    color: #7ee787;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  #run:hover { background: rgba(63, 185, 80, 0.24); }
+  #run[disabled] { opacity: 0.45; cursor: progress; }
+
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--dim);
+    min-width: 92px;
+  }
+  .status .chip {
+    border-radius: 999px;
+    padding: 2px 8px;
+    border: 1px solid var(--line);
+    color: var(--dim);
+  }
+  .status.ok .chip { color: var(--green); border-color: rgba(63, 185, 80, 0.45); background: var(--green-soft); }
+  .status.err .chip { color: var(--red); border-color: rgba(248, 81, 73, 0.45); background: var(--red-soft); }
+  .status.busy .chip { color: var(--amber); border-color: rgba(210, 153, 34, 0.45); }
+
+  .outs {
+    flex: 1 1 45%;
+    min-height: 130px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .out {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 0;
+    padding: 10px 12px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.55;
+    color: var(--text);
+  }
+  .out.err { color: #ff9d95; }
+  .out.empty::after {
+    content: attr(data-empty);
+    color: #45594f;
+  }
+
+  @media (max-width: 760px) {
+    .outs { grid-template-columns: 1fr; }
+    .meta { display: none; }
+  }
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span class="led" id="led"></span>
+      <span>HackerConsole</span>
+      <span class="tag">TEST ONLY</span>
+    </div>
+    <div class="meta">
+      <span>target <b id="target">aicode:evaljs</b></span>
+      <span>as <b id="who">—</b></span>
+      <span id="clock">—</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="pane" id="editor-pane">
+      <div class="pane-head">
+        <span>code &nbsp;·&nbsp; 按 async 函数体执行，用 return 带回结果</span>
+        <span class="hint">Ctrl / ⌘ + Enter 执行 · Tab 缩进</span>
+      </div>
+      <div class="editor">
+        <pre id="gutter" aria-hidden="true">1</pre>
+        <textarea id="code" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off"></textarea>
+      </div>
+    </section>
+
+    <div class="toolbar">
+      <select id="presets" title="安全测试预设"><option value="">— 预设片段 —</option></select>
+      <button id="clear" type="button">清空输出</button>
+      <span class="status" id="status"><span class="chip">ready</span><span id="timing"></span></span>
+      <button id="run" type="button">执行 ▶</button>
+    </div>
+
+    <div class="outs">
+      <section class="pane">
+        <div class="pane-head"><span>stdout</span><span class="hint" id="stdout-meta"></span></div>
+        <pre class="out empty" id="stdout" data-empty="空"></pre>
+      </section>
+      <section class="pane">
+        <div class="pane-head"><span>stderr</span><span class="hint" id="stderr-meta"></span></div>
+        <pre class="out err empty" id="stderr" data-empty="空"></pre>
+      </section>
+    </div>
+  </main>
+
+<script>
+(function () {
+  'use strict';
+
+  var $ = function (id) { return document.getElementById(id); };
+  var codeEl = $('code');
+  var gutterEl = $('gutter');
+  var token = new URLSearchParams(location.search).get('token') || '';
+  var busy = false;
+
+  var PRESETS = [
+    { name: '基础：日志 + 返回值', src: [
+      "console.log('hello from sandbox');",
+      'const xs = [3, 1, 2].sort(function (a, b) { return a - b; });',
+      "return xs.join(',');"
+    ].join('\n') },
+    { name: '读项目内的文件（应被拒）', src: [
+      "const fs = await import('node:fs');",
+      'try {',
+      "  return fs.readFileSync(process.cwd() + '/secret.json', 'utf8').slice(0, 200);",
+      "} catch (e) { return e.name + ': ' + e.message; }"
+    ].join('\n') },
+    { name: '探测环境变量与 cwd', src: [
+      'return {',
+      '  cwd: process.cwd(),',
+      '  env: Object.assign({}, process.env),',
+      '  globalKeys: Object.keys(globalThis).slice(0, 40)',
+      '};'
+    ].join('\n') },
+    { name: '内网联通性探测', src: [
+      "const net = await import('node:net');",
+      'return await new Promise(function (resolve) {',
+      "  const s = net.connect({ host: '127.0.0.1', port: 22 });",
+      "  s.on('connect', function () { s.destroy(); resolve('open'); });",
+      "  s.on('error', function (e) { resolve('closed: ' + e.code); });",
+      '});'
+    ].join('\n') },
+    { name: '原型链逃逸尝试', src: [
+      "const out = { tag: Object.prototype.toString.call(globalThis) };",
+      "try { out.ctor = typeof globalThis.constructor.constructor('return process')(); }",
+      "catch (e) { out.ctor = 'blocked: ' + e.message; }",
+      "try { out.fromProto = typeof ({}).constructor.constructor('return this')(); }",
+      "catch (e) { out.fromProto = 'blocked: ' + e.message; }",
+      'return out;'
+    ].join('\n') },
+    { name: '死循环（测软/硬超时）', src: 'while (true) {}\n' },
+    { name: '内存炸弹（测 OOM/poison）', src: [
+      'const keep = [];',
+      'while (true) keep.push(new Array(1e5).fill(1));'
+    ].join('\n') },
+    { name: '抛出异常（测 stderr）', src: [
+      "console.log('about to throw');",
+      "throw new RangeError('deliberate boom');"
+    ].join('\n') }
+  ];
+
+  function pad(n) { return n < 10 ? '0' + n : String(n); }
+
+  function syncGutter() {
+    var lines = codeEl.value.split('\n').length;
+    var text = '';
+    for (var i = 1; i <= lines; i++) text += i + '\n';
+    gutterEl.textContent = text;
+    gutterEl.scrollTop = codeEl.scrollTop;
+  }
+
+  function setStatus(kind, label, timing) {
+    var box = $('status');
+    box.className = 'status' + (kind ? ' ' + kind : '');
+    box.querySelector('.chip').textContent = label;
+    $('timing').textContent = timing || '';
+  }
+
+  function writeOutputs(stdout, stderr) {
+    var out = $('stdout');
+    var err = $('stderr');
+    out.textContent = stdout || '';
+    err.textContent = stderr || '';
+    out.classList.toggle('empty', !stdout);
+    err.classList.toggle('empty', !stderr);
+  }
+
+  function headers() {
+    var h = { 'content-type': 'application/json' };
+    if (token) h['x-hackerconsole-token'] = token;
+    return h;
+  }
+
+  function run() {
+    if (busy) return;
+    var src = codeEl.value;
+    if (!src.trim()) { setStatus('err', 'empty'); return; }
+
+    busy = true;
+    $('run').disabled = true;
+    setStatus('busy', 'running…', '');
+    var started = performance.now();
+
+    fetch('/api/exec', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ code: src })
+    })
+      .then(function (res) {
+        return res.json().then(function (data) { return { status: res.status, data: data }; });
+      })
+      .then(function (r) {
+        var d = r.data || {};
+        var wall = Math.round(performance.now() - started);
+        writeOutputs(d.stdout, d.stderr || (r.status >= 400 ? d.message : ''));
+        $('stdout-meta').textContent = d.durationMs != null ? 'sandbox ' + d.durationMs + 'ms · wall ' + wall + 'ms' : '';
+        $('stderr-meta').textContent = d.code ? d.code : '';
+        setStatus(d.ok ? 'ok' : 'err', d.ok ? 'ok' : 'failed', '');
+      })
+      .catch(function (e) {
+        writeOutputs('', '请求失败：' + e.message);
+        setStatus('err', 'network', '');
+      })
+      .then(function () {
+        busy = false;
+        $('run').disabled = false;
+      });
+  }
+
+  codeEl.addEventListener('input', syncGutter);
+  codeEl.addEventListener('scroll', function () { gutterEl.scrollTop = codeEl.scrollTop; });
+
+  codeEl.addEventListener('keydown', function (e) {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      var s = codeEl.selectionStart;
+      var t = codeEl.selectionEnd;
+      codeEl.setRangeText('  ', s, t, 'end');
+      syncGutter();
+      return;
+    }
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      run();
+    }
+  });
+
+  $('run').addEventListener('click', run);
+  $('clear').addEventListener('click', function () {
+    writeOutputs('', '');
+    $('stdout-meta').textContent = '';
+    $('stderr-meta').textContent = '';
+    setStatus('', 'ready', '');
+  });
+
+  var select = $('presets');
+  PRESETS.forEach(function (p, i) {
+    var opt = document.createElement('option');
+    opt.value = String(i);
+    opt.textContent = p.name;
+    select.appendChild(opt);
+  });
+  select.addEventListener('change', function () {
+    var p = PRESETS[Number(select.value)];
+    if (!p) return;
+    codeEl.value = p.src;
+    syncGutter();
+    select.value = '';
+    codeEl.focus();
+  });
+
+  setInterval(function () {
+    var now = new Date();
+    $('clock').textContent = pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+  }, 1000);
+
+  fetch('/api/status', { headers: headers() })
+    .then(function (res) { return res.json(); })
+    .then(function (s) {
+      $('target').textContent = s.tool || 'aicode:evaljs';
+      $('who').textContent = s.executor || '—';
+      var led = $('led');
+      led.className = 'led ' + (s.aicode ? 'on' : 'bad');
+      if (!s.aicode) {
+        writeOutputs('', 'aicode 未就绪：找不到 AI 工具 ' + (s.tool || 'aicode:evaljs') + '，请先加载 aicode 拓展。');
+        setStatus('err', 'no sandbox', '');
+      }
+    })
+    .catch(function () { $('led').className = 'led bad'; });
+
+  codeEl.value = PRESETS[0].src;
+  syncGutter();
+  codeEl.focus();
+})();
+</script>
+</body>
+</html>
