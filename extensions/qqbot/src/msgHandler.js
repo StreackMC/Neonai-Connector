@@ -8,7 +8,7 @@ import { neonaicMessageIn } from '#src/message/messageIn.js';
 import { neonaicUserDirectory } from '#src/message/userDirectory.js';
 import { neonaicPlatformManager } from '#src/platform/platformManager.js';
 import { neonaicConfManager } from '#src/system/confManager.js';
-import { parseString } from '#src/utils/chore.js';
+import { neonaicChore, parseString } from '#src/utils/chore.js';
 import { NeonaicIllegalArgumentError } from '#src/utils/NeonaicNewableError.js';
 import qqBotBackend, { segment } from 'qq-official-bot';
 import stripAnsi from 'strip-ansi';
@@ -17,8 +17,6 @@ import { PlatformQQBot } from './entry.js';
 import { convert_qqBotMsg_to_NeonaicMsg as toNeonaicMsg, convert_NeonaicMsg_to_qqBotMsg as toQbSendable } from './msgPayloadConvertor.js';
 
 const REPLY_TIMEOUT_TIPS = 5 * 1e3; // 5 秒未回复延缓用户等待
-const REPLY_TIMEOUT_SYMBOL = Symbol('reply_timeout');
-const getTimeoutPromise = (timeoutMs = REPLY_TIMEOUT_TIPS) => new Promise((r) => setTimeout(() => r(REPLY_TIMEOUT_SYMBOL), timeoutMs));
 
 // TODO : 由于 SDK 缺陷，在解决 #132 之前都不能交给解析器解析成 Sendable，需要强制以 Markdown 上传
 
@@ -41,23 +39,22 @@ async function onPrivateMessageIn(event, pp) {
   noteKnownNames(event, { user });
 
   pp.logMsgIn('Private:', `from=${user} | msg=` + parseString(event.message, false).replace(/\n/g, "\\n"));
-  const replyPromise = await neonaicMessageIn.resolveReply(neonaicmsg, {
+
+  // 延缓回复
+  const replyPromise = neonaicMessageIn.resolveReply(neonaicmsg, {
     AI: profile_config.useAI,
     AIlist: pickAIList(profile_config.aiRouting, profile_config.allowedAI, {
       scene: 'private', profile: pp.profile, user, group: '', executor: [user], text: neonaicmsg.toMarkdown(),
     }),
     resolveCommandWith: ctx,
   });
-
-  // 延缓回复
-  if (await Promise.race([replyPromise, getTimeoutPromise()]) === REPLY_TIMEOUT_SYMBOL) {
-    event.reply([
+  const reply = (await neonaicChore.assertFulfillInTime(replyPromise, REPLY_TIMEOUT_TIPS, async () => {
+    await event.reply([
       segment.reply(event.message_id),
       segment.markdown(`“${neonaicConfManager.getBotName()}”回复你的用时较长……`),
     ]);
-  }
+  })).at(0).result;
 
-  const reply = await replyPromise;
   if (reply.text) {
     event.reply([
       segment.reply(event.message_id),
@@ -127,6 +124,8 @@ async function onGroupMessageIn(event, pp) {
 
   // 处理 @ 机器人的情形以及提到澪奈的情形，也就是主动式回复
   if (Array.isArray(mentioned) && mentioned.length > 0 && mentioned.some((u) => !!u.is_you)) {
+    
+    // 判断延缓回复
     const replyPromise = neonaicMessageIn.resolveReply(neonaicmsg, {
       AI: profile_config.useAI,
       AIlist: pickAIList(profile_config.aiRouting, profile_config.allowedAI, {
@@ -134,16 +133,13 @@ async function onGroupMessageIn(event, pp) {
       }),
       resolveCommandWith: ctx,
     });
-
-    // 判断延缓回复
-    if (await Promise.race([replyPromise, getTimeoutPromise()]) === REPLY_TIMEOUT_SYMBOL) {
-      event.reply([
+    const reply = (await neonaicChore.assertFulfillInTime(replyPromise, REPLY_TIMEOUT_TIPS, async () => {
+      await event.reply([
         segment.reply(event.message_id),
         segment.markdown(`“${neonaicConfManager.getBotName()}”回复你的用时较长……`),
       ]);
-    }
+    })).at(0).result;
 
-    const reply = await replyPromise;
     if (reply.text) {
       event.reply([
         segment.reply(event.message_id),
@@ -168,17 +164,21 @@ async function onGroupMessageIn(event, pp) {
       && /* 有这个权限 */neonaicPermissionServer.checkPermissionFromContext(ctx, cmd.permissions, cmd.permissionDefault)
     ) {
       try {
-        const quickCommandPromise = neonaicCommandServer.executeCommandSilent(cmdName, ctx, ...cmdArgs);
-
         // 判断延缓回复
-        if (await Promise.race([quickCommandPromise, getTimeoutPromise()]) === REPLY_TIMEOUT_SYMBOL) {
-          event.reply([
+        const quickCommandPromise = new Promise((resolve) => {
+          neonaicCommandServer.executeCommandSilent(cmdName, ctx, ...cmdArgs).then((result) => {
+            resolve(result);
+          }).catch((error) => {
+            resolve(neonaicMessageIn.REPLY_FALLBACK.CMD_FAILED(error, cmdName));
+          });
+        });
+        const quickCommandResult = (await neonaicChore.assertFulfillInTime(quickCommandPromise, REPLY_TIMEOUT_TIPS, async () => {
+          await event.reply([
             segment.reply(event.message_id),
             segment.markdown(`“${neonaicConfManager.getBotName()}”回复你的用时较长……`),
           ]);
-        }
+        })).at(0).result;
 
-        const quickCommandResult = await quickCommandPromise;
         event.reply([
           segment.reply(event.message_id),
           segment.markdown(new NeonaicMessage(quickCommandResult != null
@@ -258,14 +258,13 @@ async function onGroupAtMessageIn(event, pp) {
   });
 
   // 判断延缓回复
-  if (await Promise.race([replyPromise, getTimeoutPromise()]) === REPLY_TIMEOUT_SYMBOL) {
-    event.reply([
+  const reply = (await neonaicChore.assertFulfillInTime(replyPromise, REPLY_TIMEOUT_TIPS, async () => {
+    await event.reply([
       segment.reply(event.message_id),
       segment.markdown(`“${neonaicConfManager.getBotName()}”回复你的用时较长……`),
     ]);
-  }
+  })).at(0);
 
-  const reply = await replyPromise;
   if (reply.text) {
     event.reply([
       segment.reply(event.message_id),

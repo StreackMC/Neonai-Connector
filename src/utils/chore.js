@@ -11,6 +11,8 @@ const STORAGE_UNIT = Object.freeze({
   IEC: Object.freeze(['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB', 'RiB', 'QiB']),
 });
 
+const RACE_SYMBOL = Symbol('race_timeout');
+
 /**
  * 尝试将输入尽可能地转化为文本
  * @param {*} val 输入值
@@ -325,5 +327,54 @@ export const neonaicChore = Object.freeze({
     if (minutes > 0) result += `${minutes}${minutesSplit || '分钟'}`;
     if (secs > 0 || result === '') result += `${secs}${secondsSplit || '秒'}`;
     return result;
+  },
+
+  /**
+   * 断言一个或多个异步任务在指定时间内完成，否则调用一个给定函数。
+   * @template T 异步任务返回类型
+   * @param {Promise<T>|Promise<T>[]} promises 异步任务列表，**超时并不会终止任务**
+   * @param {number} timeoutMs 超时时间（毫秒）
+   * @param {() => (void|Promise<void>)} ifTimeout 超时后触发的回调函数，**如果是 async 则会等待其完成，本函数再收集结果**；**抛出错误静默忽略**
+   * @param {Object} [option] 可选参数
+   * @param {boolean} [option.unref=false] 是否取消引用定时器，避免阻止 Node.js 进程退出
+   * @param {boolean} [option.all=true] 是否需要等待全部任务完成：如果不为真，只要一个及时完成就不会触发回调
+   * @return {Promise<{result?: T, error?: unknown, status: 'fulfilled' | 'rejected'}[]>} 异步任务结果，顺序与传入顺序一致
+   * @throws {NeonaicIllegalArgumentError} 参数错误
+   */
+  assertFulfillInTime: async (promises, timeoutMs, ifTimeout, option) => {
+    if (!Array.isArray(promises)) promises = [promises];
+    if (promises.some(p => !(p instanceof Promise))) throw new NeonaicIllegalArgumentError("期待的传入值不是 Promise 数组：" + parseString(promises));
+    if (typeof timeoutMs !== 'number' || isNaN(timeoutMs) || timeoutMs <= 0) throw new NeonaicIllegalArgumentError("期待的传入值不是正数：" + parseString(timeoutMs));
+    if (typeof ifTimeout !== 'function') throw new NeonaicIllegalArgumentError("期待的传入值不是函数：" + parseString(ifTimeout));
+
+    const { unref = false, all = true } = option ?? {};
+
+    if (promises.length === 0) return [];
+
+    // 安全化：每个 Promise 无论成败都变成 resolved，永不 reject，防止意外行为
+    const settled = promises.map(p => p.then(
+      result => ({ status: 'fulfilled', result }),
+      error => ({ status: 'rejected', error }),
+    ));
+
+    let timer;
+    const timeoutPromise = new Promise((resolve) => {
+      timer = setTimeout(() => resolve(RACE_SYMBOL), timeoutMs);
+      if (unref) timer.unref?.();
+    });
+
+    // 两个分支都不会因 rejection 抛错
+    const raceResult = all
+      ? await Promise.race([Promise.all(settled), timeoutPromise])
+      : await Promise.race([...settled, timeoutPromise]);
+
+    if (raceResult === RACE_SYMBOL) {
+      try { await ifTimeout(); } catch (_) { /* 静默 */ }
+    } else {
+      clearTimeout(timer);
+    }
+
+    // settled 已在 race 中启动，这里直接等全部落定，顺序天然对应
+    return Promise.all(settled);
   }
 });
