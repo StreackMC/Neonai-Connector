@@ -165,12 +165,13 @@ async function onGroupMessageIn(event, pp) {
     ) {
       try {
         // 判断延缓回复
-        const quickCommandPromise = new Promise((resolve) => {
-          neonaicCommandServer.executeCommandSilent(cmdName, ctx, ...cmdArgs).then((result) => {
+        const quickCommandPromise = new Promise(async (resolve) => {
+          try {
+            const result = await neonaicCommandServer.executeCommandSilent(cmdName, ctx, ...cmdArgs);
             resolve(result);
-          }).catch((error) => {
+          } catch (error) {
             resolve(neonaicMessageIn.REPLY_FALLBACK.CMD_FAILED(error, cmdName));
-          });
+          }
         });
         const quickCommandResult = (await neonaicChore.assertFulfillInTime(quickCommandPromise, REPLY_TIMEOUT_TIPS, async () => {
           await event.reply([
