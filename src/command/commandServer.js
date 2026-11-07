@@ -431,6 +431,7 @@ registerCommand('neonaic', 'help', function (...which) {
   usage: '/help [cmd]',
   permissions: ['neonaic.commmand.help'],
   permissionDefault: true,
+  alias: ['?', '？']
 });
 
 async function sudoOrRunuser(inherit, who, cmd, ...args) {
