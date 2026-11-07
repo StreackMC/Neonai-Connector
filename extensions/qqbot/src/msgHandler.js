@@ -183,7 +183,7 @@ async function onGroupMessageIn(event, pp) {
           segment.reply(event.message_id),
           segment.markdown(new NeonaicMessage(quickCommandResult != null
             ? quickCommandResult
-            : REPLY_FALLBACK.VOID_CMD(cmdName)).toMarkdown()),
+            : neonaicMessageIn.REPLY_FALLBACK.VOID_CMD(cmdName)).toMarkdown()),
         ]).then(() => {
           pp.logMsgOut('GroupAt:', `where=${group} | to=${user} | reply=`, parseString(quickCommandResult).replace(/\n/g, "\\n"));
         }).catch((e) => {
