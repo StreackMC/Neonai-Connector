@@ -21,6 +21,7 @@ export class PlatformQQBot extends NeonaiPlatform {
   static type = 'qqbot';
   /** @type {qqBotBackend.Bot|null} */
   #botInstance = null;
+  /** @type {qqBotBackend.Bot.Info|null} */
   #selfInfo = null;
 
   constructor(profile) {
