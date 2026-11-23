@@ -35,6 +35,7 @@
 - 绑定表 `config/saves/joyous-identities.json`（`profile → chatId → {uuid,name,boundAt}`；有 uuid 只认 uuid）。⚠️ 两侧 profile 命名不必相同，靠 `bridge.profiles.<键>.platform` 对应。⚠️ 改 `config.json` 后要 `/neonaic:reload` **并重启拓展**，通道不热切换。⚠️ 对端 `connect.timeout.request` 是**它等我方应答**的上限，`ai.request` 建议调到 60s 以上。
 
 ## AI 调用链
+- **模块布局**：`src/message/ai.js` 只是兼容入口，实现在 `src/message/ai/`：`prompt`（提示词缓存）/ `toolRegistry`（`_allTools`+`_toolFqn`，对外给 `getAITools`/`getAIToolByFqn`）/ `toolPattern`（模式求值）/ `providerTools`（providerTools + extraTools 注入）/ `multimodal` / `callProvider`（单次请求）/ `caller`（封禁/身份/上下文）/ `ask`（`askAI` 编排）/ `commands`（`ai` 命令）/ `index`（汇总成 `neonaicAI`）。依赖单向：commands → ask → callProvider → 其余，无环。
 - 链路：平台事件 → 平台拓展 → `neonaicMessageIn.resolveReply(msg, {AI, AIlist, resolveCommandWith})` → `neonaicAI.askAI(msg, {AIlist, context, speaker, overridePrompt, overrideAITool})` → `callProvider`。**`caller` 已弃用**，改 `context`（`NeonaicCommandContext` 或普通对象，二者互斥；垫片 `privateExecutor=false`）。
 - **Profile = `secret.json` 的 `oai[]`**：`{name, available, address, token, model, tools, maxToolcall, prompt}`。`address` 是 **base URL**，端点由 SDK 追加（chat → `/chat/completions`，responses → `/responses`）。
 - **`AIlist` 只过滤、不决定顺序** ⇒ 尝试顺序恒等于 `oai` 声明顺序；`available:false` 是独立闸门。**模式列表**（`tools` 与 `AIlist` 共用 `resolvePatternList`）：`"*"`/`"!name"`（排除优先）/`"!*"`；`AIlist` 严格（只写排除项 → 抛错），`tools` 宽松（`["!x"]` = 一个都不给）。匹配粒度由传入的 `match` 决定：`AIlist` 精确；`tools` 走 `matchToolPattern`，`*` 通配符可出现在命名空间段与工具名段（`"ns:*"`、`"*:name"`、`"n*:a*"`、`"!ns:*"`），省略命名空间即 `*:name`（跨命名空间同名工具）。

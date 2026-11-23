@@ -4,6 +4,7 @@
 - **Neonai-Connector** — Node.js (ESM) 服务端，与「澪奈 (Neonai)」沟通的桥梁；显示名取 `config/main.json` 的 `name`/`subname`。License **AGPL-3.0 + 附加条款**（禁止复用美术资源、禁止把 "Neonai"/「澪奈」当自身品牌）。
 - 分层：`src/{system,logger,command,message,event,platform,extension,utils}/`（内核）＋ `extensions/`（拓展）。`main.js` 瘦入口，`debug.cjs` 调试入口（非 TTY 下 `$("cmd")` 模拟 CLI）。错误统一抛 `Neonaic*Error`，不抛裸 `Error`。
 - 函数/常量**只导出单个命名空间对象**（`export const neonaicXxx = {...}`）；**类一律 `export class`，不嵌套**；camelCase（含 extensions）。例外只有 `chore.parseString`、`Logger.getLogger()`、`log4js_inject.configure`。对象字面量放文件**末尾**（`class` 不提升 → TDZ）；JSDoc 类型引用写 `import('./x.js').类名`，**不写悬空 `{@link}`**。
+- **单文件过大就拆成同名目录 + 兼容入口**：`src/message/ai.js` 现在只有 8 行（`export { neonaicAI } from './ai/index.js'`），实现在 `src/message/ai/`（`prompt` / `toolRegistry` / `toolPattern` / `providerTools` / `multimodal` / `callProvider` / `caller` / `ask` / `commands` + `index` 汇总）。`index.js` **必须 import `commands.js`**——命令靠 import 副作用自注册，删了它 `ai` 命令就消失。
 - ⚠️ **内核不得出现任何拓展名**（解耦硬判据）：判断标准是「本体是否只在某拓展存在时才有意义」。拓展专属合成执行者（`$joyous`）必须定义在拓展内，**不得写进内核 `COMMAND_ENUMS`**；`$` 是内核保留的合成身份命名空间（内核只占 `$console`/`$unknown`）。反例：`NeonaicProtocolError` 这类**通用词汇**进内核不算耦合。
 - ⚠️ 常见实现坑：`extends` 了 `*Newable` 的类必须 `super()` 且早于任何 `this` 访问（漏了直接 ReferenceError）；`net.connect({path})` 失败是**异步 `emit('error')`、不抛**；ESM **私有字段不能跨类访问**（子类 `this.#x` 会在解析期报错，每个类必须自己声明）。
 
@@ -60,6 +61,6 @@
 ## 已知待办
 - **`commandServer.js` 的 `executeCommand`/`executeCommandSilent` 只拦同步异常**：async 处理器抛出的拒绝会逸出、不被包成 `NeonaicCommandError`（影响全项目所有 async 命令）。
 - `extLoader.js` 的 `disable()` 无空守卫；`replaceAll('.', '\.')` 是空操作，且键名用 `.enabled` 而 `ext.json` 样例写 `enable`。
-- `ai.js` 的 `neonaic:webfetch` 是半成品（`uri = new URL(address)` 赋给未声明变量，严格模式必抛，被 catch 吞掉）；`entry.js` 的 `checkPermissionFromContext(this)` 只传 1 个参数，`systemLine` 永远为空；`NeonaicUriMeta.js:184` 的 `{@link resolveUri}` 悬空。
+- `src/utils/registerUtilsSupport.js` 的 `neonaic:webfetch` 已正常实现（走 `neonaicNetwork.fetch` + `NeonaicUriMeta.resolve`，不是当年那个 `new URL(address)` 半成品）；`entry.js` 的 `checkPermissionFromContext(this)` 只传 1 个参数，`systemLine` 永远为空；`NeonaicUriMeta.js:184` 的 `{@link resolveUri}` 悬空。
 - `NeonaicTable.toCsv()` 仍未按 RFC4180 转义（只转义 `|`）。
 - Joyous Java 侧需按 `PROTOCOL.md` 实现 UDS 才能真联调。
