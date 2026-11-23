@@ -369,7 +369,7 @@ function resolveProviderTools(config, factories, label = 'providerTools') {
   else {
     throw new NeonaicIllegalArgumentError(
       `${label} 必须是对象或工具名数组，实际是 ${typeof config}：${JSON.stringify(config)}。`
-      + `可用工具：${Object.keys(PROVIDER_TOOL_FACTORIES).join(', ')}。`,
+      + `可用工具：${Object.values(PROVIDER_TOOL_FACTORIES).join(', ')}。`,
     );
   }
 
@@ -409,7 +409,7 @@ function resolveProviderTools(config, factories, label = 'providerTools') {
   if (unknown.length) {
     throw new NeonaicIllegalArgumentError(
       `${label} 中有不支持的 Provider 工具：${unknown.join(', ')}。`
-      + `可用工具：${Object.keys(PROVIDER_TOOL_FACTORIES).join(', ')}（大小写与下划线不敏感）。`
+      + `可用工具：${Object.values(PROVIDER_TOOL_FACTORIES).join(', ')}（大小写与下划线不敏感）。`
       + '仅支持由 Provider 服务端执行的工具；applyPatch/computer/shell/localShell/customTool 需要应用侧回传结果，本项目不支持。',
     );
   }
