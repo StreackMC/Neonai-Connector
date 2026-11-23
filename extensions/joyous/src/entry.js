@@ -220,6 +220,16 @@ neonaicAI.registerAITool('joyous', 'serverStatus', {
   },
 });
 
+neonaicAI.registerAITool('joyous', 'whois', {
+  description: '获取当前用户是否存在可能的 Minecraft 玩家名。',
+  inputSchema: z.object({
+  }),
+  execute: async ({ }, ctx) => {
+    //TODO: 此处无法获取平台profile，无法使用正常API
+    return joyousIdentity.findByChatId(ctx.neonaic.executor.at(0)).at(0)?.name || '[未知玩家]';
+  },
+});
+
 // =====================================================================
 // 生命周期
 // =====================================================================
