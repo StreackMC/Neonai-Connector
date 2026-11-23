@@ -160,19 +160,43 @@ function getAITools() { return _allTools; }
 // ---- 工具过滤 ----
 
 /**
- * 匹配工具模式。带命名空间（含 ':'）精确匹配 fqn；不带则模糊匹配 name。
+ * 把 glob 片段转成正则源码：只有 `*` 是元字符，其余字符一律转义。
+ * @param {string} glob
+ * @param {string} starSrc `*` 对应的正则源码
+ * @returns {string}
+ */
+function globToRegExpSource(glob, starSrc) {
+  return glob
+    .split('*')
+    .map((seg) => seg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join(starSrc);
+}
+
+/**
+ * 匹配工具模式。`*` 是通配符，命名空间段与工具名段都可以写：
+ *   - `"ns:name"` → 精确匹配该 fqn
+ *   - `"ns:*"`    → 该命名空间下的全部工具
+ *   - `"*:name"`  → 任意命名空间下名为 name 的工具（等价于省略命名空间的 `"name"`）
+ *   - `"name"`    → 同上：省略命名空间即等价于 `"*:name"`
+ *   - `"*"`       → 全部工具
+ *
+ * 命名空间与工具名在注册时都被规整为 `[a-zA-Z0-9_]`，段内不可能出现 ':'，
+ * 因此按**第一个** ':' 切分命名空间与工具名是无歧义的。
  * @param {string} pattern
  * @returns {string[]} 匹配到的 fqn 列表
  */
 function matchToolPattern(pattern) {
-  const hasNs = pattern.includes(':');
+  if (typeof pattern !== 'string' || !pattern) return [];
+  const sep = pattern.indexOf(':');
+  // 省略命名空间时等价于 `*:name`，保持「不带前缀即跨命名空间」的既有语义
+  const nsGlob = sep >= 0 ? pattern.slice(0, sep) : '*';
+  const nameGlob = sep >= 0 ? pattern.slice(sep + 1) : pattern;
+  // 命名空间段里的 '*' 不跨越 ':'；工具名段已在尾部，'*' 匹配剩余全部字符
+  const nsRe = new RegExp(`^${globToRegExpSource(nsGlob, '[^:]*')}$`);
+  const nameRe = new RegExp(`^${globToRegExpSource(nameGlob, '.*')}$`);
   const hits = [];
   for (const t of _allTools) {
-    if (hasNs) {
-      if (`${t.namespace}:${t.name}` === pattern) hits.push(`${t.namespace}:${t.name}`);
-    } else {
-      if (t.name === pattern) hits.push(`${t.namespace}:${t.name}`);
-    }
+    if (nsRe.test(t.namespace) && nameRe.test(t.name)) hits.push(`${t.namespace}:${t.name}`);
   }
   return hits;
 }
@@ -192,9 +216,12 @@ function exactMatch(candidates) {
  *
  * 规则（`tools` 与 `AIlist` **共用同一套**，避免两处语义各自漂移）：
  *   - `"*"`     → 纳入全部候选
- *   - `"!name"` → 排除（支持模糊匹配）；**排除优先于纳入**
+ *   - `"!name"` → 排除；**排除优先于纳入**
  *   - `"!*"`    → 排除全部
- *   - 其余      → 纳入（支持模糊匹配）
+ *   - 其余      → 纳入
+ *
+ * 单个模式能匹配到什么由调用方传入的 `match` 决定：`AIlist` 按候选名精确匹配，
+ * `tools` 则支持 `*` 通配符（见 {@link matchToolPattern}）。
  *
  * @param {string|string[]|undefined} patterns 模式列表
  * @param {string[]} candidates 候选全集
@@ -264,7 +291,9 @@ function resolvePatternList(patterns, candidates, options = {}) {
 /**
  * 解析 profile.tools 配置，返回该 Profile 可用工具的 fqn 列表。
  *
- * 规则见 {@link resolvePatternList}；空 / 未设置 → 不得调用任何工具。
+ * 规则见 {@link resolvePatternList}，工具模式支持 `*` 通配符：`"*"` 全部、`"ns:*"` 整个命名空间、
+ * `"*:name"` 或 `"name"` 跨命名空间按名匹配、`"!ns:*"` 屏蔽整个命名空间。
+ * 空 / 未设置 → 不得调用任何工具。
  * @apiNote 这里刻意**不启用** requireInclusion：`tools: ["!x"]` 的既有语义是「一个都不给」，
  *          改成报错属于行为变更，留给显式决策（`AIlist` 走的是严格模式）。
  *
@@ -875,7 +904,7 @@ async function askAI(userMessage, options) {
 
 /**
  * 查找工具定义。
- * @param {string} ref 工具引用：fqn（ns:name）或 name（模糊匹配）
+ * @param {string} ref 工具引用：fqn（ns:name），支持 `*` 通配符（如 `ns:*`）；省略命名空间时按名跨命名空间匹配
  * @returns {NeonaicTAIToolDef[]}
  */
 function findTool(ref) {
@@ -1009,6 +1038,11 @@ async function aiTool(ctx, ...args) {
       if (!toolRef) return '用法: ai tool test <tool> <json5>';
       const def = findTool(toolRef);
       if (def.length <= 0) return `未找到 AI 工具: ${toolRef}`;
+      // 引用支持 `*` 通配符，可能一次命中多个；随机挑第一个执行等于「静默跑错工具」，直接要求写精确
+      if (def.length > 1) {
+        return `工具引用 "${toolRef}" 匹配到 ${def.length} 个工具，请写得更精确：\n`
+          + def.map((d) => `${d.namespace}:${d.name}`).join('\n');
+      }
       const argsJson = args.slice(2).join(' ');
       let input;
       try {
