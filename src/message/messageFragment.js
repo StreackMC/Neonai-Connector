@@ -1,3 +1,4 @@
+import { neonaicUserDirectory } from "#src/message/userDirectory.js";
 import { parseString } from "#src/utils/chore.js";
 import { NeonaicTable } from "#src/utils/math.js";
 import { NeonaicNewable } from "#src/utils/NeonaicNewableClass.js";
@@ -353,7 +354,10 @@ export class NeonaicAtMsgFrag extends NeonaicMessageFragment {
 
   get target() { return this.#payload.target; }
   toString() { return `${this.TYPE}:${this.markdown}`; }
-  get markdown() { return ` @${this.#payload.target} `; }
+  get markdown() {
+    const dict = neonaicUserDirectory.get(this.#payload.target);
+    return ` @${dict ? dict.name : this.#payload.target} `;
+  }
 
   constructor(target) {
     super();
