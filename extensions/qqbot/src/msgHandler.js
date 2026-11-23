@@ -266,10 +266,20 @@ async function onGroupAtMessageIn(event, pp) {
     ]);
   })).at(0);
 
-  if (reply.text) {
+  if (reply.status === 'fulfilled') {
     event.reply([
       segment.reply(event.message_id),
-      segment.markdown(reply.text.toMarkdown()),
+      segment.markdown(reply.result.text.toMarkdown()),
+    ]).then(() => {
+      pp.logMsgOut('GroupAt:', `where=${group} | to=${user} | reply=`, parseString(reply.text, false).replace(/\n/g, "\\n"));
+    }).catch((e) => {
+      pp.log('error', 'Failed to reply group at-message:', `where=${group} | to=${user} | error=`, e, ` | reply=`, parseString(reply.text, false).replace(/\n/g, "\\n"));
+    });
+  } else {
+    pp.log('warn', 'Failed to reply group at-message:', `where=${group} | to=${user} | error=`, reply.error, ` | reply=<null>`);
+    event.reply([
+      segment.reply(event.message_id),
+      segment.markdown(neonaicMessageIn.REPLY_FALLBACK.AI_FAILED()),
     ]).then(() => {
       pp.logMsgOut('GroupAt:', `where=${group} | to=${user} | reply=`, parseString(reply.text, false).replace(/\n/g, "\\n"));
     }).catch((e) => {
