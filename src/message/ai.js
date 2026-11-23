@@ -307,6 +307,115 @@ function resolveToolList(toolsConfig) {
   });
 }
 
+// ---- Provider 托管工具 ----
+
+/**
+ * 可用作 Provider 托管工具的**归一化键名** → `client.tools` 上的 factory 方法名。
+ *
+ * 只收录「由 Provider 服务端执行」（`isProviderExecuted: true`）的内置工具：
+ * 它们不需要本地 `execute`，模型调用后由服务端直接给出结果。
+ * 像 `applyPatch` / `computer` / `shell` / `localShell` / `customTool` 这类
+ * 「要应用侧执行并回传」的 provider 工具**刻意排除**——本项目没有对应的执行链路，
+ * 放进来只会在模型调用的那一刻报「没有 execute」。
+ *
+ * @type {Record<string, string>}
+ */
+const PROVIDER_TOOL_FACTORIES = {
+  codeinterpreter: 'codeInterpreter',
+  filesearch: 'fileSearch',
+  imagegeneration: 'imageGeneration',
+  mcp: 'mcp',
+  websearch: 'webSearch',
+  websearchpreview: 'webSearchPreview',
+};
+
+/**
+ * 归一化配置里写的 Provider 工具名：忽略大小写与 `_` / `-` / 空格，
+ * 于是 `webSearch`、`web_search`、`web-search` 都指向同一个工具。
+ * @param {string} key
+ * @returns {string}
+ */
+function normalizeProviderToolKey(key) {
+  return String(key).toLowerCase().replace(/[\s_-]/g, '');
+}
+
+/**
+ * 解析 `oai[].providerTools` 配置，构造 Provider 托管工具表。
+ *
+ * 配置写法（`providerTools` 与 `tools` **相互独立**，不受其过滤）：
+ *   - 对象：`{ "webSearch": true, "codeInterpreter": { "container": "auto" } }`
+ *     值 `true` / 未写参数 → 用默认参数；写对象 → 原样透传给该工具的 factory；
+ *     值 `false` / `null` → 显式关闭（便于临时停用而不删配置）
+ *   - 数组简写：`["webSearch", "codeInterpreter"]` ≡ `{ webSearch: true, codeInterpreter: true }`
+ *   - 数组值：同一工具构造多实例（典型是挂多个 MCP server），模型名依次为 `mcp`、`mcp_2`…
+ *
+ * @apiNote ⚠️ 必须传 `{}` 而不是 `undefined`：多数 factory 会解构 options 参数
+ *          （`webSearchPreview()` 直接抛 `Cannot destructure property 'onInputStart'`），
+ *          所以「用默认参数」也要显式给一个空对象。
+ *
+ * @param {object|string[]|undefined} config 配置值
+ * @param {import('@ai-sdk/openai').OpenAIProvider['tools']} factories provider 提供的工具 factory 表
+ * @param {string} [label='providerTools'] 报错信息里使用的配置项名
+ * @returns {Record<string, object>} 模型可见名 → Provider 托管工具
+ * @throws {NeonaicIllegalArgumentError} 配置类型不对、键名不认识、选项不是对象、构造失败
+ */
+function resolveProviderTools(config, factories, label = 'providerTools') {
+  const table = {};
+  if (config == null || config === false) return table;
+
+  let entries;
+  if (Array.isArray(config)) entries = config.map((key) => [key, true]);
+  else if (typeof config === 'object') entries = Object.entries(config);
+  else {
+    throw new NeonaicIllegalArgumentError(
+      `${label} 必须是对象或工具名数组，实际是 ${typeof config}：${JSON.stringify(config)}。`
+      + `可用工具：${Object.keys(PROVIDER_TOOL_FACTORIES).join(', ')}。`,
+    );
+  }
+
+  const unknown = [];
+  for (const [rawKey, rawValue] of entries) {
+    const factoryName = PROVIDER_TOOL_FACTORIES[normalizeProviderToolKey(rawKey)];
+    if (!factoryName) {
+      unknown.push(rawKey);
+      continue;
+    }
+    // 同一工具可写成数组以构造多实例；单实例则退化为只有一项
+    const optionList = Array.isArray(rawValue) ? rawValue : [rawValue];
+    let instance = 0;
+    for (const rawOptions of optionList) {
+      if (rawOptions === false || rawOptions === null) continue;
+      const options = (rawOptions === true || rawOptions === undefined) ? {} : rawOptions;
+      if (typeof options !== 'object' || Array.isArray(options)) {
+        throw new NeonaicIllegalArgumentError(
+          `${label}.${rawKey} 的选项必须是对象、true 或它们的数组，实际是 ${JSON.stringify(rawOptions)}。`,
+        );
+      }
+      let def;
+      try {
+        def = factories[factoryName](options);
+      } catch (err) {
+        throw new NeonaicIllegalArgumentError(
+          `${label}.${rawKey} 构造失败：${err?.message ?? err}（选项：${JSON.stringify(options)}）。`, err,
+        );
+      }
+      // 模型可见名取 provider 自己的工具名（openai.web_search → web_search），多实例加序号后缀
+      const base = String(def?.id ?? '').split('.').pop() || factoryName;
+      table[instance ? `${base}_${instance + 1}` : base] = def;
+      instance += 1;
+    }
+  }
+
+  if (unknown.length) {
+    throw new NeonaicIllegalArgumentError(
+      `${label} 中有不支持的 Provider 工具：${unknown.join(', ')}。`
+      + `可用工具：${Object.keys(PROVIDER_TOOL_FACTORIES).join(', ')}（大小写与下划线不敏感）。`
+      + '仅支持由 Provider 服务端执行的工具；applyPatch/computer/shell/localShell/customTool 需要应用侧回传结果，本项目不支持。',
+    );
+  }
+  return table;
+}
+
 // ---- 调用 ----
 
 /**
@@ -598,6 +707,20 @@ async function callProvider(provider, userMessage, overrideAITool = [], override
     return t ? t : null;
   });
 
+  // Provider 托管工具（由 Provider 服务端执行，与 provider.tools 的本地工具相互独立）。
+  // ⚠️ 只有 Responses API 会把这些工具写进请求体：Chat Completions 的 tools 只接受 function，
+  // `prepareChatTools` 遇到 provider 类型只会 push 一条 unsupported warning 然后**静默丢弃**。
+  // 这种「配置看起来生效了、其实一个都没送出去」的故障最难查，所以这里直接判死。
+  const providerToolSet = resolveProviderTools(provider.providerTools, client.tools);
+  const providerToolNames = Object.keys(providerToolSet);
+  if (providerToolNames.length && !provider.responseAPI) {
+    throw new NeonaicIllegalArgumentError(
+      `Profile "${provider.name}" 配置了 providerTools（${providerToolNames.join(', ')}），但 responseAPI=false；`
+      + 'Provider 托管工具只在 Responses API 下可用，Chat Completions 端点会被 SDK 静默丢弃。'
+      + '请改为 responseAPI: true，或移除 providerTools。',
+    );
+  }
+
   // 先合并再判断是否为空。
   // 原写法是在 `provider.tools` 解析结果非空时才把 overrideAITool 一起送出，
   // 于是「Profile 没有启用任何工具」时，临时叠加的工具会被**静默丢弃**
@@ -608,7 +731,10 @@ async function callProvider(provider, userMessage, overrideAITool = [], override
   const userInput = plainTextOf(userMessage);
   const extraTools = Array.isArray(overrideAITool) ? overrideAITool.filter(Boolean) : [];
   // 临时工具排在后面：同名时后写入的覆盖前者，即临时工具优先
-  const tools = buildToolSet([...toolList, ...extraTools], ctx, userInput);
+  const tools = {
+    ...providerToolSet,
+    ...buildToolSet([...toolList, ...extraTools], ctx, userInput),
+  };
   const toolNames = Object.keys(tools);
 
   const messages = [
@@ -623,9 +749,10 @@ async function callProvider(provider, userMessage, overrideAITool = [], override
   const rawMax = Number(provider.maxToolcall);
   const maxToolcall = Math.max(1, Number.isFinite(rawMax) ? rawMax : 5);
   const extraCount = extraTools.length;
+  const providerCount = providerToolNames.length;
   const mediaCount = Array.isArray(userMessage) ? userMessage.filter((p) => p?.type === 'file').length : 0;
   getLogger().tool.info(
-    `${SESSION_ID} → ${provider.name}: ${provider.address}#${provider.model} (${endpoint}${provider.stream ? ', stream' : ''}, ${toolNames.length} tools${extraCount ? ` 含临时 ${extraCount}` : ''}, maxToolcall=${maxToolcall}${mediaCount ? `, ${mediaCount} media` : ''})`,
+    `${SESSION_ID} → ${provider.name}: ${provider.address}#${provider.model} (${endpoint}${provider.stream ? ', stream' : ''}, ${toolNames.length} tools${providerCount ? ` 含 provider ${providerCount}` : ''}${extraCount ? ` 含临时 ${extraCount}` : ''}, maxToolcall=${maxToolcall}${mediaCount ? `, ${mediaCount} media` : ''})`,
   );
 
   const common = {
@@ -1164,6 +1291,7 @@ export const neonaicAI = {
   unregisterAITool,
   getAITools,
   resolveToolList,
+  resolveProviderTools,
   isAIBanned,
   askAI,
   findTool,
