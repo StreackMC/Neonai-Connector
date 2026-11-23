@@ -64,7 +64,7 @@ export function convert_qqBotMsg_to_NeonaicMsg(event, pp, textOnly = false) {
   });
 
   /** @type {import('qq-official-bot').MentionedGroupMember[]} */
-  const mentioned = Array.isArray(event.mentions) ? event.mentions : [];
+  const mentioned = Array.isArray(event.mentions) ? event.mentions.filter(m => !m.is_you) : [];
   for (const user of mentioned) {
     result.appendFragment(new NeonaicAtMsgFrag(`qUSR#${user.id}@${pp.selfInfo.id}`));
   }
