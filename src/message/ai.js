@@ -410,10 +410,105 @@ function resolveProviderTools(config, factories, label = 'providerTools') {
     throw new NeonaicIllegalArgumentError(
       `${label} 中有不支持的 Provider 工具：${unknown.join(', ')}。`
       + `可用工具：${Object.values(PROVIDER_TOOL_FACTORIES).join(', ')}（大小写与下划线不敏感）。`
-      + '仅支持由 Provider 服务端执行的工具；applyPatch/computer/shell/localShell/customTool 需要应用侧回传结果，本项目不支持。',
+      + '仅支持由 Provider 服务端执行的工具；applyPatch/computer/shell/localShell/customTool 需要应用侧回传结果，本项目不支持。'
+      + '第三方兼容平台的自定义工具类型（如 deepseek 的 deepseek_web_search）请写进 extraTools。',
     );
   }
   return table;
+}
+
+// ---- 请求体工具注入 ----
+
+/**
+ * 解析 `oai[].extraTools` 配置，得到要**原样追加**到请求体 `tools` 数组的条目。
+ *
+ * 这一路是给「兼容 OpenAI 协议、但有自己内置工具类型」的第三方平台用的（如 deepseek 的
+ * `deepseek_web_search`）。它们既不是本地的 function 工具，也不是 OpenAI 的官方内置工具，
+ * AI SDK 里**没有任何通道**能把它们送出去（见 {@link createExtraToolsFetch}）。
+ *
+ * 写法（键 = 条目的 `type`，值 = 该条目的其余字段）：
+ *   - `{ "deepseek_web_search": true }` → `{ "type": "deepseek_web_search" }`
+ *   - `{ "deepseek_web_search": { "mode": "fast" } }` → `{ "type": "deepseek_web_search", "mode": "fast" }`
+ *   - 值写数组 → 注入多条同 type 条目；值写 `false` / `null` → 跳过
+ *
+ * @param {object|undefined} config 配置值
+ * @param {string} [label='extraTools'] 报错信息里使用的配置项名
+ * @returns {object[]} 请求体里的 tools 条目（已含 `type`）
+ * @throws {NeonaicIllegalArgumentError} 配置类型不对、条目不是对象、与键冲突地写了别的 type
+ */
+function resolveExtraTools(config, label = 'extraTools') {
+  if (config == null || config === false) return [];
+  if (typeof config !== 'object' || Array.isArray(config)) {
+    throw new NeonaicIllegalArgumentError(
+      `${label} 必须是「type → 其余字段」的对象，实际是 ${Array.isArray(config) ? 'array' : typeof config}：${JSON.stringify(config)}。`,
+    );
+  }
+
+  const entries = [];
+  for (const [rawType, rawValue] of Object.entries(config)) {
+    const type = String(rawType).trim();
+    if (!type) continue;
+    // 同一 type 可写成数组以注入多条；单条则退化为只有一项
+    const optionList = Array.isArray(rawValue) ? rawValue : [rawValue];
+    for (const rawOptions of optionList) {
+      if (rawOptions === false || rawOptions === null) continue;
+      const options = (rawOptions === true || rawOptions === undefined) ? {} : rawOptions;
+      if (typeof options !== 'object' || Array.isArray(options)) {
+        throw new NeonaicIllegalArgumentError(
+          `${label}.${rawType} 的字段必须是对象、true 或它们的数组，实际是 ${JSON.stringify(rawOptions)}。`,
+        );
+      }
+      // type 由键给出；值里再写一个不同的 type 属于自相矛盾，直接判错而不是静默覆盖
+      if (options.type != null && options.type !== type) {
+        throw new NeonaicIllegalArgumentError(
+          `${label}.${rawType} 的字段里不能再写 type（type 由键名决定），却写成了 ${JSON.stringify(options.type)}。`,
+        );
+      }
+      entries.push({ ...options, type });
+    }
+  }
+  return entries;
+}
+
+/**
+ * 构造一个「只往请求体 `tools` 数组里塞条目」的 fetch，交给 `createOpenAI({ fetch })`。
+ *
+ * 为什么必须在传输层做：`@ai-sdk/openai` 里没有透传自定义工具类型的通道 ——
+ *   - Chat Completions：`prepareChatTools` 的 `switch (tool.type)` **只认 `function`**，
+ *     其余类型只 push 一条 `unsupported` warning 就被丢弃；
+ *   - Responses：`prepareResponsesTools` 的 `switch (tool.id)` **连 default 都没有**，
+ *     未知的 provider 工具 id 被静默忽略（连 warning 都没有）。
+ * 所以平台自定义的工具类型只能在请求体序列化之后补进去。
+ *
+ * ⚠️ 注入的工具 AI SDK 并不认识：如果平台要求**客户端**执行它（响应里返回 tool_call），
+ * 会抛 `NoSuchToolError`。只适用于「服务端执行、直接把结果写进回复」这类工具。
+ *
+ * @param {object[]} entries 要注入的条目
+ * @param {string} providerName Profile 名（日志用）
+ * @returns {(url: string, init: object) => Promise<Response>}
+ */
+function createExtraToolsFetch(entries, providerName) {
+  return async (url, init) => {
+    let body = init?.body;
+    if (typeof body === 'string' && body) {
+      try {
+        const parsed = JSON.parse(body);
+        const existing = Array.isArray(parsed?.tools) ? parsed.tools : [];
+        // 幂等：同 type 的条目只补一次（SDK 已经写进去的不再重复）
+        const added = entries.filter((t) => !existing.some((e) => e?.type === t.type));
+        if (added.length) {
+          parsed.tools = [...existing, ...added];
+          body = JSON.stringify(parsed);
+        }
+      } catch (err) {
+        // 注入失败不该顺带把请求搞坏：原样发出去，问题留给服务端与日志
+        getLogger().tool.warn(`${providerName}: 无法向请求体注入 extraTools（body 不是合法 JSON），已原样发送`, err);
+      }
+    }
+    // ⚠️ 必须在这里才取 `globalThis.fetch`：自检脚本与中间件都会打桩它，
+    //    在 createExtraToolsFetch 阶段提前捕获会把桩打在空气上。
+    return globalThis.fetch(url, { ...init, body });
+  };
 }
 
 // ---- 调用 ----
@@ -673,11 +768,16 @@ async function callProvider(provider, userMessage, overrideAITool = [], override
     : loadSystemPrompt(provider.prompt);
   const SESSION_ID = `#${NeonaicNewable.getUniqueId()}`;
 
+  // 请求体注入项（第三方平台的自定义工具类型）要在建 client 之前解析好：它决定要不要装 fetch 中间件
+  const injectedTools = resolveExtraTools(provider.extraTools);
+
   // address 是 base URL，端点（/chat/completions、/responses）由 SDK 追加。
   const client = createOpenAI({
     apiKey: provider.token,
     name: provider.name,
     baseURL: provider.address,
+    // 只有配了注入项才装中间件，其余 Profile 走的还是原生 fetch（不改变既有行为）
+    ...(injectedTools.length ? { fetch: createExtraToolsFetch(injectedTools, provider.name) } : {}),
   });
 
   // responseAPI 仅决定请求体格式（responses API vs chat completions），端点由 SDK 按 base URL 拼接
@@ -729,11 +829,12 @@ async function callProvider(provider, userMessage, overrideAITool = [], override
   // ⚠️ 用一次 buildToolSet 构建，不要对两个「工具表」再套 joinObject：
   // 那会把 `{tools, toolsContext}` 当成两层结构做浅合并，后者会把前者的整个 `tools` 键覆盖掉。
   const userInput = plainTextOf(userMessage);
-  const extraTools = Array.isArray(overrideAITool) ? overrideAITool.filter(Boolean) : [];
+  /** 临时工具（overrideAITool）过滤后的列表 */
+  const overrideTools = Array.isArray(overrideAITool) ? overrideAITool.filter(Boolean) : [];
   // 临时工具排在后面：同名时后写入的覆盖前者，即临时工具优先
   const tools = {
     ...providerToolSet,
-    ...buildToolSet([...toolList, ...extraTools], ctx, userInput),
+    ...buildToolSet([...toolList, ...overrideTools], ctx, userInput),
   };
   const toolNames = Object.keys(tools);
 
@@ -748,11 +849,12 @@ async function callProvider(provider, userMessage, overrideAITool = [], override
   // 下限钳制为 1，避免配置为 0/负数导致 stepCountIs 失效。
   const rawMax = Number(provider.maxToolcall);
   const maxToolcall = Math.max(1, Number.isFinite(rawMax) ? rawMax : 5);
-  const extraCount = extraTools.length;
+  const extraCount = overrideTools.length;
   const providerCount = providerToolNames.length;
+  const injectedCount = injectedTools.length;
   const mediaCount = Array.isArray(userMessage) ? userMessage.filter((p) => p?.type === 'file').length : 0;
   getLogger().tool.info(
-    `${SESSION_ID} → ${provider.name}: ${provider.address}#${provider.model} (${endpoint}${provider.stream ? ', stream' : ''}, ${toolNames.length} tools${providerCount ? ` 含 provider ${providerCount}` : ''}${extraCount ? ` 含临时 ${extraCount}` : ''}, maxToolcall=${maxToolcall}${mediaCount ? `, ${mediaCount} media` : ''})`,
+    `${SESSION_ID} → ${provider.name}: ${provider.address}#${provider.model} (${endpoint}${provider.stream ? ', stream' : ''}, ${toolNames.length} tools${providerCount ? ` 含 provider ${providerCount}` : ''}${extraCount ? ` 含临时 ${extraCount}` : ''}${injectedCount ? ` + 注入 ${injectedCount}` : ''}, maxToolcall=${maxToolcall}${mediaCount ? `, ${mediaCount} media` : ''})`,
   );
 
   const common = {
@@ -1292,6 +1394,7 @@ export const neonaicAI = {
   getAITools,
   resolveToolList,
   resolveProviderTools,
+  resolveExtraTools,
   isAIBanned,
   askAI,
   findTool,
