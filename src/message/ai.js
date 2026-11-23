@@ -1098,11 +1098,24 @@ async function aiProfile(ctx, ...args) {
         // 执行全量测试
         return await askAI(msg, { AIlist: ['*'], context: ctx, preprocessWilling: false });
       }
+
       // 非全量测试
       const target = findProvider(profileName);
       if (!target) return `未找到 AI Profile: ${profileName}`;
       try {
-        return await callProvider(target, msg, [], null, toCommandContext(ctx));
+        const overrideAITool = [];
+        const speakerText = resolveSpeaker(undefined, ctx.executor);
+        if (speakerText) {
+          overrideAITool.push({
+            namespace: 'neonaic',
+            name: 'speaker',
+            description: '查询当前与你对话的人是谁。'
+              + '返回本地名录中登记的可读身份（昵称、称呼偏好等）；名录未登记时会如实说明。',
+            inputSchema: z.object({}),
+            execute: async () => speakerText,
+          });
+        }
+        return await callProvider(target, msg, overrideAITool, null, toCommandContext(ctx));
       } catch (err) {
         return `测试失败: ${err?.message || (err?.statusCode ?? parseString(err))}`;
       }
